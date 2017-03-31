@@ -1,4 +1,5 @@
 #pragma once
+
 #include <limits>
 #include <vector>
 
@@ -15,26 +16,16 @@
 #include "AdvectField.h"
 #include "ExtrapolateField.h"
 
-///////////////////////////////////
-//
-// EulerianFluid.h/cpp
-// Ryan Goldade 2016
-//
-// Wrapper class around the staggered MAC grid fluid simulator 
-// (which stores face-aligned velocities and pressure).
-// Handles velocity, surface, viscosity field advection,
-// pressure projection, viscosity and velocity extrapolation.
-//
-////////////////////////////////////
+#include "MarkerParticles.h"
+#include "FlipParticles.h"
 
-class EulerianFluid
+class FlipSimulation
 {
 public:
-	EulerianFluid(const Transform& xform, Vec2st nx, size_t nb = 5)
+	FlipSimulation(const Transform& xform, Vec2st nx, size_t nb = 5)
 		: m_xform(xform)
 		, m_moving_solids(false)
 		, m_solve_viscosity(false)
-		, m_enforce_bubbles(false)
 		, m_st_scale(0.)
 	{
 		m_vel = VectorGrid<Real>(m_xform, nx, VectorGridSettings::STAGGERED);
@@ -48,53 +39,36 @@ public:
 	void set_collision_velocity(const VectorGrid<Real>& collision_vel);
 	void set_surface_volume(const LevelSet2D& surface);
 	void set_surface_velocity(const VectorGrid<Real>& vel);
+
 	void set_surface_tension(Real st_scale)
 	{
 		m_st_scale = st_scale;
 	}
 
-	void set_enforce_bubbles()
-	{
-		m_enforce_bubbles = true;
-	}
-
-	void set_viscosity(const ScalarGrid<Real>& visc_coeff)
-	{
-		assert(m_surface.is_matched(visc_coeff));
-		m_variableviscosity = visc_coeff;
-		m_solve_viscosity = true;
-	}
-
-	void set_viscosity(Real visc_coeff = 1.)
-	{
-		m_variableviscosity = ScalarGrid<Real>(m_surface.xform(), m_surface.size(), visc_coeff);
-		m_solve_viscosity = true;
-	}
-
-	void disable_moving_solids() { m_moving_solids = false; }
-	
 	void add_surface_volume(const LevelSet2D& surface);
 
 	template<typename ForceSampler>
 	void add_force(const ForceSampler& force, Real dt);
-	
+
 	void add_force(const Vec2R& force, Real dt);
 
+	// Move fluid particles
 	void advect_surface(Real dt, IntegratorSettings::Integrator order);
+	// TODO: move viscosity with particles so this is not needed
 	void advect_viscosity(Real dt, IntegratorSettings::Integrator order);
+	// TODO: since particles carry velocity, this is not needed either
 	void advect_velocity(Real dt, IntegratorSettings::Integrator order);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
 	void run_simulation(Real dt, Renderer& renderer);
 
 	// Useful for CFL
-	Real max_vel_mag() { return m_vel.max_magnitude(); }
-	
+	Real max_vel_mag() { return mag(m_particles.max_vel()); }
+
 	// Rendering tools
 	void draw_grid(Renderer& renderer) const;
 	void draw_surface(Renderer& renderer);
 	void draw_collision(Renderer& renderer);
-	void draw_collision_vel(Renderer& renderer, Real length) const;
 	void draw_velocity(Renderer& renderer, Real length) const;
 
 private:
@@ -106,6 +80,9 @@ private:
 
 	Transform m_xform;
 
-	bool m_moving_solids, m_solve_viscosity, m_enforce_bubbles;
+	bool m_moving_solids, m_solve_viscosity;
 	Real m_st_scale;
+
+	FlipParticles m_particles;
+
 };

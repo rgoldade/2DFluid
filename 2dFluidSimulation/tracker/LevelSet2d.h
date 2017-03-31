@@ -159,13 +159,18 @@ public:
 
 	inline Vec2R normal_const(const Vec2R& wpos) const
 	{
-		Vec2R grad = m_gradient.interp(wpos);
+		Vec2R grad;
+		if (m_gradient_set)
+			grad = m_gradient.interp(wpos);
+		else
+			grad = m_phi.gradient(wpos);
+
 		if (fabs(grad[0]) < 1E-6 && fabs(grad[1]) < 1E-6) return Vec2R(0.);
 		else normalize(grad);
 		return grad;
 	}
 
-	bool gradient_field(VectorGrid<Real>& grad);
+	void gradient_field(VectorGrid<Real>& grad);
 	
 	void build_gradient();
 

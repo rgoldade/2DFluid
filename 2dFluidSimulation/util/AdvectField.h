@@ -76,24 +76,8 @@ template<typename Field>
 template<typename Integrator>
 void AdvectField<Field>::advect_field(Real dt, Field& dest_field, const Integrator& f)
 {
-	//using namespace tbb;
-	
 	size_t x_size = dest_field.size()[0];
 	size_t y_size = dest_field.size()[1];
-
-	/*parallel_for( blocked_range<size_t> (0, x_size * y_size),
-		[&](const blocked_range<size_t> &r)
-		{
-			for (size_t i = r.begin(); i != r.end(); ++i)
-			{
-				size_t x = i / y_size;
-				size_t y = i % y_size;
-
-				Vec2R pos = field.idx_to_ws(Vec2R(x, y));
-				pos = f(pos, -dt, *this);
-				temp_field(x, y) = field.interp(pos);
-			}
-		});*/
 
 	for (size_t x = 0; x < x_size; ++x)
 		for (size_t y = 0; y < y_size; ++y)
@@ -107,5 +91,10 @@ void AdvectField<Field>::advect_field(Real dt, Field& dest_field, const Integrat
 template<typename Field>
 Vec2R AdvectField<Field>::operator()(Real dt, const Vec2R& wpos) const
 {
+	// Bump to boundary surface if there is a boundary field set
+	//if (m_boundary && m_boundary->interp(wpos) <= 0.)
+	//{
+	//	return - m_boundary->interp(wpos) * m_boundary->normal_const(wpos) / dt;
+	//}
 	return m_vel.interp(wpos);
 }

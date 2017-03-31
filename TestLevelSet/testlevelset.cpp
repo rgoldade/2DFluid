@@ -30,17 +30,8 @@ int main(int argc, char** argv)
 	levelset.reinit();
 
 	levelset.draw_surface(*g_renderer.get(), Vec3f(0., 1.0, 1.));
-	//// Sanity check
-	//for(size_t x = 0; x < levelset.size()[0]; ++x)
-	//	for (size_t y = 0; y < levelset.size()[1]; ++y)
-	//	{
-	//		if (levelset.phi(x, y) < 0) levelset.set_phi(Vec2st(x, y), -1);
-	//		if (levelset.phi(x, y) > 0) levelset.set_phi(Vec2st(x, y), 1);
-	//	}
 	levelset.draw_supersampled_values(*g_renderer.get(), .025, 5, 5);
 	levelset.draw_normals(*g_renderer.get());
-	
-
 
 	g_renderer->run();
 }

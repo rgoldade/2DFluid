@@ -83,7 +83,7 @@ void LevelSet2D::reinit(size_t iters)
 		for (size_t x = 0; x < size()[0]; ++x)
 			for (size_t y = 0; y < size()[1]; ++y)
 			{
-				if (fabs(m_phi(x, y)) >= dx() * 2.) continue;
+				//if (fabs(m_phi(x, y)) >= dx() * 2.) continue;
 
 				for (size_t dir = 0; dir < 4; ++dir)
 				{
@@ -98,38 +98,25 @@ void LevelSet2D::reinit(size_t iters)
 						Vec2R int_pos = interface_search(idx_to_ws(Vec2R(x, y)), 5);
 						Real udf = dist(int_pos, idx_to_ws(Vec2R(x, y)));
 
-						temp_phi(x, y) = (m_phi(x, y) < 0.) ? -udf : udf;
-						marked_cells(x, y) = FINISHED;
+						// If the cell has not be updated yet OR the update is lower than a previous
+						// update, assign the SDF to the cell
+						if (marked_cells(x, y) != FINISHED || abs(temp_phi(x, y)) > udf)
+						{
+							temp_phi(x, y) = (m_phi(x, y) < 0.) ? -udf : udf;
+							marked_cells(x, y) = FINISHED;
+						}
 					}
 				}
-
-				/*
-				Real sdf = m_phi(x, y);
-				for (size_t dir = 0; dir < 4; ++dir)
+				if (marked_cells(x, y) != FINISHED)
 				{
-					int cx = x + cell_offset[dir][0];
-					int cy = y + cell_offset[dir][1];
-
-					if (cx < 0 || cy < 0 || cx >= size()[0] || cy >= size()[1]) continue;
-
-					if (sdf * m_phi(cx, cy) <= 0.)
-					{
-						// Update distance
-						Vec2R pos = interp_interface(Vec2st(x, y), Vec2st(cx, cy));
-						Real udf = dist(pos, Vec2R(x, y)) * dx();
-
-						if ((udf < fabs(sdf)) || dir == 0) sdf = (sdf < 0.) ? -udf : udf;
-						marked_cells(x, y) = FINISHED;
-					}
+					//Real max = std::numeric_limits<Real>::max();
+					temp_phi(x, y) = (m_phi(x, y) < 0.) ? -m_nb : m_nb;
 				}
-
-				temp_phi(x, y) = sdf;*/
 			}
 
 		m_phi = temp_phi;
 		fast_marching(marked_cells);
 	}
-	//init(m_surface, false);
 
 	m_dirty_surface = false;
 	m_gradient_set = false;
@@ -440,6 +427,11 @@ void LevelSet2D::fast_marching(UniformGrid<marked>& marked_cells)
 			//Check that a marked cell was indeed visited
 			assert(marked);
 		}
+		// Clamp to narrow band
+		else
+		{
+			m_phi(idx[0], idx[1]) = (m_phi(idx[0], idx[1]) < 0.) ? -m_nb : m_nb;
+		}
 
 		// Solidify cell now that we've handled all it's neighbours
 		marked_cells(idx[0], idx[1]) = FINISHED;
@@ -541,22 +533,6 @@ void LevelSet2D::extract_mesh(Mesh2D& surf) const
 	surf = Mesh2D(edges, verts);
 
 }
-//
-////Assumes index space
-//Vec2d LevelSet2d::interface(const Vec2d& p0, const Vec2d& p1) const
-//{
-//	assert(m_phi.interp(p0)*m_phi.interp(p1) <= 0.0);
-//	//Find weight to zero isosurface
-//	double s = -m_phi.interp(p0) / (m_phi.interp(p1) - m_phi.interp(p0));
-//
-//	if (s < 0.0) s = 0.0;
-//	else if (s > 1.0) s = 1.0;
-//
-//	Vec2d dx = p1 - p0;
-//	return p1 + s*dx;
-//}
-//
-
 
 Vec2R LevelSet2D::interp_interface(const Vec2st& i0, const Vec2st& i1) const
 {
@@ -571,7 +547,7 @@ Vec2R LevelSet2D::interp_interface(const Vec2st& i0, const Vec2st& i1) const
 	return Vec2d(i0[0], i0[1]) + s*dx;
 }
 
-bool LevelSet2D::gradient_field(VectorGrid<Real>& grad)
+void LevelSet2D::gradient_field(VectorGrid<Real>& grad)
 {
 	grad = VectorGrid<Real>(xform(), size(), 0, VectorGridSettings::STAGGERED);
 	
@@ -597,16 +573,14 @@ bool LevelSet2D::gradient_field(VectorGrid<Real>& grad)
 
 			grad(x, y, 1) = (m_phi(cf[0], cf[1]) - m_phi(cb[0], cb[1])) * invdx;
 		}
-
-	return true;
 }
 
 void LevelSet2D::build_gradient()
 {
 	if (m_gradient_set) return;
 
-	m_gradient_set = gradient_field(m_gradient);
-	assert(m_gradient_set);
+	gradient_field(m_gradient);
+	m_gradient_set = true;
 }
 
 bool LevelSet2D::curvature_field(ScalarGrid<Real>& curv)

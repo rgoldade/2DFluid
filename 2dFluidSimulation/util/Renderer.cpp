@@ -1,5 +1,7 @@
 #include "Renderer.h"
 
+#include <fstream>
+
 // Helper struct because glut is a pain.
 // This is probably a very bad design choice
 // but glut doesn't make life easy.
@@ -122,8 +124,9 @@ void Renderer::mouse(int button, int state, int x, int y)
 				{
 					// Zoom in by 2x
 					Real scale = .5;
-					m_smin[0] += (1 - scale) * m_sheight * (x / m_wsize[1]);
-					m_smin[1] += (1 - scale) * m_sheight * (1. - y / m_wsize[1]);
+
+					m_smin[0] -= .5 * (scale - 1.) * m_wsize[0] * m_sheight / m_wsize[1];
+					m_smin[1] -= .5 * (scale - 1.) * m_sheight;
 					m_sheight *= scale;
 
 					glutPostRedisplay();
@@ -327,4 +330,67 @@ void Renderer::draw_primitives() const
 void Renderer::run()
 {
 	glutMainLoop();
+}
+
+static void write_big_endian_ushort(std::ostream &output, unsigned short v)
+{
+	output.put((v >> 8) % 256);
+	output.put(v % 256);
+}
+
+static void write_big_endian_uint(std::ostream &output, unsigned int v)
+{
+	output.put((v >> 24) % 256);
+	output.put((v >> 16) % 256);
+	output.put((v >> 8) % 256);
+	output.put(v % 256);
+}
+
+void Renderer::sgi_screenshot(const char *filename_format, ...)
+{
+	va_list ap;
+	va_start(ap, filename_format);
+#ifdef _MSC_VER
+#define FILENAMELENGTH 256
+	char filename[FILENAMELENGTH];
+	_vsnprintf_s(filename, FILENAMELENGTH, filename_format, ap);
+	std::ofstream output(filename, std::ofstream::binary);
+#else
+	char *filename;
+	vasprintf(&filename, filename_format, ap);
+	ofstream output(filename, ofstream::binary);
+#endif
+	if (!output) return;
+	// first write the SGI header
+	write_big_endian_ushort(output, 474); // magic number to identify this as an SGI image file
+	output.put(0); // uncompressed
+	output.put(1); // use 8-bit colour depth
+	write_big_endian_ushort(output, 3); // number of dimensions
+	write_big_endian_ushort(output, m_wsize[0]); // x size
+	write_big_endian_ushort(output, m_wsize[1]); // y size
+	write_big_endian_ushort(output, 3); // three colour channels (z size)
+	write_big_endian_uint(output, 0); // minimum pixel value
+	write_big_endian_uint(output, 255); // maximum pixel value
+	write_big_endian_uint(output, 0); // dummy spacing
+									  // image name
+	int i;
+	for (i = 0; i<80 && filename[i]; ++i)
+		output.put(filename[i]);
+	for (; i<80; ++i)
+		output.put(0);
+	write_big_endian_uint(output, 0); // colormap is normal
+	for (i = 0; i<404; ++i) output.put(0); // filler to complete header
+										   // now write the SGI image data
+	GLubyte *image_buffer = new GLubyte[m_wsize[0] * m_wsize[1]];
+	glReadBuffer(GL_FRONT);
+	glReadPixels(0, 0, m_wsize[0], m_wsize[1], GL_RED, GL_UNSIGNED_BYTE, image_buffer);
+	output.write((const char*)image_buffer, m_wsize[0] * m_wsize[1]);
+	glReadPixels(0, 0, m_wsize[0], m_wsize[1], GL_GREEN, GL_UNSIGNED_BYTE, image_buffer);
+	output.write((const char*)image_buffer, m_wsize[0] * m_wsize[1]);
+	glReadPixels(0, 0, m_wsize[0], m_wsize[1], GL_BLUE, GL_UNSIGNED_BYTE, image_buffer);
+	output.write((const char*)image_buffer, m_wsize[0] * m_wsize[1]);
+	delete[] image_buffer;
+#ifndef _MSC_VER
+	free(filename);
+#endif
 }

@@ -1,10 +1,12 @@
 #pragma once
+#pragma once
 #include <limits>
 #include <vector>
 
 #include "core.h"
 #include "vec.h"
 
+#include "MarkerParticles.h"
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
 #include "LevelSet2d.h"
@@ -14,10 +16,11 @@
 
 #include "AdvectField.h"
 #include "ExtrapolateField.h"
+#include "MarkerParticlesSimulation.h"
 
 ///////////////////////////////////
 //
-// EulerianFluid.h/cpp
+// MarkerParticlesSimulation.h/cpp
 // Ryan Goldade 2016
 //
 // Wrapper class around the staggered MAC grid fluid simulator 
@@ -27,14 +30,15 @@
 //
 ////////////////////////////////////
 
-class EulerianFluid
+class MarkerParticlesSimulation
 {
 public:
-	EulerianFluid(const Transform& xform, Vec2st nx, size_t nb = 5)
+	MarkerParticlesSimulation(const Transform& xform, Vec2st nx, size_t nb = 5)
 		: m_xform(xform)
 		, m_moving_solids(false)
 		, m_solve_viscosity(false)
 		, m_enforce_bubbles(false)
+		, m_air_volume(false)
 		, m_st_scale(0.)
 	{
 		m_vel = VectorGrid<Real>(m_xform, nx, VectorGridSettings::STAGGERED);
@@ -42,6 +46,11 @@ public:
 
 		m_surface = LevelSet2D(m_xform, nx, nb);
 		m_collision = LevelSet2D(m_xform, nx, nb);
+
+		m_particles = MarkerParticles(m_surface.dx() / 2., 4, 2.);
+
+		m_air_surface = LevelSet2D(m_xform, nx, nb);
+		m_air_particles = MarkerParticles(m_surface.dx() / 2., 4, 2.);
 	}
 
 	void set_collision_volume(const LevelSet2D& collision);
@@ -71,28 +80,34 @@ public:
 		m_solve_viscosity = true;
 	}
 
+	void set_air_volume();
+
 	void disable_moving_solids() { m_moving_solids = false; }
-	
+
 	void add_surface_volume(const LevelSet2D& surface);
 
 	template<typename ForceSampler>
 	void add_force(const ForceSampler& force, Real dt);
-	
+
 	void add_force(const Vec2R& force, Real dt);
 
 	void advect_surface(Real dt, IntegratorSettings::Integrator order);
 	void advect_viscosity(Real dt, IntegratorSettings::Integrator order);
 	void advect_velocity(Real dt, IntegratorSettings::Integrator order);
 
+	// Super sample voxels to compute the volume of the liquid or air
+	Real compute_volume(bool liquid = true) const;
+
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
 	void run_simulation(Real dt, Renderer& renderer);
 
 	// Useful for CFL
 	Real max_vel_mag() { return m_vel.max_magnitude(); }
-	
+
 	// Rendering tools
 	void draw_grid(Renderer& renderer) const;
 	void draw_surface(Renderer& renderer);
+	void draw_air(Renderer& renderer);
 	void draw_collision(Renderer& renderer);
 	void draw_collision_vel(Renderer& renderer, Real length) const;
 	void draw_velocity(Renderer& renderer, Real length) const;
@@ -103,6 +118,14 @@ private:
 	VectorGrid<Real> m_vel, m_collision_vel;
 	LevelSet2D m_surface, m_collision;
 	ScalarGrid<Real> m_variableviscosity;
+
+	// Marker particle to track the liquid
+	MarkerParticles m_particles;
+
+	// Volume correction
+	bool m_air_volume;
+	LevelSet2D m_air_surface;
+	MarkerParticles m_air_particles;
 
 	Transform m_xform;
 

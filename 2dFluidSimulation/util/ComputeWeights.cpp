@@ -126,10 +126,6 @@ void ComputeWeights::compute_supersampled_volumes(ScalarGrid<Real>& volume_weigh
 	for (int i = 0; i < volume_weights.size()[0]; ++i)
 		for (int j = 0; j < volume_weights.size()[1]; ++j)
 		{
-			// Early exit if we're far enough away from the surface that we can't possibly get anything
-			Real tempphi = sign * surface->interp(volume_weights.idx_to_ws(Vec2R(i, j)));
-			Real compare_val = surface->dx() * 2.;
-
 			if (sign * surface->interp(volume_weights.idx_to_ws(Vec2R(i, j))) > surface->dx() * 2.)
 			{
 				volume_weights(i, j) = 0.;
@@ -143,9 +139,6 @@ void ComputeWeights::compute_supersampled_volumes(ScalarGrid<Real>& volume_weigh
 				for (Real y = ((Real)j - .5) + (.5 * sample_dx); y < (Real)j + .5; y += sample_dx)
 				{
 					Vec2R wpos = volume_weights.idx_to_ws(Vec2R(x, y));
-					Real tempinterp = surface->interp(wpos);
-					if (tempinterp > 0.)
-						int a = 2;
 					if (sign * surface->interp(wpos) <= 0.) ++volcount;
 				}
 

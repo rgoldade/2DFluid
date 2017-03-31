@@ -45,6 +45,9 @@ public:
 	void add_quads(const std::vector<Vec2R>& points, const std::vector<Vec4st>& faces, const Vec3f& colour);
 	
 	void draw_primitives() const;
+
+	void sgi_screenshot(const char *filename_format, ...);
+
 	void clear();
 	void run();
 private:

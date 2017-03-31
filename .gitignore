@@ -240,3 +240,7 @@ ModelManifest.xml
 
 # FAKE - F# Make
 .fake/
+/2dFluidSimulation/util/QuadTreeIndex.h
+/2dFluidSimulation/util/QuadTreeIndex.cpp
+/2dFluidSimulation/tracker/FlipParticles.h
+/2dFluidSimulation/tracker/FlipParticles.cpp
