@@ -26,6 +26,7 @@ public:
 		: m_dt(dt)
 		, m_vel(vel)
 		, m_surface(surface)
+		, m_volume_error(0)
 		, m_collision(NULL)
 		, m_enforce_bubbles(false)
 		, m_sp_set(false)
@@ -65,6 +66,11 @@ public:
 		m_divergence = &divergence;
 	}
 
+	void set_volume_correction(Real relative_error)
+	{
+		m_volume_error = relative_error;
+	}
+
 	void enforce_bubbles() { m_enforce_bubbles = true; }
 
 	inline bool is_valid(size_t x, size_t y, size_t axis) const
@@ -78,7 +84,7 @@ public:
 	// weights. 
 	// The fluid weights refer to the cut-cell length of fluid (air and liquid) through a cell face.
 	// In both cases, 0 means "empty" and 1 means "full".
-	void project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights, Renderer& renderer);
+	void project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights, const ScalarGrid<Real>& center_weights, Renderer& renderer);
 
 	void batty_pressure_solve(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights, Renderer& renderer, VectorGrid<Real>& valid, VectorGrid<Real>& vel);
 
@@ -107,6 +113,7 @@ private:
 	Real m_dt;
 	bool m_sp_set, m_enforce_bubbles;
 	Real m_sp_scale;
+	Real m_volume_error;
 
 	// Temp batty containers
 	VectorGrid<Real> batty_vel;

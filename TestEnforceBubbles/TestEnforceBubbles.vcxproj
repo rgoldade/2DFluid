@@ -148,8 +148,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\2dFluidSimulation\simulator\EulerianFluid.cpp" />
-    <ClCompile Include="..\2dFluidSimulation\simulator\MarkerParticlesSimulation.cpp" />
+    <ClCompile Include="..\2dFluidSimulation\simulator\FlipParticlesSimulation.cpp" />
     <ClCompile Include="..\2dFluidSimulation\tracker\LevelSet2d.cpp" />
     <ClCompile Include="..\2dFluidSimulation\tracker\MarkerParticles.cpp" />
     <ClCompile Include="..\2dFluidSimulation\tracker\Mesh2D.cpp" />

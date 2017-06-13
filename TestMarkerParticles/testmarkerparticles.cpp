@@ -20,8 +20,8 @@ bool g_dirty_display = true;
 Real g_dt = 1. / 24;
 Real g_seed_time = 0;
 
-Real g_dx = 0.05;
-Vec2st g_size(100);
+Real g_dx = 0.025;
+Vec2st g_size(200);
 void display()
 {
 	if (g_run || g_single_run)

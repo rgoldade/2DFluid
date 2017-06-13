@@ -9,18 +9,18 @@
 #include "LevelSet2d.h"
 #include "InitialConditions.h"
 
-#include "MarkerParticlesSimulation.h"
+#include "FlipParticlesSimulation.h"
 #include "EulerianFluid.h"
 
 std::unique_ptr<Renderer> g_renderer;
-std::unique_ptr<EulerianFluid> g_sim;
+std::unique_ptr<FlipParticlesSimulation> g_sim;
 
 bool g_run = false;
 bool g_single_run = false;
 bool g_dirty_display = true;
 bool g_print_screen = false;
 int g_frame_count = 0;
-Real g_dt = 1. / 60.;
+Real g_dt = 1. / 30.;
 
 Real g_dx = 0.025;
 Vec2st g_size(200);
@@ -55,7 +55,7 @@ void display()
 			if (dt <= 0.) break;
 
 			g_sim->add_force(Vec2R(0., -9.8), dt);
-			g_sim->set_enforce_bubbles();
+			
 			g_sim->run_simulation(dt, *g_renderer.get());
 
 
@@ -87,23 +87,22 @@ void display()
 	if (g_dirty_display)
 	{
 		//g_sim->draw_grid(*g_renderer.get());
-		//g_sim->draw_surface(*g_renderer.get());
-		//g_sim->draw_collision(*g_renderer.get());
-		g_sim->draw_velocity(*g_renderer.get(), 5 * g_dt);
+		g_sim->draw_surface(*g_renderer.get());
+		g_sim->draw_collision(*g_renderer.get());
+		//g_sim->draw_velocity(*g_renderer.get(), 5 * g_dt);
 		g_dirty_display = false;
+		
+		if (g_print_screen)
+		{
+			char * ppmfileformat;
+			ppmfileformat = new char[strlen("d:/output/") + 50];
 
-		//// Print screenshot
-		//if (g_print_screen)
-		//{
-		//	char * ppmfileformat;
-		//	ppmfileformat = new char[strlen("c:/output/") + 50];
+			sprintf_s(ppmfileformat, strlen("d:/output/") + 50, "%s/screenshot%%04d.sgi", "d:/output/");
+			g_renderer->sgi_screenshot(ppmfileformat, g_frame_count);
 
-		//	sprintf(ppmfileformat, "%s/screenshot%%04d.sgi", "c:/output/");
-		//	g_renderer->sgi_screenshot(ppmfileformat, g_frame_count);
-
-		//	delete[] ppmfileformat;
-		//}
-		//++g_frame_count;
+			delete[] ppmfileformat;
+		}
+		++g_frame_count;
 	}
 }
 
@@ -159,9 +158,11 @@ int main(int argc, char** argv)
 	surface.init(waterside, false);
 
 	// Set up simulation
-	g_sim = std::unique_ptr<EulerianFluid>(new EulerianFluid(xform, g_size, 10));
+	g_sim = std::unique_ptr<FlipParticlesSimulation>(new FlipParticlesSimulation(xform, g_size, 10));
 	g_sim->set_surface_volume(surface);
 	g_sim->set_collision_volume(solid);
+	g_sim->set_enforce_bubbles();
+	//g_sim->set_volume_correction();
 
 	std::function<void()> display_func = display;
 	g_renderer->set_user_display(display_func);

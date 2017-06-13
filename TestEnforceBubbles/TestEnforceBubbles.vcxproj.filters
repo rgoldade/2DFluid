@@ -48,13 +48,10 @@
     <ClCompile Include="testenforcebubbles.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\2dFluidSimulation\simulator\EulerianFluid.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\2dFluidSimulation\simulator\MarkerParticlesSimulation.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\2dFluidSimulation\tracker\MarkerParticles.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\2dFluidSimulation\simulator\FlipParticlesSimulation.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

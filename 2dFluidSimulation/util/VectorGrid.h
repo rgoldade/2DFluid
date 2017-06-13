@@ -136,7 +136,7 @@ public:
 	inline Vec2R ws_to_idx(const Vec2R& wpos, size_t axis) const
 	{
 		assert(axis < 2);
-		return m_grids[axis].ws_to_idx(ipos);
+		return m_grids[axis].ws_to_idx(wpos);
 	}
 
 	Real dx() const { return m_xform.dx(); }

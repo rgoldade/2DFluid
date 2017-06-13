@@ -29,14 +29,15 @@
 //
 ////////////////////////////////////
 
-class MarkerParticlesSimulation
+class FlipParticlesSimulation
 {
 public:
-	MarkerParticlesSimulation(const Transform& xform, Vec2st nx, size_t nb = 5)
+	FlipParticlesSimulation(const Transform& xform, Vec2st nx, size_t nb = 5)
 		: m_xform(xform)
 		, m_moving_solids(false)
 		, m_solve_viscosity(false)
 		, m_enforce_bubbles(false)
+		, m_volume_correction(false)
 		, m_air_volume(false)
 		, m_st_scale(0.)
 	{
@@ -46,7 +47,7 @@ public:
 		m_surface = LevelSet2D(m_xform, nx, nb);
 		m_collision = LevelSet2D(m_xform, nx, nb);
 
-		m_particles = MarkerParticles(m_surface.dx() / 2., 4, 2.);
+		m_particles = MarkerParticles(m_surface.dx() / 2., 4, 2., true);
 
 		m_air_surface = LevelSet2D(m_xform, nx, nb);
 		m_air_particles = MarkerParticles(m_surface.dx() / 2., 4, 2.);
@@ -64,6 +65,13 @@ public:
 	void set_enforce_bubbles()
 	{
 		m_enforce_bubbles = true;
+	}
+
+	void set_volume_correction()
+	{
+		m_volume_correction = true;
+		m_target_volume = compute_volume(true);
+		m_accum_error = 0.;
 	}
 
 	void set_viscosity(const ScalarGrid<Real>& visc_coeff)
@@ -109,7 +117,7 @@ public:
 	void draw_air(Renderer& renderer);
 	void draw_collision(Renderer& renderer);
 	void draw_collision_vel(Renderer& renderer, Real length) const;
-	void draw_velocity(Renderer& renderer, Real length) const;
+	void draw_velocity(Renderer& renderer, Real length, bool from_particles = false) const;
 
 private:
 
@@ -128,6 +136,7 @@ private:
 
 	Transform m_xform;
 
-	bool m_moving_solids, m_solve_viscosity, m_enforce_bubbles;
-	Real m_st_scale;
+	bool m_moving_solids, m_solve_viscosity, m_enforce_bubbles, m_volume_correction;
+	Real m_st_scale, m_target_volume;
+	Real m_accum_error;
 };

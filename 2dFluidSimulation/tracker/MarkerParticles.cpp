@@ -8,13 +8,30 @@ void MarkerParticles::draw_points(Renderer& renderer, const Vec3f& colour, size_
 	//renderer.add_points(m_add_parts, Vec3f(0, 1, 0), 3. *size);
 }
 
+void MarkerParticles::draw_velocity(Renderer& renderer, const Vec3f& colour, Real length) const
+{
+	assert(m_track_vel);
+
+	std::vector<Vec2R> start_points;
+	std::vector<Vec2R> end_points;
+
+	for (size_t p = 0; p < m_parts.size(); ++p)
+	{
+		start_points.push_back(m_parts[p]);
+		end_points.push_back(m_parts[p] + m_vel[p] * length);
+	}
+	
+	renderer.add_lines(start_points, end_points, colour);
+}
+
 void MarkerParticles::init(const LevelSet2D& surface)
 {
 	// Set up random number generator to jitter particles
 	std::random_device rd;
 	std::mt19937 gen(rd());
 	std::uniform_real_distribution<> dis(-.5, .5);
-
+	
+	m_parts.clear();
 	for (size_t i = 0; i < surface.size()[0]; ++i)
 		for (size_t j = 0; j < surface.size()[1]; ++j)
 		{
@@ -46,6 +63,85 @@ void MarkerParticles::init(const LevelSet2D& surface)
 				}
 			}
 		}
+
+	m_vel.resize(m_parts.size(), Vec2R(0));
+}
+
+void MarkerParticles::set_velocity(const VectorGrid<Real>& vel)
+{
+	assert(m_track_vel);
+	m_vel.resize(m_parts.size());
+
+	for (size_t p = 0; p < m_parts.size(); ++p)
+		m_vel[p] = vel.interp(m_parts[p]);
+}
+
+void MarkerParticles::apply_velocity(VectorGrid<Real>& vel)
+{
+	assert(m_track_vel);
+	for (size_t axis = 0; axis < 2; ++axis)
+	{
+		UniformGrid<Real> denominator(vel.size(axis), 0);
+		UniformGrid<Real> numerator(vel.size(axis), 0);
+
+		for (size_t p = 0; p < m_parts.size(); ++p)
+		{
+			// Iterate over nearby voxels
+			Vec2i ibbmin = floor(vel.ws_to_idx(m_parts[p], axis));
+			Vec2i ibbmax = ceil(vel.ws_to_idx(m_parts[p], axis));
+
+			max_union(ibbmin, Vec2i(0));
+			min_union(ibbmax, Vec2i(vel.size(axis)) - Vec2i(1));
+
+			for (int i = ibbmin[0]; i <= ibbmax[0]; ++i)
+				for (int j = ibbmin[1]; j <= ibbmax[1]; ++j)
+				{
+					if (i < 0 || j < 0 || i >= vel.size(axis)[0]
+						|| j >= vel.size(axis)[1]) continue;
+
+					Vec2R grid_pos = vel.idx_to_ws(Vec2R(i, j), axis);
+
+					if (dist2(grid_pos, m_parts[p]) <= sqr(vel.dx()))
+					{
+						Real k = 1. - dist(m_parts[p], grid_pos)/ vel.dx();
+						numerator(i, j) += k * m_vel[p][axis];
+						denominator(i, j) += k;
+					}
+				}
+		}
+
+		for (size_t i = 0; i < vel.size(axis)[0]; ++i)
+			for (size_t j = 0; j < vel.size(axis)[1]; ++j)
+			{
+				if (denominator(i, j) > 0.)
+				{
+					vel(i, j, axis) = numerator(i, j) / denominator(i, j);
+				}
+			}
+	}
+}
+void MarkerParticles::increment_velocity(VectorGrid<Real>& vel)
+{
+	assert(m_vel.size() == m_parts.size() && m_track_vel);
+
+	for (size_t p = 0; p < m_parts.size(); ++p)
+		m_vel[p] += vel.interp(m_parts[p]);
+}
+
+void MarkerParticles::blend_velocity(const VectorGrid<Real>& vel_old,
+										const VectorGrid<Real>& vel_new,
+										Real blend)
+{
+	assert(m_vel.size() == m_parts.size() && m_track_vel);
+
+	for (size_t p = 0; p < m_parts.size(); ++p)
+	{
+		Vec2R vel_part = m_vel[p];
+		Vec2R vel_pic = vel_new.interp(m_parts[p]);
+		Vec2R vel_flip = vel_pic - vel_old.interp(m_parts[p]);
+
+		m_vel[p] = (1. - blend) * vel_pic + (blend) * (vel_part + vel_flip);
+	}
 }
 
 void MarkerParticles::construct_surface(LevelSet2D& surface) const
@@ -101,7 +197,7 @@ void MarkerParticles::construct_surface(LevelSet2D& surface) const
 	surface.reinit(2);
 }
 
-void MarkerParticles::reseed(const LevelSet2D& surface, Real min, Real max)
+void MarkerParticles::reseed(const LevelSet2D& surface, Real min, Real max, const VectorGrid<Real>* vel)
 {
 	m_add_parts.clear();
 
@@ -171,10 +267,34 @@ void MarkerParticles::reseed(const LevelSet2D& surface, Real min, Real max)
 	{
 		size_t psize = m_parts.size();
 		std::swap(m_parts[d], m_parts[psize - 1]);
+		
+		if (m_track_vel) std::swap(m_vel[d], m_vel[psize - 1]);
+			
 		m_parts.resize(psize - 1);
 	}
 
+	if (m_track_vel) m_vel.resize(m_parts.size());
+
 	m_parts.insert(m_parts.end(), add_parts.begin(), add_parts.end());
+
+	// Sample velocity field if tracked
+	if (m_track_vel)
+	{
+		if (vel)
+		{
+			for (size_t p = 0; p < add_parts.size(); ++p)
+			{
+				Vec2R pvel = vel->interp(add_parts[p]);
+				m_vel.push_back(pvel);
+			}
+		}
+		else
+		for (size_t p = 0; p < add_parts.size(); ++p)
+		{
+			m_vel.push_back(Vec2R(0));
+		}
+		assert(m_vel.size() == m_parts.size());
+	}
 
 	m_add_parts = add_parts;
 }

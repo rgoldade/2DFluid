@@ -49,7 +49,7 @@ void Mesh2D::draw_mesh(Renderer& renderer,
 
 		for (auto v : m_verts) vert_points.push_back(v.point());
 
-		renderer.add_points(vert_points, vert_colour);
+		renderer.add_points(vert_points, vert_colour, 2);
 	}
 }
 

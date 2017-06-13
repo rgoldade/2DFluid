@@ -48,6 +48,12 @@
     <ClCompile Include="testsurfacetension.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\2dFluidSimulation\simulator\MarkerParticlesSimulation.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\2dFluidSimulation\tracker\MarkerParticles.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\2dFluidSimulation\util\ComputeWeights.h">

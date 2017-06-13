@@ -169,8 +169,8 @@ void build_bubble_components(const LevelSet2D& surface,
 			}
 		}
 
-		//Vec3f colours[] = { Vec3f(1,0,0), Vec3f(0,1,0), Vec3f(0,0,1),
-		//						Vec3f(1,1,0), Vec3f(0,1,1), Vec3f(1,0,1), };
+		Vec3f colours[] = { Vec3f(1,0,0), Vec3f(0,1,0), Vec3f(0,0,1),
+								Vec3f(1,1,0), Vec3f(0,1,1), Vec3f(1,0,1), };
 
 		//// Temporary render of the bubble surface list
 		//for (size_t b = 0; b < bubble_surface_list.size(); ++b)
@@ -237,7 +237,7 @@ void build_bubble_components(const LevelSet2D& surface,
 		//}
 }
 
-void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights, Renderer& renderer)
+void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights, const ScalarGrid<Real>& center_weights, Renderer& renderer)
 {
 	assert(liquid_weights.size(0) == fluid_weights.size(0) &&
 			liquid_weights.size(1) == fluid_weights.size(1) &&
@@ -325,8 +325,16 @@ void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const V
 					}
 				}
 
-				if(m_divergence)
-					solver.add_rhs(idx, (*m_divergence)(x, y));
+				bool volume_correct = true;
+				for (int dir = 0; dir < 4; ++dir)
+				{
+					int fx = x + cell_to_face[dir][0];
+					int fy = y + cell_to_face[dir][1];
+					if (fluid_weights(fx, fy, dir / 2) < 1.) volume_correct = false;
+				}
+				if (volume_correct) solver.add_rhs(idx, -m_volume_error * center_weights(x, y));// / (Real)solvecount);
+				/*if(m_divergence)
+					solver.add_rhs(idx, (*m_divergence)(x, y));*/
 
 				// Build row
 				double middle_coeff = 0;
@@ -385,6 +393,9 @@ void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const V
 		std::sort(bubble_order.begin(), bubble_order.end(),
 			[](const std::pair<int, int> &v0, const std::pair<int, int> &v1) -> bool
 		{ return v0.second < v1.second; });
+
+		size_t total_bubble = 0;
+		for (size_t b = 0; b < bubble_order.size() - 1; ++b) total_bubble += bubble_order[b].second;
 
 		for (size_t b = 0; b < bubble_order.size() - 1; ++b)
 		{

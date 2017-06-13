@@ -18,9 +18,6 @@
     <ClCompile Include="testmovinglevelset.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\2dFluidSimulation\util\PressureProjection.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\2dFluidSimulation\util\Renderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -43,9 +40,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\2dFluidSimulation\tracker\Mesh2D.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="..\2dFluidSimulation\simulator\EulerianFluid.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

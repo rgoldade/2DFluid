@@ -27,38 +27,6 @@
 //
 ////////////////////////////////////
 
-enum INTERSECTION { YES, ON, NO };
-static INTERSECTION exact_edge_intersect(Vec2R q, Vec2R r, Vec2R s)
-{
-	//Make sure y-axis bb crosses x-axis grid
-	//Degenerate cases should be handled with predicates
-	if ((q[1] > s[1] && r[1] > s[1]) ||
-		(q[1] <= s[1] && r[1] <= s[1])) return NO;
-
-	//Sort for winding
-	if (q[1] > r[1])
-	{
-		Vec2R temp = q;
-		q = r;
-		r = temp;
-	}
-
-	Real qrs = orient2d(q.v, r.v, s.v);
-
-	//Check that "s" lies to the left of the edge, 
-	//signifying that axis aligned ray starting 
-	//from "s" point in the positive direction
-	//will intersect the edge
-	if (qrs > 0) return YES;
-
-	//Check that "s" lies strictly on the edge.
-	//This needs to be handled 
-	else if (qrs == 0.) return ON;
-
-	//Ray "s" doesn't intersect the edge
-	else return NO;
-}
-
 class LevelSet2D
 {
 public:
@@ -146,6 +114,8 @@ public:
 	
 	void extract_mesh(Mesh2D& surf) const;
 
+	void extract_dc_mesh(Mesh2D& surf);
+
 	template<typename VelField, typename Integrator>
 	void backtrace_advect(Real dt, const VelField& vel, const Integrator& f);
 
@@ -221,6 +191,7 @@ public:
 	void draw_supersampled_values(Renderer& renderer, Real radius = .5, size_t samples = 1, size_t size = 1) const;
 	void draw_normals(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
 	void draw_surface(Renderer& renderer, const Vec3f& colour = Vec3f(0.));
+	void draw_dc_surface(Renderer& renderer, const Vec3f& colour = Vec3f(0.));
 
 	void fast_marching(UniformGrid<marked>& marked_cells);
 

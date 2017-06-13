@@ -180,7 +180,6 @@ public:
 	Mesh2D()
 	{}
 
-
 	// Initialize mesh container with edges and the associated vertices.
 	// Input mesh should be water-tight with no dangling edges
 	// (i.e. no vertex has a valence less than 2).
@@ -204,6 +203,30 @@ public:
 			m_verts[v1].add_edge(e);
 		}
 	}
+
+	void initialize(const std::vector<Vec2i>& edges, const std::vector<Vec2R>& verts)
+	{
+		m_edges.clear();
+		m_edges.reserve(edges.size());
+		for (auto e : edges) m_edges.push_back(Edge2D(e));
+
+		m_verts.clear();
+		m_verts.reserve(verts.size());
+		for (auto v : verts) m_verts.push_back(Vertex2D(v));
+
+		// Update vertices to store adjacent edges in their edge lists
+		for (size_t e = 0; e < m_edges.size(); ++e)
+		{
+			int v0 = m_edges[e].vert(0);
+			assert(v0 >= 0);
+			m_verts[v0].add_edge(e);
+
+			int v1 = m_edges[e].vert(1);
+			assert(v1 >= 0);
+			m_verts[v1].add_edge(e);
+		}
+	}
+
 
 	// Add more mesh pieces to an already existing mesh (although the existing mesh could
 	// empty). The incoming mesh edges point to vertices (and vice versa) from 0 to ne-1 locally. They need
@@ -276,17 +299,22 @@ public:
 		return m_verts.size();
 	}
 
-	inline Vec2R normal(size_t e) const
+	inline Vec2R unnormal(size_t e) const
 	{
 		Edge2D edge = m_edges[e];
 		Vec2R tan = m_verts[edge.vert(1)].point() - m_verts[edge.vert(0)].point();
-		if (tan == Vec2d(0.))
+		if (tan == Vec2R(0.))
 		{
 			std::cout << "Degenerate edge" << std::endl;
-			return Vec2d(0.); //Return nothing if degernate edge
+			return Vec2R(0.); //Return nothing if degernate edge
 		}
 
-		return normalized(Vec2d(-tan[1], tan[0]));
+		return Vec2R(-tan[1], tan[0]);
+	}
+
+	inline Vec2R normal(size_t e) const
+	{
+		return normalized(unnormal(e));
 	}
 
 	//Reverse winding order

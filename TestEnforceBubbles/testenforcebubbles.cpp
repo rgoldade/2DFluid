@@ -9,10 +9,11 @@
 #include "LevelSet2d.h"
 #include "InitialConditions.h"
 
-#include "MarkerParticlesSimulation.h"
+#include "FlipParticlesSimulation.h"
+//#include "MarkerParticlesSimulation.h"
 
 std::unique_ptr<Renderer> g_renderer;
-std::unique_ptr<MarkerParticlesSimulation> g_sim;
+std::unique_ptr<FlipParticlesSimulation> g_sim;
 
 bool g_run = false;
 bool g_single_run = false;
@@ -36,7 +37,7 @@ void display()
 			Real dt;
 			if (velmag > 1E-6)
 			{
-				// CFL is allows the velocity to track 3 cells 
+				// CFL is allows the velocity to track 3 cells
 				dt = 3. * g_dx / velmag;
 				if (dt > (g_dt - frame_time))
 				{
@@ -55,7 +56,7 @@ void display()
 
 			g_sim->add_force(Vec2R(0., -9.8), dt);
 
-			
+			std::cout << "Simulation loop. Timestep: " << dt << std::endl;
 			g_sim->run_simulation(dt, *g_renderer.get());
 		}
 	
@@ -69,7 +70,7 @@ void display()
 		g_sim->draw_surface(*g_renderer.get());
 		g_sim->draw_air(*g_renderer.get());
 		g_sim->draw_collision(*g_renderer.get());
-		//g_sim->draw_velocity(*g_renderer.get(), 5 * g_dt);
+		//g_sim->draw_velocity(*g_renderer.get(), 5 * g_dt, true);
 		g_dirty_display = false;
 
 		if (g_print_screen)
@@ -147,11 +148,14 @@ int main(int argc, char** argv)
 	surface.init(fluid_top, false);
 
 	// Set up simulation
-	g_sim = std::unique_ptr<MarkerParticlesSimulation>(new MarkerParticlesSimulation(xform, g_size, 10));
+	g_sim = std::unique_ptr<FlipParticlesSimulation>(new FlipParticlesSimulation(xform, g_size, 10));
 	g_sim->set_surface_volume(surface);
 	g_sim->set_collision_volume(solid);
 	//g_sim->set_air_volume();
 	g_sim->set_enforce_bubbles();
+
+	//g_sim->set_volume_correction();
+
 
 	std::function<void()> display_func = display;
 	g_renderer->set_user_display(display_func);

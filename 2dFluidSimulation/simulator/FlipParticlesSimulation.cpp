@@ -1,21 +1,21 @@
-#include "MarkerParticlesSimulation.h"
+#include "FlipParticlesSimulation.h"
 #include "PressureProjection.h"
 #include "ViscositySolver.h"
 #include "ExtrapolateField.h"
 #include "ComputeWeights.h"
 
-void MarkerParticlesSimulation::draw_grid(Renderer& renderer) const
+void FlipParticlesSimulation::draw_grid(Renderer& renderer) const
 {
 	m_surface.draw_grid(renderer);
 }
 
-void MarkerParticlesSimulation::draw_surface(Renderer& renderer)
+void FlipParticlesSimulation::draw_surface(Renderer& renderer)
 {
 	m_particles.draw_points(renderer, Vec3f(0., 0., 1.0));
 	m_surface.draw_surface(renderer, Vec3f(0., 0., 1.0));
 }
 
-void MarkerParticlesSimulation::draw_air(Renderer& renderer)
+void FlipParticlesSimulation::draw_air(Renderer& renderer)
 {
 	if (m_air_volume)
 	{
@@ -24,25 +24,28 @@ void MarkerParticlesSimulation::draw_air(Renderer& renderer)
 	}
 }
 
-void MarkerParticlesSimulation::draw_collision(Renderer& renderer)
+void FlipParticlesSimulation::draw_collision(Renderer& renderer)
 {
 	m_collision.draw_surface(renderer);
 }
 
-void MarkerParticlesSimulation::draw_collision_vel(Renderer& renderer, Real length) const
+void FlipParticlesSimulation::draw_collision_vel(Renderer& renderer, Real length) const
 {
 	if (m_moving_solids)
 		m_collision_vel.draw_sample_point_vectors(renderer, Vec3f(0, 1, 0), m_collision_vel.dx() * length);
 }
 
 
-void MarkerParticlesSimulation::draw_velocity(Renderer& renderer, Real length) const
+void FlipParticlesSimulation::draw_velocity(Renderer& renderer, Real length, bool from_particles) const
 {
-	m_vel.draw_sample_point_vectors(renderer, Vec3f(0), m_vel.dx() * length);
+	if (from_particles)
+		m_particles.draw_velocity(renderer, Vec3f(0), m_vel.dx() * length);
+	else
+		m_vel.draw_sample_point_vectors(renderer, Vec3f(0), m_vel.dx() * length);
 }
 
 // Incoming collision volume must already be inverted
-void MarkerParticlesSimulation::set_collision_volume(const LevelSet2D& collision)
+void FlipParticlesSimulation::set_collision_volume(const LevelSet2D& collision)
 {
 	assert(collision.inverted());
 
@@ -55,7 +58,7 @@ void MarkerParticlesSimulation::set_collision_volume(const LevelSet2D& collision
 	m_collision.build_gradient();
 }
 
-void MarkerParticlesSimulation::set_surface_volume(const LevelSet2D& fluid)
+void FlipParticlesSimulation::set_surface_volume(const LevelSet2D& fluid)
 {
 	Mesh2D temp_mesh;
 	fluid.extract_mesh(temp_mesh);
@@ -64,7 +67,7 @@ void MarkerParticlesSimulation::set_surface_volume(const LevelSet2D& fluid)
 	m_particles.init(m_surface);
 }
 
-void MarkerParticlesSimulation::set_surface_velocity(const VectorGrid<Real>& vel)
+void FlipParticlesSimulation::set_surface_velocity(const VectorGrid<Real>& vel)
 {
 	for (size_t axis = 0; axis < 2; ++axis)
 	{
@@ -78,9 +81,11 @@ void MarkerParticlesSimulation::set_surface_velocity(const VectorGrid<Real>& vel
 				m_vel.set(x, y, axis, vel.interp(pos, axis));
 			}
 	}
+
+	m_particles.set_velocity(vel);
 }
 
-void MarkerParticlesSimulation::set_collision_velocity(const VectorGrid<Real>& collision_vel)
+void FlipParticlesSimulation::set_collision_velocity(const VectorGrid<Real>& collision_vel)
 {
 	for (size_t axis = 0; axis < 2; ++axis)
 	{
@@ -98,7 +103,7 @@ void MarkerParticlesSimulation::set_collision_velocity(const VectorGrid<Real>& c
 	m_moving_solids = true;
 }
 
-void MarkerParticlesSimulation::set_air_volume()
+void FlipParticlesSimulation::set_air_volume()
 {
 	assert(m_surface.size() == m_air_surface.size());
 
@@ -115,7 +120,7 @@ void MarkerParticlesSimulation::set_air_volume()
 	m_air_volume = true;
 }
 
-void MarkerParticlesSimulation::add_surface_volume(const LevelSet2D& surface)
+void FlipParticlesSimulation::add_surface_volume(const LevelSet2D& surface)
 {
 	// Need to zero out velocity in this added region as it could get extrapolated values
 	for (size_t axis = 0; axis < 2; ++axis)
@@ -143,8 +148,9 @@ void MarkerParticlesSimulation::add_surface_volume(const LevelSet2D& surface)
 }
 
 template<typename ForceSampler>
-void MarkerParticlesSimulation::add_force(const ForceSampler& force, Real dt)
+void FlipParticlesSimulation::add_force(const ForceSampler& force, Real dt)
 {
+	VectorGrid<Real> force_vel(m_surface.xform(), m_surface.size(), 0, VectorGridSettings::STAGGERED);
 	for (size_t axis = 0; axis < 2; ++axis)
 	{
 		size_t x_size = m_vel.size(axis)[0];
@@ -154,17 +160,21 @@ void MarkerParticlesSimulation::add_force(const ForceSampler& force, Real dt)
 			for (size_t y = 0; y < y_size; ++y)
 			{
 				Vec2R pos = m_vel.idx_to_ws(Vec2R(x, y), axis);
-				m_vel.set(x, y, axis, m_vel(x, y, axis) + force(pos, axis) * dt);
+				//m_vel.set(x, y, axis, m_vel(x, y, axis) + force(pos, axis) * dt);
+
+				force_vel.set(x, y, axis, force(pos, axis) * dt);
 			}
 	}
+
+	m_particles.increment_velocity(force_vel);
 }
 
-void MarkerParticlesSimulation::add_force(const Vec2R& force, Real dt)
+void FlipParticlesSimulation::add_force(const Vec2R& force, Real dt)
 {
 	add_force([&](Vec2R, size_t axis) {return force[axis]; }, dt);
 }
 
-void MarkerParticlesSimulation::advect_surface(Real dt, IntegratorSettings::Integrator order)
+void FlipParticlesSimulation::advect_surface(Real dt, IntegratorSettings::Integrator order)
 {
 	AdvectField<LevelSet2D> advector(m_vel, m_surface);
 	advector.set_collision_volumes(m_collision);
@@ -198,7 +208,7 @@ void MarkerParticlesSimulation::advect_surface(Real dt, IntegratorSettings::Inte
 	}
 }
 
-void MarkerParticlesSimulation::advect_viscosity(Real dt, IntegratorSettings::Integrator order)
+void FlipParticlesSimulation::advect_viscosity(Real dt, IntegratorSettings::Integrator order)
 {
 	AdvectField<ScalarGrid<Real>> advector(m_vel, m_variableviscosity);
 	//advector.set_collision_volumes(m_collision);
@@ -207,7 +217,7 @@ void MarkerParticlesSimulation::advect_viscosity(Real dt, IntegratorSettings::In
 	m_variableviscosity = temp_visc;
 }
 
-void MarkerParticlesSimulation::advect_velocity(Real dt, IntegratorSettings::Integrator order)
+void FlipParticlesSimulation::advect_velocity(Real dt, IntegratorSettings::Integrator order)
 {
 	AdvectField<VectorGrid<Real>> advector(m_vel, m_vel);
 	//advector.set_collision_volumes(m_collision);
@@ -216,7 +226,7 @@ void MarkerParticlesSimulation::advect_velocity(Real dt, IntegratorSettings::Int
 	m_vel = temp_vel;
 }
 
-Real MarkerParticlesSimulation::compute_volume(bool liquid) const
+Real FlipParticlesSimulation::compute_volume(bool liquid) const
 {
 	size_t samples = 2;
 	Real sample_dx = 1. / (Real)samples;
@@ -244,7 +254,7 @@ Real MarkerParticlesSimulation::compute_volume(bool liquid) const
 	return volume * sqr(sample_dx) * sqr(m_surface.dx());
 }
 
-void MarkerParticlesSimulation::run_simulation(Real dt, Renderer& renderer)
+void FlipParticlesSimulation::run_simulation(Real dt, Renderer& renderer)
 {
 	// Extrapolate surface into collision by one cell
 	LevelSet2D extrap_surface = m_surface;
@@ -257,20 +267,7 @@ void MarkerParticlesSimulation::run_simulation(Real dt, Renderer& renderer)
 				extrap_surface.set_phi(Vec2st(x, y), m_surface(x, y) - dx);//extrap_surface.set_phi(Vec2st(x, y), -.5);//
 			}
 		}
-
-
-
-	//LevelSet2D extrap_surface = m_surface;
-	//Real dx = m_surface.dx();
-	//for (size_t x = 0; x < extrap_surface.size()[0]; ++x)
-	//	for (size_t y = 0; y < extrap_surface.size()[1]; ++y)
-	//	{
-	//		if (m_surface(x, y) < 0.5 * dx)
-	//		{
-	//			if (m_collision(x, y) <= .0) extrap_surface.set_phi(Vec2st(x, y), m_surface(x, y) - dx);//extrap_surface.set_phi(Vec2st(x, y), -.5);//
-	//		}
-	//	}
-
+	
 	extrap_surface.reinit();
 	//extrap_surface.draw_surface(renderer, Vec3f(1, 0, 1));
 
@@ -283,13 +280,17 @@ void MarkerParticlesSimulation::run_simulation(Real dt, Renderer& renderer)
 	VectorGrid<Real> cc_weights(m_surface.xform(), m_surface.size(), VectorGridSettings::STAGGERED);
 	pressureweightcomputer.compute_cutcell_weights(cc_weights);
 
+	// Stamp particle velocity to velocity grid
+	m_particles.apply_velocity(m_vel);
+	VectorGrid<Real> old_vel = m_vel;
+
 	// Initialize and call pressure projection
 	PressureProjection projectdivergence(dt, m_vel, extrap_surface);
 	VectorGrid<Real> valid(m_surface.xform(), m_surface.size(), VectorGridSettings::STAGGERED);
 
-
-		std::cout << "Liquid volume: " << compute_volume(true) << std::endl;
-		std::cout << "Bubble volume: " << compute_volume(false) << std::endl;
+	Real liquid_volume = compute_volume(true);
+	std::cout << "Liquid volume: " << liquid_volume << std::endl;
+	std::cout << "Bubble volume: " << compute_volume(false) << std::endl;
 	//projectdivergence.batty_pressure_solve(liquid_weights, cc_weights, renderer, valid, m_vel);
 
 
@@ -298,6 +299,16 @@ void MarkerParticlesSimulation::run_simulation(Real dt, Renderer& renderer)
 		projectdivergence.set_collision_velocity(m_collision_vel);
 	}
 
+	if (m_volume_correction)
+	{
+		Real xn = (liquid_volume - m_target_volume) / m_target_volume;
+		m_accum_error += xn * dt;
+		Real kp = 2.3 / (25. * dt);
+		Real kl = sqr(kp / 4.);
+
+		//projectdivergence.set_volume_correction(-kp*xn - kl * m_accum_error);
+		projectdivergence.set_volume_correction(liquid_volume - m_target_volume);
+	}
 	if (m_st_scale != 0.)
 	{
 		const ScalarGrid<Real> surface_tension = m_surface.get_curvature();
@@ -368,8 +379,7 @@ void MarkerParticlesSimulation::run_simulation(Real dt, Renderer& renderer)
 
 		if (m_enforce_bubbles)
 			projectdivergence2.enforce_bubbles();
-
-		projectdivergence2.project(liquid_weights, cc_weights, center_weights, renderer);
+//		projectdivergence2.project(liquid_weights, cc_weights, renderer);
 
 		// Update velocity field
 		projectdivergence2.apply_solution(m_vel, liquid_weights, cc_weights);
@@ -398,9 +408,12 @@ void MarkerParticlesSimulation::run_simulation(Real dt, Renderer& renderer)
 			}
 	}
 
+	// Apply velocity back to particles
+	m_particles.blend_velocity(old_vel, m_vel, 0.9);
+
 	// Move particles through velocity field -- TODO: deal with errant loose particles
 	m_particles.bump_particles(m_collision);
-	m_particles.reseed(m_surface, .5, 1.5);
+	m_particles.reseed(m_surface, .5, 1.5, &m_vel);
 
 	// Manage particles on the air side
 	if (m_air_volume)
@@ -436,10 +449,10 @@ void MarkerParticlesSimulation::run_simulation(Real dt, Renderer& renderer)
 		m_surface.reinit();
 
 		m_air_particles.reseed(m_air_surface, .5, 1.5);
-		m_particles.reseed(m_surface, .5, 1.5);
+		m_particles.reseed(m_surface, .5, 1.5, &m_vel);
 	}
 
-	advect_velocity(dt, IntegratorSettings::RK3);
+	//advect_velocity(dt, IntegratorSettings::RK3);
 
 	if (m_solve_viscosity)
 		advect_viscosity(dt, IntegratorSettings::RK3);

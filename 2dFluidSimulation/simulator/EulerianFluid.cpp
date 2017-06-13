@@ -213,7 +213,12 @@ void EulerianFluid::run_simulation(Real dt, Renderer& renderer)
 	
 	if (m_enforce_bubbles)
 		projectdivergence.enforce_bubbles();
-	projectdivergence.project(liquid_weights, cc_weights, renderer);
+
+	ComputeWeights volumecomputer(m_surface, m_collision);
+	ScalarGrid<Real> center_weights(m_surface.xform(), m_surface.size(), 0, ScalarGridSettings::CENTER);
+	volumecomputer.compute_supersampled_volumes(center_weights, 3);
+
+	projectdivergence.project(liquid_weights, cc_weights, center_weights, renderer);
 	
 	// Update velocity field
 	projectdivergence.apply_solution(m_vel, liquid_weights, cc_weights);

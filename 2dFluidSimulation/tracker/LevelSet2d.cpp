@@ -1,5 +1,8 @@
 #include <queue>
 
+#include <Eigen/Dense>
+#include <Eigen/SVD>
+
 #include "LevelSet2d.h"
 #include "VectorGrid.h"
 #include "predicates.h"
@@ -30,6 +33,12 @@ void LevelSet2D::draw_surface(Renderer& renderer, const Vec3f& colour)
 	if (!m_mesh_set) extract_mesh(m_surface);
 	m_mesh_set = true;
 	m_surface.draw_mesh(renderer, colour);
+}
+
+void LevelSet2D::draw_dc_surface(Renderer& renderer, const Vec3f& colour)
+{
+	extract_dc_mesh(m_surface);
+	m_surface.draw_mesh(renderer, colour, true, true, Vec3f(1.,0,0));
 }
 
 // Find the nearest point on the interface starting from the index position.
@@ -69,7 +78,6 @@ void LevelSet2D::reinit(size_t iters)
 
 	for (size_t i = 0; i < iters; ++i)
 	{
-
 		// We want a new gradient to run the interface search with
 		build_gradient();
 
@@ -452,26 +460,6 @@ static const Vec2st edge_node_map[4] =
 static const Vec2st node_in_cell[4] =
 { Vec2st(0,0), Vec2st(1,0), Vec2st(1,1), Vec2st(0,1) };
 
-static const int mc_template[16][4] =
-{ { -1,-1,-1,-1 },
-{ 3, 0,-1,-1 },
-{ 0, 1,-1,-1 },
-{ 3, 1,-1,-1 },
-
-{ 1, 2,-1,-1 },
-{ 3, 0, 1, 2 },
-{ 0, 2,-1,-1 },
-{ 3, 2,-1,-1 },
-
-{ 2, 3,-1,-1 },
-{ 2, 0,-1,-1 },
-{ 0, 1, 2, 3 },
-{ 2, 1,-1,-1 },
-
-{ 1, 3,-1,-1 },
-{ 1, 0,-1,-1 },
-{ 0, 3,-1,-1 },
-{ -1,-1,-1,-1 } };
 
 // Extract a mesh representation of the interface. Useful for rendering but not much
 // else since there will be duplicate vertices per grid edge in the current implementation.
@@ -533,6 +521,158 @@ void LevelSet2D::extract_mesh(Mesh2D& surf) const
 	surf = Mesh2D(edges, verts);
 
 }
+
+// Extract a mesh representation of the interface using dual contouring
+
+void LevelSet2D::extract_dc_mesh(Mesh2D& surf) // Not const because of building normals
+{
+	std::vector<Vec2R> verts;
+	std::vector<Vec2i> edges;
+
+	verts.reserve(surf.vert_size());
+	edges.reserve(surf.edge_size());
+
+	surf.clear();
+
+	// Create grid to store index to dual contouring point. Note that phi is
+	// center sampled so the DC grid must be node sampled and cell shorter
+	// in each dimension
+	UniformGrid<int> dc_points(size() - Vec2st(1), -1);
+
+	// Run dual contouring loop
+	for (size_t x = 0; x < dc_points.size()[0]; ++x)
+		for (size_t y = 0; y < dc_points.size()[1]; ++y)
+		{
+			std::vector<Vec2R> qef_points;
+			std::vector<Vec2R> qef_norms;
+
+			Vec2st idx(x, y);
+			// Find zero crossings
+			for (int e = 0; e < 4; ++e)
+			{
+				Vec2st bidx = idx + node_in_cell[edge_node_map[e][0]];
+				Vec2st fidx = idx + node_in_cell[edge_node_map[e][1]];
+
+				// Look for zero crossings
+				if ((m_phi(bidx[0], bidx[1]) <= 0.) && (m_phi(fidx[0], fidx[1]) > 0.) ||
+					(m_phi(bidx[0], bidx[1]) > 0.) && (m_phi(fidx[0], fidx[1]) <= 0.))
+				{
+					// Find interface point
+					Vec2R v0 = interp_interface(bidx, fidx);
+					qef_points.push_back(v0);
+
+					// Find associated surface normal
+					Vec2R norm = normal(idx_to_ws(v0));
+					qef_norms.push_back(norm);
+				}
+			}
+
+			if(qef_points.size() > 0)
+			{
+
+				Eigen::MatrixXd A(qef_points.size(), 2);
+				Eigen::VectorXd b(qef_points.size());
+				Eigen::VectorXd xcom = Eigen::VectorXd::Zero(2);
+				
+				assert(qef_points.size() > 1);
+				for (size_t p = 0; p < qef_points.size(); ++p)
+				{
+					A(p, 0) = qef_norms[p][0]; A(p, 1) = qef_norms[p][1];
+					b(p) = dot(qef_norms[p], qef_points[p]);
+					xcom[0] += qef_points[p][0]; xcom[1] += qef_points[p][1];	
+				}
+
+				xcom /= (Real)(qef_points.size());
+
+				Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
+				svd.setThreshold(1E-2);
+
+				Eigen::VectorXd np = xcom + svd.solve(b - A * xcom);
+				
+				Vec2R cm(xcom[0], xcom[1]);
+
+				Vec2i bbmin = floor(cm);
+				Vec2i bbmax = ceil(cm);
+
+
+				if (np[0] < bbmin[0] || np[1] < bbmin[1] ||
+					np[0] > bbmax[0] || np[1] > bbmax[1]) np = xcom;
+				/*
+				if (np[0] < bbmin[0])
+				{
+					Real alpha = (bbmin[0] - np[0]) / (xcom[0] - np[0]);
+					np += alpha * (xcom - np);
+				}
+				if (np[1] < bbmin[1])
+				{
+					Real alpha = (bbmin[1] - np[1]) / (xcom[1] - np[1]);
+					np += alpha * (xcom - np);
+				}
+				if (np[0] > bbmax[0])
+				{
+					Real alpha = (bbmax[0] - np[0]) / (xcom[0] - np[0]);
+					np += alpha * (xcom - np);
+				}
+				if (np[1] > bbmax[1])
+				{
+					Real alpha = (bbmax[1] - np[1]) / (xcom[1] - np[1]);
+					np += alpha * (xcom - np);
+				}
+				*/
+
+				verts.push_back(idx_to_ws(Vec2R(np[0], np[1])));
+				dc_points(x, y) = verts.size() - 1;
+			}
+		}
+
+	// Connected DC points across faces
+	for (size_t x = 1; x < size()[0] - 1; ++x)
+		for (size_t y = 0; y < size()[1] - 1; ++y)
+		{
+			Vec2i idx(x, y);
+			Vec2i bidx = idx;
+			Vec2i fidx = idx + Vec2i(0,1);
+
+			// Look for zero crossings
+			if ((m_phi(bidx[0], bidx[1]) <= 0.) && (m_phi(fidx[0], fidx[1]) > 0.) ||
+				(m_phi(bidx[0], bidx[1]) > 0.) && (m_phi(fidx[0], fidx[1]) <= 0.))
+			{
+				// Confirm that both adjacent cells have indexed vertices
+				Vec2i bcidx = idx + face_to_cell[0][0];
+				Vec2i fcidx = idx + face_to_cell[0][1];
+
+				assert(dc_points(bcidx[0], bcidx[1]) >= 0 && dc_points(fcidx[0], fcidx[1]) >= 0);
+
+				if (m_phi(bidx[0], bidx[1]) <= 0.) edges.push_back(Vec2i(dc_points(bcidx[0], bcidx[1]), dc_points(fcidx[0], fcidx[1])));
+				else edges.push_back(Vec2i(dc_points(fcidx[0], fcidx[1]), dc_points(bcidx[0], bcidx[1])));
+			}
+		}
+
+	for (size_t x = 0; x < size()[0] - 1; ++x)
+		for (size_t y = 1; y < size()[1] - 1; ++y)
+		{
+			Vec2i idx(x, y);
+			Vec2i bidx = idx;
+			Vec2i fidx = idx + Vec2i(1, 0);
+
+			// Look for zero crossings
+			if ((m_phi(bidx[0], bidx[1]) <= 0.) && (m_phi(fidx[0], fidx[1]) > 0.) ||
+				(m_phi(bidx[0], bidx[1]) > 0.) && (m_phi(fidx[0], fidx[1]) <= 0.))
+			{
+				// Confirm that both adjacent cells have indexed vertices
+				Vec2i bcidx = idx + face_to_cell[1][0];
+				Vec2i fcidx = idx + face_to_cell[1][1];
+
+				assert(dc_points(bcidx[0], bcidx[1]) >= 0 && dc_points(fcidx[0], fcidx[1]) >= 0);
+
+				if (m_phi(bidx[0], bidx[1]) <= 0.) edges.push_back(Vec2i(dc_points(fcidx[0], fcidx[1]), dc_points(bcidx[0], bcidx[1])));
+				else edges.push_back(Vec2i(dc_points(bcidx[0], bcidx[1]), dc_points(fcidx[0], fcidx[1])));
+			}
+		}
+
+	surf = Mesh2D(edges, verts);
+}
+
 
 Vec2R LevelSet2D::interp_interface(const Vec2st& i0, const Vec2st& i1) const
 {
