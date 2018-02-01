@@ -1,6 +1,6 @@
-add_executable(eulerianfluid eulerianfluid.cpp)
+add_executable(viscousfluid viscousfluid.cpp)
 
-target_link_libraries(eulerianfluid
+target_link_libraries(viscousfluid
 						PRIVATE
 						2dfluid_simulators
 						2dfluid_trackers
@@ -10,4 +10,4 @@ target_link_libraries(eulerianfluid
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
-install(TARGETS eulerianfluid RUNTIME DESTINATION ${REL})
+install(TARGETS viscousfluid RUNTIME DESTINATION ${REL})
