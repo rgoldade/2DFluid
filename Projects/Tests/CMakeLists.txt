@@ -1,0 +1,3 @@
+add_subdirectory(TestLevelSet)
+add_subdirectory(TestScalarGrid)
+add_subdirectory(TestMeshAndLevelSet)
