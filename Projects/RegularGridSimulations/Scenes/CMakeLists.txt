@@ -1,0 +1,2 @@
+add_subdirectory(EulerianFluid)
+add_subdirectory(ViscousFluid)

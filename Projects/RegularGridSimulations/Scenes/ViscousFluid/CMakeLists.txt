@@ -2,7 +2,7 @@ add_executable(viscousfluid viscousfluid.cpp)
 
 target_link_libraries(viscousfluid
 						PRIVATE
-						2dfluid_simulators
+						2dfluid_library
 						2dfluid_trackers
 						2dfluid_simtools
 						2dfluid_common
