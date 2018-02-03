@@ -1,5 +1,4 @@
-add_library(2dfluid_common
-				OctreeGrid.cpp)
+add_library(2dfluid_common)
 
 target_include_directories(2dfluid_common PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
