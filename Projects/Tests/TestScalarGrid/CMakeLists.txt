@@ -9,3 +9,5 @@ target_link_libraries(testscalargrid
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
 install(TARGETS testscalargrid RUNTIME DESTINATION ${REL})
+
+set_target_properties(testscalargrid PROPERTIES FOLDER ${TEST_FOLDER})

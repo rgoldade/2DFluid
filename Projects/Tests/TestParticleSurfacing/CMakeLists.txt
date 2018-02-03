@@ -10,3 +10,5 @@ target_link_libraries(testparticlesurfacing
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
 install(TARGETS testparticlesurfacing RUNTIME DESTINATION ${REL})
+
+set_target_properties(testparticlesurfacing PROPERTIES FOLDER ${TEST_FOLDER})

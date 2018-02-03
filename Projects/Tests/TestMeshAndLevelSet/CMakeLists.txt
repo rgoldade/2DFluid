@@ -10,3 +10,5 @@ target_link_libraries(testmovingmeshandlevelset
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
 install(TARGETS testmovingmeshandlevelset RUNTIME DESTINATION ${REL})
+
+set_target_properties(testmovingmeshandlevelset PROPERTIES FOLDER ${TEST_FOLDER})

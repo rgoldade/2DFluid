@@ -11,3 +11,5 @@ target_link_libraries(2dfluid_simulators
 target_include_directories(2dfluid_simulators PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 							  $<INSTALL_INTERFACE:include>)
+
+set_target_properties(2dfluid_simulators PROPERTIES FOLDER ${REGULAR_FOLDER}/Library)

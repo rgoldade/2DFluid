@@ -8,3 +8,5 @@ target_include_directories(2dfluid_common PUBLIC
 target_link_libraries(2dfluid_common
 						PRIVATE
 						2dfluid_render)
+
+set_target_properties(2dfluid_common PROPERTIES FOLDER ${SOURCE_FOLDER})

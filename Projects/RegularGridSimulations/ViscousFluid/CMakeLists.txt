@@ -11,3 +11,5 @@ target_link_libraries(viscousfluid
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
 install(TARGETS viscousfluid RUNTIME DESTINATION ${REL})
+
+set_target_properties(viscousfluid PROPERTIES FOLDER ${REGULAR_FOLDER})

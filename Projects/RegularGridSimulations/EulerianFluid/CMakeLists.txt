@@ -11,3 +11,5 @@ target_link_libraries(eulerianfluid
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
 install(TARGETS eulerianfluid RUNTIME DESTINATION ${REL})
+
+set_target_properties(eulerianfluid PROPERTIES FOLDER ${REGULAR_FOLDER})
