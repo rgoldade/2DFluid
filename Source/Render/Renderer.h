@@ -3,7 +3,6 @@
 #include <vector>
 #include <functional>
 
-#include <GL/glew.h>
 #include <GL/glut.h>
 
 #include "Core.h"
