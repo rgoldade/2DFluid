@@ -34,7 +34,6 @@ public:
 		: m_xform(xform)
 		, m_moving_solids(false)
 		, m_solve_viscosity(false)
-		, m_enforce_bubbles(false)
 		, m_st_scale(0.)
 	{
 		m_vel = VectorGrid<Real>(m_xform, nx, VectorGridSettings::STAGGERED);
@@ -51,11 +50,6 @@ public:
 	void set_surface_tension(Real st_scale)
 	{
 		m_st_scale = st_scale;
-	}
-
-	void set_enforce_bubbles()
-	{
-		m_enforce_bubbles = true;
 	}
 
 	void set_viscosity(const ScalarGrid<Real>& visc_coeff)
@@ -106,6 +100,6 @@ private:
 
 	Transform m_xform;
 
-	bool m_moving_solids, m_solve_viscosity, m_enforce_bubbles;
+	bool m_moving_solids, m_solve_viscosity;
 	Real m_st_scale;
 };
