@@ -1,3 +1,5 @@
+.cproject
+.project
 
 Projects/*
 !Projects/RegularGridSimulations/*
