@@ -14,7 +14,6 @@ To-do:
 5. Add a scene with moving collisions to demonstrate that it indeed works.
 6. Add support and a scene for variable viscosity.
 7. Test build with Mac.
-8. Implicit fluid extrapolation into solids in pressure solve. The explicit method of dilating the surface level set into the solid is slow and not needed.
 
 Stretch to-do:
 
