@@ -14,6 +14,7 @@ To-do:
 5. Add a scene with moving collisions to demonstrate that it indeed works.
 6. Add support and a scene for variable viscosity.
 7. Test build with Mac.
+8. Consistency when indexing loops -- (i,j) or (x,y)
 
 Stretch to-do:
 
