@@ -51,10 +51,23 @@ void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const V
 	UniformGrid<int> solvable_cells(m_surface.size(), UNSOLVED);
 
 	// This loop is dumb in serial but it's here as a placeholder for parallel later
+
+	Real dx = m_surface.dx();
 	for (int x = 0; x < solvable_cells.size()[0]; ++x)
 		for (int y = 0; y < solvable_cells.size()[1]; ++y)
 		{
-			if (m_surface(x, y) < 0.)
+			Real sdf = m_surface(x, y);
+			bool in_fluid = (sdf < 0.);
+
+			// Implicit extrapolation of the fluid into the collision. This is an important piece
+			// of Batty et al. 2007. A cell whose center falls inside the solid could still have fluid
+			// in the cell. By extrapolating, we are sure to get all partially filled cells.
+			if (!in_fluid && m_collision)
+			{
+				if (sdf < .5 * dx && (*m_collision)(x, y) < 0.) in_fluid = true;
+			}
+
+			if (in_fluid)
 			{
 				for (int dir = 0; dir < 4; ++dir)
 				{
@@ -83,7 +96,7 @@ void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const V
 	Solver solver(solvecount, solvecount * 7);
 
 	// Build linear system
-	double dx = m_surface.dx();
+
 	Real cell_vol = sqr(dx);
 	for (int x = 0; x < solvable_cells.size()[0]; ++x)
 		for (int y = 0; y < solvable_cells.size()[1]; ++y)

@@ -170,22 +170,7 @@ void EulerianFluid::advect_velocity(Real dt, IntegratorSettings::Integrator orde
 
 void EulerianFluid::run_simulation(Real dt, Renderer& renderer)
 {
-	// Extrapolate surface into collision by one cell
-	LevelSet2D extrap_surface = m_surface;
-	Real dx = m_surface.dx();
-	for (size_t x = 0; x < extrap_surface.size()[0]; ++x)
-		for (size_t y = 0; y < extrap_surface.size()[1]; ++y)
-		{
-			if (m_surface(x, y) > -.5 * dx && m_collision(x, y) <= 0)
-			{
-				extrap_surface.set_phi(Vec2st(x, y), m_surface(x, y) - dx);//extrap_surface.set_phi(Vec2st(x, y), -.5);//
-			}
-		}
-
-	extrap_surface.reinit();
-	//extrap_surface.draw_surface(renderer, Vec3f(1, 0, 1));
-
-	ComputeWeights pressureweightcomputer(extrap_surface, m_collision);
+	ComputeWeights pressureweightcomputer(m_surface, m_collision);
 
 	// Compute weights for both liquid-solid side and air-liquid side
 	VectorGrid<Real> liquid_weights(m_surface.xform(), m_surface.size(), VectorGridSettings::STAGGERED);
@@ -195,11 +180,10 @@ void EulerianFluid::run_simulation(Real dt, Renderer& renderer)
 	pressureweightcomputer.compute_cutcell_weights(cc_weights);
 
 	// Initialize and call pressure projection
-	PressureProjection projectdivergence(dt, m_vel, extrap_surface);
+	PressureProjection projectdivergence(dt, m_vel, m_surface);
 
 	if (m_moving_solids)
 	{
-		Real testmax = m_collision_vel.max_magnitude();
 		projectdivergence.set_collision_velocity(m_collision_vel);
 	}
 
@@ -257,7 +241,7 @@ void EulerianFluid::run_simulation(Real dt, Renderer& renderer)
 		viscosity.solve(face_vol_weights, center_vol_weights, node_vol_weights, renderer);
 
 		// Initialize and call pressure projection		
-		PressureProjection projectdivergence2(dt, m_vel, extrap_surface);
+		PressureProjection projectdivergence2(dt, m_vel, m_surface);
 
 		if (m_moving_solids)
 		{

@@ -2,7 +2,9 @@
 .project
 
 Projects/*
+!Projects/RegularGridSimulations
 !Projects/RegularGridSimulations/*
+!Projects/Tests
 !Projects/Tests/*
 !Projects/CMakeLists.txt
 
