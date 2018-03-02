@@ -1,6 +1,9 @@
 .cproject
 .project
 
+CMakeFiles
+CMakeCache.txt
+
 Projects/*
 !Projects/RegularGridSimulations
 !Projects/RegularGridSimulations/*
