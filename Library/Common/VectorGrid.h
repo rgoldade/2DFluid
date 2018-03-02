@@ -64,7 +64,7 @@ public:
 	}
 
 
-	SampleType sample_type() { return m_stype; }
+	SampleType sample_type() const { return m_stype; }
 
 	// Check that the two grids are of the same size, 
 	// positioned at the same spot, have the same grid
@@ -72,9 +72,10 @@ public:
 	template<typename S>
 	inline bool is_matched(const VectorGrid<S>& grid) const
 	{
-		if (size() != grid.size()) return false;
-		if (m_xform != grid.xform()) return false;
-		if (m_stype != grid.sample_type()) return false;
+		if (size(0) != grid.size(0)) return false;
+		if (size(1) != grid.size(1)) return false;
+		if (grid.xform() != m_xform ) return false;
+		if (grid.sample_type() != m_stype) return false;
 		return true;
 	}
 
