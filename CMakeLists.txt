@@ -22,6 +22,17 @@ else()
 	link_libraries(${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} )
 endif()
 
+find_package(EIGEN3 REQUIRED)
+if (EIGEN3_FOUND)
+    include_directories(${EIGEN3_INCLUDE_DIR})
+endif()
+
+find_package(TBB REQUIRED)
+if (TBB_FOUND)
+	include_directories(${TBB_INCLUDE_DIRS})
+	link_libraries(${TBB_LIBRARIES} ${TBB_LIBRARIES_DEBUG})
+endif()
+
 enable_testing()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)

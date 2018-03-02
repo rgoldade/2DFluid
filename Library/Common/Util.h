@@ -14,7 +14,8 @@
 //
 ////////////////////////////////////
 
-static unsigned int intmax = std::numeric_limits<unsigned int>::max();
+
+static unsigned int intmax = (std::numeric_limits<unsigned int>::max)();
 
 #ifndef M_PI
 const double M_PI = 3.1415926535897932384626433832795;
