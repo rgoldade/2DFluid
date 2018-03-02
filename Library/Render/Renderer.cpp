@@ -239,18 +239,18 @@ void Renderer::add_lines(const std::vector<Vec2R>& start, const std::vector<Vec2
 	m_line_colours.push_back(colour);
 }
 
-void Renderer::add_tris(const std::vector<Vec2R>& points, const std::vector<Vec3st>& faces, const Vec3f& colour)
+void Renderer::add_tris(const std::vector<Vec2R>& verts, const std::vector<Vec3st>& faces, const std::vector<Vec3f>& colour)
 {
-	m_tri_points.push_back(points);
+	m_tri_verts.push_back(verts);
 	m_tri_faces.push_back(faces);
 	m_tri_colours.push_back(colour);
 }
 
-void Renderer::add_quads(const std::vector<Vec2R>& points, const std::vector<Vec4st>& faces, const Vec3f& colour)
+void Renderer::add_quads(const std::vector<Vec2R>& verts, const std::vector<Vec4st>& faces, const std::vector<Vec3f>& colours)
 {
-	m_quad_points.push_back(points);
+	m_quad_verts.push_back(verts);
 	m_quad_faces.push_back(faces);
-	m_quad_colours.push_back(colour);
+	m_quad_colours.push_back(colours);
 }
 
 void Renderer::clear()
@@ -263,7 +263,11 @@ void Renderer::clear()
 	m_end_lines.clear();
 	m_line_colours.clear();
 
-	m_quad_points.clear();
+	m_tri_verts.clear();
+	m_tri_faces.clear();
+	m_tri_colours.clear();
+
+	m_quad_verts.clear();
 	m_quad_faces.clear();
 	m_quad_colours.clear();
 }
@@ -272,17 +276,20 @@ void Renderer::draw_primitives() const
 {
 	// Render quads
 	glBegin(GL_QUADS);
+
 	for (size_t qs = 0; qs < m_quad_faces.size(); ++qs)
 	{
-		Vec3f c = m_quad_colours[qs];
-		glColor3f(c[0], c[1], c[2]);
 		for (size_t f = 0; f < m_quad_faces[qs].size(); ++f)
 		{
+			Vec3f colour = m_quad_colours[qs][f];
+			glColor3f(colour[0], colour[1], colour[2]);
+
+			
 			for (size_t qp = 0; qp < 4; ++qp)
 			{
 				size_t face = m_quad_faces[qs][f][qp];
-				Vec2R p = m_quad_points[qs][face];
-				glVertex2d(p[0], p[1]);
+				Vec2R vert = m_quad_verts[qs][face];
+				glVertex2d(vert[0], vert[1]);
 			}
 		}
 	}
@@ -292,14 +299,15 @@ void Renderer::draw_primitives() const
 	glBegin(GL_TRIANGLES);
 	for (size_t ts = 0; ts < m_tri_faces.size(); ++ts)
 	{
-		Vec3f c = m_tri_colours[ts];
-		glColor3f(c[0], c[1], c[2]);
 		for (size_t f = 0; f < m_tri_faces[ts].size(); ++f)
 		{
+			Vec3f colour = m_tri_colours[ts][f];
+			glColor3f(colour[0], colour[1], colour[2]);
+
 			for (size_t tp = 0; tp < 3; ++tp)
 			{
 				size_t face = m_tri_faces[ts][f][tp];
-				Vec2R p = m_tri_points[ts][face];
+				Vec2R p = m_tri_verts[ts][face];
 				glVertex2d(p[0], p[1]);
 			}
 		}

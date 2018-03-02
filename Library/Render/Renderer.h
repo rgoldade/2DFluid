@@ -42,8 +42,8 @@ public:
 
 	void add_line(const Vec2R& start, const Vec2R& end, const Vec3f& colour = Vec3f(0, 0, 0));
 	void add_lines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour);
-	void add_tris(const std::vector<Vec2R>& points, const std::vector<Vec3st>& faces, const Vec3f& colour);
-	void add_quads(const std::vector<Vec2R>& points, const std::vector<Vec4st>& faces, const Vec3f& colour);
+	void add_tris(const std::vector<Vec2R>& verts, const std::vector<Vec3st>& faces, const std::vector<Vec3f>& colour);
+	void add_quads(const std::vector<Vec2R>& verts, const std::vector<Vec4st>& faces, const std::vector<Vec3f>& colours);
 	
 	void draw_primitives() const;
 
@@ -59,13 +59,13 @@ private:
 	std::vector<std::vector<Vec2R>> m_end_lines;
 	std::vector<Vec3f> m_line_colours;
 
-	std::vector<std::vector<Vec2R>> m_tri_points;
+	std::vector<std::vector<Vec2R>> m_tri_verts;
 	std::vector<std::vector<Vec3st>> m_tri_faces;
-	std::vector<Vec3f> m_tri_colours;
+	std::vector<std::vector<Vec3f>> m_tri_colours;
 
-	std::vector<std::vector<Vec2R>> m_quad_points;
+	std::vector<std::vector<Vec2R>> m_quad_verts;
 	std::vector<std::vector<Vec4st>> m_quad_faces;
-	std::vector<Vec3f> m_quad_colours;
+	std::vector<std::vector<Vec3f>> m_quad_colours;
 
 	// width, height
 	Vec2i m_wsize;
