@@ -1,5 +1,4 @@
-add_library(2dfluid_library
-				EulerianFluid.cpp)
+add_library(2dfluid_library EulerianLiquid.cpp EulerianSmoke.cpp)
 
 target_link_libraries(2dfluid_library
 						PRIVATE

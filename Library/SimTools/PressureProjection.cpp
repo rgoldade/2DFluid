@@ -41,7 +41,7 @@ void PressureProjection::draw_divergence(Renderer& renderer) const
 	div.draw_supersampled_values(renderer, .25, 3, 2);
 }
 
-void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights, const ScalarGrid<Real>& center_weights, Renderer& renderer)
+void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights)
 {
 	assert(liquid_weights.size(0) == fluid_weights.size(0) &&
 			liquid_weights.size(1) == fluid_weights.size(1) &&

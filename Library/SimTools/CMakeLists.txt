@@ -11,11 +11,6 @@ target_link_libraries(2dfluid_simtools
 						2dfluid_common
 						2dfluid_trackers)
 
-find_package(EIGEN3 REQUIRED)
-if (EIGEN3_FOUND)
-    include_directories(${EIGEN3_INCLUDE_DIR})
-endif()
-
 target_include_directories(2dfluid_simtools PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 							  $<INSTALL_INTERFACE:include>)

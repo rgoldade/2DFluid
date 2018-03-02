@@ -65,11 +65,11 @@ void ComputeWeights::compute_cutcell_weights(VectorGrid<Real>& cc_weights)
 	// the underlying collision surface
 
 	assert(cc_weights.sample_type() == VectorGridSettings::STAGGERED &&
-			cc_weights.size(0)[0] - 1 == m_surface.size()[0] &&
-			cc_weights.size(0)[1] == m_surface.size()[1] &&
-			cc_weights.size(1)[0] == m_surface.size()[0] &&
-			cc_weights.size(1)[1] - 1 == m_surface.size()[1] &&
-			cc_weights.xform() == m_surface.xform());
+			cc_weights.size(0)[0] - 1 == m_collision.size()[0] &&
+			cc_weights.size(0)[1] == m_collision.size()[1] &&
+			cc_weights.size(1)[0] == m_collision.size()[0] &&
+			cc_weights.size(1)[1] - 1 == m_collision.size()[1] &&
+			cc_weights.xform() == m_collision.xform());
 
 	for (int y = 0; y < cc_weights.size(0)[1]; ++y)
 	{

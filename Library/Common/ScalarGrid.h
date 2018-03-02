@@ -111,7 +111,7 @@ public:
 	inline bool is_matched(const ScalarGrid<S>& grid) const
 	{
 		if (this->size() != grid.size()) return false;
-		if (m_xform != grid.xform()) return false;
+		if (grid.xform() != m_xform) return false;
 		if (m_stype != grid.sample_type()) return false;
 		return true;
 	}
@@ -177,6 +177,7 @@ public:
 	void draw_sample_points(Renderer& renderer, const Vec3f& colour = Vec3f(1,0,0), Real size = 1.) const;
 	void draw_supersampled_values(Renderer& renderer, Real radius = .5, size_t samples = 5, size_t size = 1) const;
 	void draw_sample_gradients(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
+	void draw_volumetric(Renderer& renderer, const Vec3f& mincolour, const Vec3f& maxcolour, T minval, T maxval) const;
 
 private:
 
@@ -414,6 +415,60 @@ void ScalarGrid<T>::draw_sample_gradients(Renderer& renderer, const Vec3f& colou
 			Vec2R gpos = wpos + length * grad;
 			gradient_points.push_back(gpos);
 		}
+
 	renderer.add_lines(sample_points, gradient_points, colour);
 }
 
+template<typename T>
+void ScalarGrid<T>::draw_volumetric(Renderer& renderer, const Vec3f& mincolour, const Vec3f& maxcolour, T minval, T maxval) const
+{
+	ScalarGrid<Real> nodes(xform(), size(), SampleType::NODE);
+
+	std::vector<Vec2R> verts(nodes.size()[0] * nodes.size()[1]);
+	std::vector<Vec4st> pixels(this->m_nx[0] * this->m_nx[1]);
+	std::vector<Vec3f> colours(this->m_nx[0] * this->m_nx[1]);
+
+	// Set node points
+	Vec2st size = nodes.size();
+	for (int i = 0; i < size[0]; ++i)
+		for (int j = 0; j < size[1]; ++j)
+		{
+			int vert = nodes.stride(Vec2st(i, j));
+			verts[vert] = nodes.idx_to_ws(Vec2R(i, j));
+		}
+
+	static Vec2i cell_to_node_cw[] = { Vec2i(0,0), Vec2i(1,0), Vec2i(1,1), Vec2i(0,1) };
+
+	int pixelcount = 0;
+	for (int i = 0; i < this->m_nx[0]; ++i)
+		for (int j = 0; j < this->m_nx[1]; ++j)
+		{
+			Vec2i idx(i, j);
+			Vec4st quad;
+
+			for (int c = 0; c < 4; ++c)
+			{
+				Vec2i point = idx + cell_to_node_cw[c];
+
+				quad[c] = nodes.stride(Vec2st(point));
+			}
+
+			pixels[pixelcount] = quad;
+
+			T val = (*this)(i, j);
+			Vec3f colour;
+			if (val > maxval) colour = maxcolour;
+			else if (val < minval) colour = mincolour;
+			else
+			{
+				float s = val / (maxval - minval);
+
+				colour = mincolour * (1. - s) + maxcolour * s;
+			}
+
+			colours[pixelcount++] = colour;
+		}
+
+	renderer.add_quads(verts, pixels, colours);
+
+}

@@ -1,2 +1,3 @@
-add_subdirectory(EulerianFluid)
-add_subdirectory(ViscousFluid)
+add_subdirectory(EulerianSmoke)
+add_subdirectory(EulerianLiquid)
+add_subdirectory(ViscousLiquid)

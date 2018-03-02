@@ -82,7 +82,7 @@ public:
 	// weights. 
 	// The fluid weights refer to the cut-cell length of fluid (air and liquid) through a cell face.
 	// In both cases, 0 means "empty" and 1 means "full".
-	void project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights, const ScalarGrid<Real>& center_weights, Renderer& renderer);
+	void project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights);
 
 	// Apply solution to a velocity field at solvable faces
 	void apply_solution(VectorGrid<Real>& vel, const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights);

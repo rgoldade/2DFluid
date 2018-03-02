@@ -1,38 +1,38 @@
-#include "EulerianFluid.h"
+#include "EulerianLiquid.h"
 #include "PressureProjection.h"
 #include "ViscositySolver.h"
 
 #include "ExtrapolateField.h"
 #include "ComputeWeights.h"
 
-void EulerianFluid::draw_grid(Renderer& renderer) const
+void EulerianLiquid::draw_grid(Renderer& renderer) const
 {
 	m_surface.draw_grid(renderer);
 }
 
-void EulerianFluid::draw_surface(Renderer& renderer)
+void EulerianLiquid::draw_surface(Renderer& renderer)
 {
 	m_surface.draw_surface(renderer, Vec3f(0., 0., 1.0));
 }
 
-void EulerianFluid::draw_collision(Renderer& renderer)
+void EulerianLiquid::draw_collision(Renderer& renderer)
 {
 	m_collision.draw_surface(renderer, Vec3f(1.,0.,1.));
 }
 
-void EulerianFluid::draw_collision_vel(Renderer& renderer, Real length) const
+void EulerianLiquid::draw_collision_vel(Renderer& renderer, Real length) const
 {
 	if (m_moving_solids)
 		m_collision_vel.draw_sample_point_vectors(renderer, Vec3f(0,1,0), m_collision_vel.dx() * length);
 }
 
-void EulerianFluid::draw_velocity(Renderer& renderer, Real length) const
+void EulerianLiquid::draw_velocity(Renderer& renderer, Real length) const
 {
 	m_vel.draw_sample_point_vectors(renderer, Vec3f(0), m_vel.dx() * length);
 }
 
 // Incoming collision volume must already be inverted
-void EulerianFluid::set_collision_volume(const LevelSet2D& collision)
+void EulerianLiquid::set_collision_volume(const LevelSet2D& collision)
 {
 	assert(collision.inverted());
 
@@ -44,7 +44,7 @@ void EulerianFluid::set_collision_volume(const LevelSet2D& collision)
 	m_collision.init(temp_mesh, false);
 }
 
-void EulerianFluid::set_surface_volume(const LevelSet2D& fluid)
+void EulerianLiquid::set_surface_volume(const LevelSet2D& fluid)
 {
 	Mesh2D temp_mesh;
 	fluid.extract_mesh(temp_mesh);
@@ -52,7 +52,7 @@ void EulerianFluid::set_surface_volume(const LevelSet2D& fluid)
 	m_surface.init(temp_mesh, false);
 }
 
-void EulerianFluid::set_surface_velocity(const VectorGrid<Real>& vel)
+void EulerianLiquid::set_surface_velocity(const VectorGrid<Real>& vel)
 {
 	for (size_t axis = 0; axis < 2; ++axis)
 	{
@@ -68,7 +68,7 @@ void EulerianFluid::set_surface_velocity(const VectorGrid<Real>& vel)
 	}
 }
 
-void EulerianFluid::set_collision_velocity(const VectorGrid<Real>& collision_vel)
+void EulerianLiquid::set_collision_velocity(const VectorGrid<Real>& collision_vel)
 {
 	for (size_t axis = 0; axis < 2; ++axis)
 	{
@@ -86,7 +86,7 @@ void EulerianFluid::set_collision_velocity(const VectorGrid<Real>& collision_vel
 	m_moving_solids = true;
 }
 
-void EulerianFluid::add_surface_volume(const LevelSet2D& surface)
+void EulerianLiquid::add_surface_volume(const LevelSet2D& surface)
 {
 	// Need to zero out velocity in this added region as it could get extrapolated values
 	for (size_t axis = 0; axis < 2; ++axis)
@@ -110,7 +110,7 @@ void EulerianFluid::add_surface_volume(const LevelSet2D& surface)
 }
 
 template<typename ForceSampler>
-void EulerianFluid::add_force(const ForceSampler& force, Real dt)
+void EulerianLiquid::add_force(const ForceSampler& force, Real dt)
 {
 	for (size_t axis = 0; axis < 2; ++axis)
 	{
@@ -126,12 +126,12 @@ void EulerianFluid::add_force(const ForceSampler& force, Real dt)
 	}
 }
 
-void EulerianFluid::add_force(const Vec2R& force, Real dt)
+void EulerianLiquid::add_force(const Vec2R& force, Real dt)
 {
 	add_force([&](Vec2R, size_t axis) {return force[axis]; }, dt);
 }
 
-void EulerianFluid::advect_surface(Real dt, IntegratorSettings::Integrator order)
+void EulerianLiquid::advect_surface(Real dt, IntegratorSettings::Integrator order)
 {
 	AdvectField<LevelSet2D> advector(m_vel, m_surface);
 	advector.set_collision_volumes(m_collision);
@@ -150,7 +150,7 @@ void EulerianFluid::advect_surface(Real dt, IntegratorSettings::Integrator order
 	m_surface.reinit();
 }
 
-void EulerianFluid::advect_viscosity(Real dt, IntegratorSettings::Integrator order)
+void EulerianLiquid::advect_viscosity(Real dt, IntegratorSettings::Integrator order)
 {
 	AdvectField<ScalarGrid<Real>> advector(m_vel, m_variableviscosity);
 	advector.set_collision_volumes(m_collision);
@@ -159,7 +159,7 @@ void EulerianFluid::advect_viscosity(Real dt, IntegratorSettings::Integrator ord
 	m_variableviscosity = temp_visc;
 }
 
-void EulerianFluid::advect_velocity(Real dt, IntegratorSettings::Integrator order)
+void EulerianLiquid::advect_velocity(Real dt, IntegratorSettings::Integrator order)
 {
 	AdvectField<VectorGrid<Real>> advector(m_vel, m_vel);
 	advector.set_collision_volumes(m_collision);
@@ -168,7 +168,7 @@ void EulerianFluid::advect_velocity(Real dt, IntegratorSettings::Integrator orde
 	m_vel = temp_vel;
 }
 
-void EulerianFluid::run_simulation(Real dt, Renderer& renderer)
+void EulerianLiquid::run_simulation(Real dt, Renderer& renderer)
 {
 	ComputeWeights pressureweightcomputer(m_surface, m_collision);
 
@@ -199,7 +199,7 @@ void EulerianFluid::run_simulation(Real dt, Renderer& renderer)
 	ScalarGrid<Real> center_weights(m_surface.xform(), m_surface.size(), 0, ScalarGridSettings::CENTER);
 	volumecomputer.compute_supersampled_volumes(center_weights, 3);
 
-	projectdivergence.project(liquid_weights, cc_weights, center_weights, renderer);
+	projectdivergence.project(liquid_weights, cc_weights);
 	
 	// Update velocity field
 	projectdivergence.apply_solution(m_vel, liquid_weights, cc_weights);
@@ -248,7 +248,7 @@ void EulerianFluid::run_simulation(Real dt, Renderer& renderer)
 			projectdivergence2.set_collision_velocity(m_collision_vel);
 		}
 
-		projectdivergence.project(liquid_weights, cc_weights, center_weights, renderer);
+		projectdivergence.project(liquid_weights, cc_weights);
 
 		// Update velocity field
 		projectdivergence.apply_solution(m_vel, liquid_weights, cc_weights);

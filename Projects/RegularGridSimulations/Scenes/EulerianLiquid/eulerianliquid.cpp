@@ -9,10 +9,10 @@
 #include "LevelSet2D.h"
 #include "InitialConditions.h"
 
-#include "EulerianFluid.h"
+#include "EulerianLiquid.h"
 
 std::unique_ptr<Renderer> g_renderer;
-std::unique_ptr<EulerianFluid> g_sim;
+std::unique_ptr<EulerianLiquid> g_sim;
 
 bool g_run = false;
 bool g_single_run = false;
@@ -118,7 +118,7 @@ int main(int argc, char** argv)
 	solid.init(solid_mesh, false);
 	
 	// Set up simulation
-	g_sim = std::unique_ptr<EulerianFluid>(new EulerianFluid(xform, g_size, 10));
+	g_sim = std::unique_ptr<EulerianLiquid>(new EulerianLiquid(xform, g_size, 10));
 	g_sim->set_surface_volume(surface);
 	g_sim->set_collision_volume(solid);
 

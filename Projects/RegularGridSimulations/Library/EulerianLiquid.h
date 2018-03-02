@@ -17,20 +17,20 @@
 
 ///////////////////////////////////
 //
-// EulerianFluid.h/cpp
+// EulerianLiquid.h/cpp
 // Ryan Goldade 2016
 //
-// Wrapper class around the staggered MAC grid fluid simulator 
+// Wrapper class around the staggered MAC grid liquid simulator 
 // (which stores face-aligned velocities and pressure).
 // Handles velocity, surface, viscosity field advection,
 // pressure projection, viscosity and velocity extrapolation.
 //
 ////////////////////////////////////
 
-class EulerianFluid
+class EulerianLiquid
 {
 public:
-	EulerianFluid(const Transform& xform, Vec2st nx, size_t nb = 5)
+	EulerianLiquid(const Transform& xform, Vec2st nx, size_t nb = 5)
 		: m_xform(xform)
 		, m_moving_solids(false)
 		, m_solve_viscosity(false)
