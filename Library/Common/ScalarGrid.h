@@ -467,6 +467,12 @@ void ScalarGrid<T>::draw_volumetric(Renderer& renderer, const Vec3f& mincolour, 
 			Vec2i idx(i, j);
 			Vec4st quad;
 
+			for (int c = 0; c < 4; ++c)
+			{
+				Vec2i point = idx + cell_to_node_cw[c];
+				quad[c] = nodes.stride(Vec2st(point));
+			}
+
 			T val = (*this)(i, j);
 
 			pixels[pixelcount] = quad;
