@@ -443,7 +443,7 @@ void ScalarGrid<T>::draw_sample_gradients(Renderer& renderer, const Vec3f& colou
 template<typename T>
 void ScalarGrid<T>::draw_volumetric(Renderer& renderer, const Vec3f& mincolour, const Vec3f& maxcolour, T minval, T maxval) const
 {
-	ScalarGrid<Real> nodes(xform(), size(), SampleType::NODE);
+	ScalarGrid<Real> nodes(xform(), this->size(), SampleType::NODE);
 
 	std::vector<Vec2R> verts(nodes.size()[0] * nodes.size()[1]);
 	std::vector<Vec4st> pixels(this->m_nx[0] * this->m_nx[1]);
