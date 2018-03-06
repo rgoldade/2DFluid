@@ -11,6 +11,8 @@
 #include "Transform.h"
 #include "MeshRebuilder.h"
 
+#include "Timer.h"
+
 #include "TestVelocityFields.h"
 
 std::unique_ptr<Renderer> g_renderer;
@@ -63,18 +65,24 @@ void display()
 		// SL level set advection
 		////////////////////////////////////////////////////////////
 
-		//typedef Integrator::rk3<Vec2R, SingleVortexSim2D> integrator_functor;
-		//g_surf->backtrace_advect(g_dt, *g_sim.get(), integrator_functor());
+		typedef Integrator::rk3<Vec2R, SingleVortexSim2D> integrator_functor;
+		g_surf->backtrace_advect(g_dt, *g_sim.get(), integrator_functor());
 
-		//// Re-init level set
+		// Re-init level set
+
+
+		
+		Timer reinitclock;
+		g_surf->reinitFIM(true);
 		//g_surf->reinit(1);
+		std::cout << "FIM levelset reinit: " << reinitclock.stop() << "s" << std::endl;
 
-		//// Extract a mesh of the level set surface using DC
-		//g_surf->extract_dc_mesh(*g_mesh);
+		// Extract a mesh of the level set surface using DC
+		g_surf->extract_dc_mesh(*g_mesh);
 	
-		////g_surf->draw_mesh_grid(*g_renderer.get());
-		//// Render out surface mesh
-		//g_mesh->draw_mesh(*g_renderer.get(), Vec3f(0, 0, 1));
+		//g_surf->draw_mesh_grid(*g_renderer.get());
+		// Render out surface mesh
+		g_mesh->draw_mesh(*g_renderer.get(), Vec3f(0, 0, 1));
 
 		////////////////////////////////////////////////////////////
 		// MC contouring SL contouring
@@ -130,18 +138,18 @@ void display()
 		//// Pure Muller + DCs
 		//////////////////////////////////////////////////////////////
 
-		// Advect the mesh through a curl noise velocity field
-		typedef Integrator::rk3<Vec2R, SingleVortexSim2D> integrator_functor;
-		g_mesh->advect(g_dt, *g_sim.get(), integrator_functor());
+		//// Advect the mesh through a curl noise velocity field
+		//typedef Integrator::rk3<Vec2R, SingleVortexSim2D> integrator_functor;
+		//g_mesh->advect(g_dt, *g_sim.get(), integrator_functor());
 
-		// Rebuild using the DC+Muller approach
-		MeshRebuilder rebuilder(g_dx);
-		rebuilder.rebuild(*g_mesh, true);
+		//// Rebuild using the DC+Muller approach
+		//MeshRebuilder rebuilder(g_dx);
+		//rebuilder.rebuild(*g_mesh, true);
 
-		//rebuilder.draw_intersections(*g_renderer.get());
+		////rebuilder.draw_intersections(*g_renderer.get());
 
-		// Render out surface mesh
-		g_mesh->draw_mesh(*g_renderer.get(), Vec3f(.5, .5, .5), false, true, Vec3f(1., 0., 0.));
+		//// Render out surface mesh
+		//g_mesh->draw_mesh(*g_renderer.get(), Vec3f(.5, .5, .5), false, true, Vec3f(1., 0., 0.));
 
 		// For single vortex sim -> bump sim forward
 		g_sim->advance(g_dt);
@@ -173,10 +181,10 @@ int main(int argc, char** argv)
 	//*g_mesh = notched_disk_mesh();
 	*g_mesh = vortex_mesh();
 	
-	//Transform xform(g_dx, Vec2R(-.5));
-	//g_surf = std::unique_ptr<LevelSet2D>(new LevelSet2D(xform, g_size, 5));
-	//g_surf->init(*g_mesh, false);
-	//g_surf->reinit();
+	Transform xform(g_dx, Vec2R(-.5));
+	g_surf = std::unique_ptr<LevelSet2D>(new LevelSet2D(xform, g_size, 5));
+	g_surf->init(*g_mesh, false);
+	g_surf->reinit();
 
 	g_mesh->draw_mesh(*g_renderer.get(), Vec3f(1,0,0), true);
 

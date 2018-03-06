@@ -1,5 +1,7 @@
 #include <queue>
 
+#include "tbb/tbb.h"
+
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 
@@ -72,6 +74,313 @@ Vec2R LevelSet2D::interface_search_idx(const Vec2R& pos, size_t iter_limit) cons
 	return ws_to_idx(fpos);
 }
 
+void LevelSet2D::reinitFIM(bool force_rebuild)
+{
+	if (!m_dirty_surface && !force_rebuild) return;
+
+	UniformGrid<marked> marked_cells(size(), UNVISITED);
+	
+	// Find the zero crossings, update their distances and flag as source cells
+	ScalarGrid<Real> temp_phi = m_phi;
+
+	build_gradient();
+
+	size_t grain_size = 500;
+	size_t voxels = size()[0] * size()[1];
+
+	tbb::enumerable_thread_specific<std::vector<Vec2st>> parallel_active_list;
+	tbb::enumerable_thread_specific<std::vector<Vec2st>> parallel_source_list;
+
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, voxels, grain_size), [&](const tbb::blocked_range<size_t> &range)
+	{
+		std::vector<Vec2st> &local_list = parallel_source_list.local();
+		std::vector<Vec2st> &active_local_list = parallel_active_list.local();
+		for (size_t r = range.begin(); r != range.end(); ++r)
+		{
+			Vec2st idx = marked_cells.unstride(r);
+
+			// Check for a zero crossing
+			for (size_t dir = 0; dir < 4; ++dir)
+			{
+				Vec2st cidx;
+
+				cidx[0] = idx[0] + cell_offset[dir][0];
+				cidx[1] = idx[1] + cell_offset[dir][1];
+
+				if (cidx[0] < 0 || cidx[1] < 0 || cidx[0] >= size()[0] || cidx[1] >= size()[1]) continue;
+
+				if (m_phi(idx[0], idx[1]) * m_phi(cidx[0], cidx[1]) <= 0.)
+				{
+					// Update distance
+					Vec2R ipos(idx);
+					Vec2R int_pos = interface_search(idx_to_ws(ipos), 5);
+					Real udf = dist(int_pos, idx_to_ws(ipos));
+
+					// If the cell has not be updated yet OR the update is lower than a previous
+					// update, assign the SDF to the cell
+					if (marked_cells(idx[0], idx[1]) != FINISHED)
+					{
+						marked_cells(idx[0], idx[1]) = FINISHED;
+						temp_phi(idx[0], idx[1]) = udf;
+						local_list.push_back(idx);
+					}
+					else if (temp_phi(idx[0], idx[1]) > udf)
+						temp_phi(idx[0], idx[1]) = udf;
+				}
+			}
+			Real val;
+			if (marked_cells(idx[0], idx[1]) == FINISHED)
+			{
+				val = temp_phi(idx[0], idx[1]);
+
+				// Add neighbours to the list
+				for (size_t dir = 0; dir < 4; ++dir)
+				{
+					Vec2st cidx;
+
+					cidx[0] = idx[0] + cell_offset[dir][0];
+					cidx[1] = idx[1] + cell_offset[dir][1];
+
+					if (cidx[0] < 0 || cidx[1] < 0 || cidx[0] >= size()[0] || cidx[1] >= size()[1]) continue;
+
+					active_local_list.push_back(cidx);
+				}
+				
+
+			}
+			else // Overwrite cell data to background distance if not at a zero crossing
+				val = m_nb;
+
+			temp_phi(idx[0], idx[1]) = (m_phi(idx[0], idx[1]) < 0.) ? -val : val;
+		}
+	});
+
+	//
+	// Cull finished cells from active list.
+	//
+
+	// Combine parallel lists
+	std::vector<Vec2st> active_list;
+
+	for (auto i = parallel_active_list.begin(); i != parallel_active_list.end(); ++i)
+	{
+		active_list.insert(active_list.end(), i->begin(), i->end());
+	}
+
+	parallel_active_list.clear();
+
+	tbb::parallel_sort(active_list.begin(), active_list.end(),
+		[](const Vec2st &a, const Vec2st &b) { if (a[0] < b[0]) return true; else if (a[0] == b[0] && a[1] < b[1]) return true; return false; });
+
+	size_t active_count = active_list.size();
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, active_count, grain_size), [&](const tbb::blocked_range<size_t> &range)
+	{
+		std::vector<Vec2st> &local_list = parallel_active_list.local();
+
+		Vec2st oidx(m_phi.size()[0], m_phi.size()[1]);
+		for (size_t r = range.begin(); r != range.end(); ++r)
+		{
+			Vec2st nidx = active_list[r];
+
+			if (nidx != oidx)
+			{
+				if (marked_cells(nidx[0], nidx[1]) != FINISHED)
+				{
+					marked_cells(nidx[0], nidx[1]) = VISITED;
+					local_list.push_back(nidx);
+				}	
+			}
+
+			oidx = nidx;
+		}
+	});
+
+	//
+	// Combine list to initialize FIM
+	//
+
+	active_list.clear();
+
+	for (auto i = parallel_active_list.begin(); i != parallel_active_list.end(); ++i)
+	{
+		active_list.insert(active_list.end(), i->begin(), i->end());
+	}
+
+	parallel_active_list.clear();
+
+	tbb::parallel_sort(active_list.begin(), active_list.end(),
+		[](const Vec2st &a, const Vec2st &b) { if (a[0] < b[0]) return true; else if (a[0] == b[0] && a[1] < b[1]) return true; return false; });
+
+	m_phi = temp_phi;
+
+
+	// Purely for rendering and debugging. Remove after method is verified.
+	std::vector<Vec2st> source_list;
+
+	for (auto i = parallel_source_list.begin(); i != parallel_source_list.end(); ++i)
+	{
+		source_list.insert(source_list.end(), i->begin(), i->end());
+	}
+
+	fast_iterative(marked_cells, active_list);
+
+	m_dirty_surface = false;
+	m_gradient_set = false;
+	m_curvature_set = false;
+	m_mesh_set = false;
+}
+
+void LevelSet2D::fast_iterative(UniformGrid<marked> &marked_cells, std::vector<Vec2st> &active_list)
+{
+	assert(marked_cells.size() == size());
+
+	// Now that the correct distances and signs have been recorded at the interface,
+	// it's important to flood fill that the signed distances outwards into the entire grid.
+	// We use the Eikonal equation here to build this outward
+	auto solveEikonal = [&](const Vec2i& idx) -> Real
+	{
+		Real max = std::numeric_limits<Real>::max();
+		Real U_bx = (idx[0] > 0) ? fabs(m_phi(idx[0] - 1, idx[1])) : max;
+		Real U_fx = (idx[0] < size()[0] - 1) ? fabs(m_phi(idx[0] + 1, idx[1])) : max;
+
+		Real U_by = (idx[1] > 0) ? fabs(m_phi(idx[0], idx[1] - 1)) : max;
+		Real U_fy = (idx[1] < size()[1] - 1) ? fabs(m_phi(idx[0], idx[1] + 1)) : max;
+
+		Real Ux = min(U_bx, U_fx);
+		Real Uy = min(U_by, U_fy);
+		Real U;
+		if (fabs(Ux - Uy) >= dx())
+			U = min(Ux, Uy) + dx();
+		else
+			// Quadratic equation from the Eikonal
+			//U = (Uh + Uv) / 2 + .5 * sqrt(pow(Uh + Uv, 2) - 2 * (Uh*Uh + Uv*Uv - dx()*dx()));
+			U = .5 * (Ux + Uy + sqrt(2. * dx() * dx() - pow(Ux - Uy, 2)));
+		return U;
+	};
+
+	ScalarGrid<Real> temp_phi = m_phi;
+
+	Real tol = dx() * 1E-5;
+	bool active_cells = true;
+	size_t grain_size = 5;
+
+	size_t active_count = active_list.size();
+
+	int loopcount = 0;
+	int maxcount = 5 * m_nb / dx();
+	while (active_count > 0 && loopcount < maxcount)
+	{	
+		tbb::enumerable_thread_specific<std::vector<Vec2st>> parallel_active_list;
+
+		tbb::parallel_for(tbb::blocked_range<size_t>(0, active_count, grain_size), [&](const tbb::blocked_range<size_t> &range)
+		{
+			std::vector<Vec2st> &local_list = parallel_active_list.local();
+			Vec2st oidx(m_phi.size()[0], m_phi.size()[1]);
+
+			for (size_t r = range.begin(); r != range.end(); ++r)
+			{
+				Vec2st idx = active_list[r];
+
+				if (oidx != idx)
+				{
+					assert(marked_cells(idx[0], idx[1]) == VISITED);
+
+					Real eikphi = solveEikonal(Vec2i(idx));
+
+					// If we hit the narrow band, we don't need to make any changes
+					if (eikphi > m_nb) continue;
+
+					temp_phi(idx[0], idx[1]) = m_phi(idx[0], idx[1]) < 0 ? -eikphi : eikphi;
+
+					// Check if new phi is converged
+					Real pval = m_phi(idx[0], idx[1]);
+
+					Real cval = fabs(eikphi - fabs(m_phi(idx[0], idx[1])));
+
+					// If the cell is converged, load up the neighbours that aren't currently being VISITED
+					if (fabs(eikphi - fabs(m_phi(idx[0], idx[1]))) < tol)
+					{
+						for (size_t dir = 0; dir < 4; ++dir)
+						{
+							Vec2st cidx;
+
+							cidx[0] = idx[0] + cell_offset[dir][0];
+							cidx[1] = idx[1] + cell_offset[dir][1];
+
+							if (cidx[0] < 0 || cidx[1] < 0 || cidx[0] >= size()[0] || cidx[1] >= size()[1]) continue;
+
+							if (marked_cells(cidx[0], cidx[1]) == UNVISITED)
+							{
+								Real eikphi = solveEikonal(Vec2i(cidx));
+
+								// Check if new phi is less than the current value
+								Real pval = fabs(m_phi(cidx[0], cidx[1]));
+								if (eikphi < fabs(m_phi(cidx[0], cidx[1])) && fabs(eikphi - fabs(m_phi(cidx[0], cidx[1]))) > tol)
+								{
+									temp_phi(cidx[0], cidx[1]) = m_phi(cidx[0], cidx[1]) < 0 ? -eikphi : eikphi;
+
+									local_list.push_back(cidx);
+								}
+							}
+						}
+					}
+					// If the cell hasn't converged, toss it back into the list
+					else
+						local_list.push_back(idx);
+				}
+
+				oidx = idx;
+			}
+
+		});
+
+		// Turn off VISITED labels for current list
+		tbb::parallel_for(tbb::blocked_range<size_t>(0, active_count, grain_size), [&](const tbb::blocked_range<size_t> &range)
+		{
+			for (size_t r = range.begin(); r != range.end(); ++r)
+			{
+				Vec2st idx = active_list[r];
+				assert(marked_cells(idx[0], idx[1]) != FINISHED);
+				marked_cells(idx[0], idx[1]) = UNVISITED;
+			}
+		});
+
+		active_list.clear();
+
+		for (auto i = parallel_active_list.begin(); i != parallel_active_list.end(); ++i)
+		{
+			active_list.insert(active_list.end(), i->begin(), i->end());
+		}
+
+		parallel_active_list.clear();
+
+		tbb::parallel_sort(active_list.begin(), active_list.end(), [](const Vec2st &a, const Vec2st &b)
+		{ 
+			if (a[0] < b[0]) return true;
+			else if (a[0] == b[0] && a[1] < b[1]) return true;
+			return false;
+		});
+
+		
+		active_count = active_list.size();
+
+		// Turn on VISITED labels for new list
+		tbb::parallel_for(tbb::blocked_range<size_t>(0, active_count, grain_size), [&](const tbb::blocked_range<size_t> &range)
+		{
+			for (size_t r = range.begin(); r != range.end(); ++r)
+			{
+				Vec2st idx = active_list[r];
+				assert(marked_cells(idx[0], idx[1]) != FINISHED);
+				marked_cells(idx[0], idx[1]) = VISITED;
+			}
+		}); 
+		
+		std::swap(temp_phi, m_phi);
+
+		++loopcount;
+	}
+}
+
 void LevelSet2D::reinit(size_t iters)
 {	
 	if (!m_dirty_surface) return;
@@ -81,8 +390,6 @@ void LevelSet2D::reinit(size_t iters)
 		// We want a new gradient to run the interface search with
 		build_gradient();
 
-		//// TODO: Write a simple redistancer for zero crossings. Blacken the crossing nodes
-		//// and dump into fast marching
 		ScalarGrid<Real> temp_phi = m_phi;
 
 		UniformGrid<marked> marked_cells(size(), UNVISITED);

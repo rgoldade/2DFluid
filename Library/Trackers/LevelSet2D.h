@@ -102,6 +102,7 @@ public:
 
 	// Each loop reconstructs the gradient, leading to more accurate SDFs
 	void reinit(size_t iters = 2);
+	void reinitFIM(bool force_rebuild = false);
 
 	bool is_dirtied() { return m_dirty_surface; }
 
@@ -196,6 +197,7 @@ public:
 	void draw_dc_surface(Renderer& renderer, const Vec3f& colour = Vec3f(0.));
 
 	void fast_marching(UniformGrid<marked>& marked_cells);
+	void fast_iterative(UniformGrid<marked>& marked_cells, std::vector<Vec2st> &active_list);
 
 private:
 
