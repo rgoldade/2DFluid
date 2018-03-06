@@ -49,7 +49,7 @@ public:
 
 	void set_smoke_source(const ScalarGrid<Real>& density, const ScalarGrid<Real>& temperature);
 
-	void advect_smoke(Real dt, IntegratorSettings::Integrator order);
+	void advect_smoke(Real dt, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp);
 	void advect_velocity(Real dt, IntegratorSettings::Integrator order);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection

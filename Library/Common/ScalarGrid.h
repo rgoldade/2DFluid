@@ -140,8 +140,8 @@ public:
 	T interp(Real x, Real y, bool idx_space = false) const { return interp(Vec2R(x, y), idx_space); }
 	T interp(const Vec2R& pos, bool idx_space = false) const;
 	
-	T cubic_interp(Real x, Real y, bool idx_space = false) const { return cubic_interp(Vec2R(x, y), idx_space); }
-	T cubic_interp(const Vec2R& pos, bool idx_space = false) const;
+	T cubic_interp(Real x, Real y, bool idx_space = false, bool clamp = false) const { return cubic_interp(Vec2R(x, y), idx_space, clamp); }
+	T cubic_interp(const Vec2R& pos, bool idx_space = false, bool clamp = false) const;
 
 	// Converters between world space and local index space
 	inline Vec2R idx_to_ws(const Vec2R& ipos) const
@@ -212,14 +212,14 @@ static inline T CINT(T p_1, T p0, T p1, T p2, T x)
 };
 
 template<typename T>
-T ScalarGrid<T>::cubic_interp(const Vec2R& pos, bool idx_space) const
+T ScalarGrid<T>::cubic_interp(const Vec2R& pos, bool idx_space, bool clamp) const
 {
 	Vec2R ipos = idx_space ? pos : ws_to_idx(pos);
 
 	Vec2i p11 = floor(ipos);
 	// Revert to linear interpolation near the boundaries
-	if (p11[0] < 1 || p11[0] > this->size()[0] - 1 ||
-		p11[1] < 1 || p11[1] > this->size()[1] - 1)
+	if (p11[0] < 1 || p11[0] >= this->size()[0] - 2 ||
+		p11[1] < 1 || p11[1] >= this->size()[1] - 2)
 			return interp(pos, true);
 
 	Vec2R u = ipos - Vec2R(p11);
@@ -240,7 +240,28 @@ T ScalarGrid<T>::cubic_interp(const Vec2R& pos, bool idx_space) const
 	T p1 = interp_x[2];
 	T p2 = interp_x[3];
 
-	return CINT(p_1, p0, p1, p2, u[1]);
+	T val = CINT(p_1, p0, p1, p2, u[1]);
+
+	if (clamp)
+	{
+		int xf = floor(ipos[0]);
+		int yf = floor(ipos[1]);
+
+		// TODO: should this actually be floor(ipos[0]+1) ?
+		int xc = ceil(ipos[0]);
+		int yc = ceil(ipos[1]);
+
+		T v00 = (*this)(xf, yf);
+		T v10 = (*this)(xc, yf);
+
+		T v01 = (*this)(xf, yc);
+		T v11 = (*this)(xc, yc);
+
+		val = max(min(min(min(v00, v10), v01), v11), val);
+		val = min(max(max(max(v00, v10), v01), v11), val);
+	}
+
+	return val;
 }
 
 template<typename T>
@@ -446,16 +467,10 @@ void ScalarGrid<T>::draw_volumetric(Renderer& renderer, const Vec3f& mincolour, 
 			Vec2i idx(i, j);
 			Vec4st quad;
 
-			for (int c = 0; c < 4; ++c)
-			{
-				Vec2i point = idx + cell_to_node_cw[c];
-
-				quad[c] = nodes.stride(Vec2st(point));
-			}
+			T val = (*this)(i, j);
 
 			pixels[pixelcount] = quad;
 
-			T val = (*this)(i, j);
 			Vec3f colour;
 			if (val > maxval) colour = maxcolour;
 			else if (val < minval) colour = mincolour;

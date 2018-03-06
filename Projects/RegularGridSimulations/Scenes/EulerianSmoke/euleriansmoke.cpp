@@ -56,10 +56,10 @@ void display()
 			// Safety checks
 			if (dt <= 0.) break;
 
+			g_sim->run_simulation(dt, *g_renderer.get());
+
 			// Add smoke density and temperature source to simulation frame
 			g_sim->set_smoke_source(g_smokedensity, g_smoketemperature);
-			
-			g_sim->run_simulation(dt, *g_renderer.get());
 
 			g_seed_time += dt;
 		}
@@ -140,7 +140,8 @@ int main(int argc, char** argv)
 	g_sim->set_collision_volume(solid);
 
 	// Set up source for smoke density and smoke temperature
-	Mesh2D source_mesh = circle_mesh(center - Vec2R(0, 1.5), .5, 20);
+	//Mesh2D source_mesh = circle_mesh(center - Vec2R(0, 1.5), .5, 20);
+	Mesh2D source_mesh = circle_mesh(center - Vec2R(0, 2.), .25, 40);
 	LevelSet2D source_volume = LevelSet2D(xform, g_size, 10);
 	source_volume.init(source_mesh, false);
 	

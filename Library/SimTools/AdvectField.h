@@ -18,6 +18,7 @@
 
 namespace IntegratorSettings
 {
+	enum Interpolator {LINEAR, CUBIC};
 	enum Integrator { FE, RK3 };
 }
 
@@ -34,10 +35,10 @@ public:
 		m_boundary = &boundary;
 	}
 
-	void advect_field(Real dt, Field& field, IntegratorSettings::Integrator order);
+	void advect_field(Real dt, Field& field, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp = IntegratorSettings::Interpolator::LINEAR);
 
 	template<typename Integrator>
-	void advect_field(Real dt, Field& field, const Integrator& f);
+	void advect_field(Real dt, Field& field, const Integrator& f, IntegratorSettings::Interpolator interp = IntegratorSettings::Interpolator::LINEAR);
 
 	// Operator overload to sample the velocity field while taking into account
 	// solid objects
@@ -52,15 +53,15 @@ private:
 };
 
 template<typename Field>
-void AdvectField<Field>::advect_field(Real dt, Field& field, IntegratorSettings::Integrator order)
+void AdvectField<Field>::advect_field(Real dt, Field& field, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp)
 {
 	switch (order)
 	{
 	case IntegratorSettings::FE:
-		advect_field(dt, field, Integrator::forward_euler<Vec2R, AdvectField<Field>>());
+		advect_field(dt, field, Integrator::forward_euler<Vec2R, AdvectField<Field>>(), interp);
 		break;
 	case IntegratorSettings::RK3:
-		advect_field(dt, field, Integrator::rk3<Vec2R, AdvectField<Field>>());
+		advect_field(dt, field, Integrator::rk3<Vec2R, AdvectField<Field>>(), interp);
 		break;
 	default:
 		assert(false);
@@ -68,13 +69,13 @@ void AdvectField<Field>::advect_field(Real dt, Field& field, IntegratorSettings:
 }
 
 template<>
-void AdvectField<VectorGrid<Real>>::advect_field(Real dt, VectorGrid<Real>& field, IntegratorSettings::Integrator order);
+void AdvectField<VectorGrid<Real>>::advect_field(Real dt, VectorGrid<Real>& field, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp);
 
 // Advect the source field (m_field) into the destination field. The destination field
 // should never be the same field as m_field since it would corrupt the information mid-loop
 template<typename Field>
 template<typename Integrator>
-void AdvectField<Field>::advect_field(Real dt, Field& dest_field, const Integrator& f)
+void AdvectField<Field>::advect_field(Real dt, Field& dest_field, const Integrator& f, IntegratorSettings::Interpolator interp)
 {
 	size_t x_size = dest_field.size()[0];
 	size_t y_size = dest_field.size()[1];
@@ -84,7 +85,18 @@ void AdvectField<Field>::advect_field(Real dt, Field& dest_field, const Integrat
 		{
 			Vec2R pos = dest_field.idx_to_ws(Vec2R(x, y));
 			pos = f(pos, -dt, *this);
-			dest_field(x, y) = m_field.interp(pos);
+			switch (interp)
+			{
+			case IntegratorSettings::Interpolator::LINEAR:
+				dest_field(x, y) = m_field.interp(pos);
+				break;
+			case IntegratorSettings::Interpolator::CUBIC:
+				dest_field(x, y) = m_field.cubic_interp(pos, false, true);
+				break;
+			default:
+				assert(false);
+			}
+			
 		}
 }
 

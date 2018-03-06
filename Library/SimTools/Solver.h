@@ -70,12 +70,11 @@ public:
 	{
 		Eigen::SparseMatrix<double> A_sparse(m_b.rows(), m_b.rows());
 		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
-		Eigen::ConjugateGradient <Eigen::SparseMatrix<double>> solver;
+		Eigen::ConjugateGradient <Eigen::SparseMatrix<double>, Eigen::Lower | Eigen::Upper> solver;
 		solver.compute(A_sparse);
 
 		if (solver.info() != Eigen::Success) return false;
 		solver.setTolerance(1E-5);
-		Eigen::setNbThreads(8);
 		m_x = solver.solveWithGuess(m_b, m_guess);
 		if (solver.info() != Eigen::Success) return false;
 

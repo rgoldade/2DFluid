@@ -5,6 +5,8 @@
 #include "ExtrapolateField.h"
 #include "ComputeWeights.h"
 
+#include "Timer.h"
+
 void EulerianSmoke::draw_grid(Renderer& renderer) const
 {
 	m_collision.draw_grid(renderer);
@@ -101,20 +103,20 @@ void EulerianSmoke::set_smoke_source(const ScalarGrid<Real>& density, const Scal
 		}
 }
 
-void EulerianSmoke::advect_smoke(Real dt, IntegratorSettings::Integrator order)
+void EulerianSmoke::advect_smoke(Real dt, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp)
 {
 	ScalarGrid<Real> tempdensity(m_smokedensity.xform(), m_smokedensity.size());
 	AdvectField<ScalarGrid<Real>> densityadvector(m_vel, m_smokedensity);
 	densityadvector.set_collision_volumes(m_collision);
 	
-	densityadvector.advect_field(dt, tempdensity, order);
+	densityadvector.advect_field(dt, tempdensity, order, interp);
 	m_smokedensity = tempdensity;
 
 	ScalarGrid<Real> temptemp(m_smoketemperature.xform(), m_smoketemperature.size());
 	AdvectField<ScalarGrid<Real>> temperatureadvector(m_vel, m_smoketemperature);
 	temperatureadvector.set_collision_volumes(m_collision);
 
-	temperatureadvector.advect_field(dt, temptemp, order);
+	temperatureadvector.advect_field(dt, temptemp, order, interp);
 	m_smoketemperature = temptemp;
 }
 
@@ -129,6 +131,10 @@ void EulerianSmoke::advect_velocity(Real dt, IntegratorSettings::Integrator orde
 
 void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
 {
+	std::cout << "\nStarting simulation loop\n" << std::endl;
+
+	Timer add_forces;
+
 	// Add bouyancy forces
 	Real alpha = 1;
 	Real beta = 1;
@@ -143,9 +149,12 @@ void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
 			m_vel(i, j, 1) += dt * (-alpha * density + beta * (temperature - m_ambienttemp));
 		}
 	
-	LevelSet2D dummysurface(m_collision.xform(), m_collision.size(), 5, false, -5);
+	std::cout << "Add forces: " << add_forces.stop() << "s" << std::endl;
 
-	
+	Timer compute_weights;
+
+	LevelSet2D dummysurface(m_collision.xform(), m_collision.size(), 5, false, -5);
+		
 	ComputeWeights pressureweightcomputer(dummysurface, m_collision);
 
 	// Compute weights for both liquid-solid side and air-liquid side
@@ -153,6 +162,10 @@ void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
 
 	VectorGrid<Real> cc_weights(m_collision.xform(), m_collision.size(), VectorGridSettings::STAGGERED);
 	pressureweightcomputer.compute_cutcell_weights(cc_weights);
+
+	std::cout << "Compute weights: " << compute_weights.stop() << "s" << std::endl;
+
+	Timer pressure_projection;
 
 	// Initialize and call pressure projection
 	PressureProjection projectdivergence(dt, m_vel, dummysurface);
@@ -171,6 +184,9 @@ void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
 
 	projectdivergence.apply_valid(valid);
 
+	std::cout << "Pressure projection: " << pressure_projection.stop() << "s" << std::endl;
+
+	Timer fix_velocity;
 	// Extrapolate velocity
 	ExtrapolateField<VectorGrid<Real>> extrapolator(m_vel);
 	extrapolator.extrapolate(valid, 10);
@@ -188,7 +204,12 @@ void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
 			}
 	}
 
-	advect_smoke(dt, IntegratorSettings::RK3);
+	std::cout << "Clean up velocity: " << fix_velocity.stop() << "s" << std::endl;
+
+	Timer advection;
+
+	advect_smoke(dt, IntegratorSettings::RK3, IntegratorSettings::Interpolator::CUBIC);
 	advect_velocity(dt, IntegratorSettings::RK3);
 
+	std::cout << "Advection: " << advection.stop() << "s" << std::endl;
 }
