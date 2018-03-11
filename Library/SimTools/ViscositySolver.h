@@ -74,8 +74,7 @@ public:
 	// TODO: add weights for collision
 	void solve(const VectorGrid<Real>& face_volumes,
 				ScalarGrid<Real> center_volumes,
-				ScalarGrid<Real> node_volumes,
-				Renderer& renderer);
+				ScalarGrid<Real> node_volumes);
 private:
 
 	VectorGrid<Real>& m_vel;

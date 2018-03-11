@@ -6,337 +6,221 @@ static int UNSOLVED = -2;
 static int COLLISION = -1;
 static int FLUID = 0;
 
-void ViscositySolver::solve(const VectorGrid<Real>& face_volumes, ScalarGrid<Real> center_volumes, ScalarGrid<Real> node_volumes, Renderer& renderer)
+void ViscositySolver::solve(const VectorGrid<Real>& face_volumes, ScalarGrid<Real> center_volumes, ScalarGrid<Real> node_volumes)
 {
-	//m_vel.draw_sample_point_vectors(renderer, Vec3f(0,0,1), m_dt * m_surface.dx());
+	// Debug check that grids are the same
+	assert(m_vel.size(0) == face_volumes.size(0) && m_vel.size(1) == face_volumes.size(1));
+	assert(m_surface.size() == center_volumes.size());
+	assert(m_surface.size() + Vec2st(1) == node_volumes.size());
 
 	VectorGrid<int> solvable_faces(m_surface.xform(), m_surface.size(), UNSOLVED, VectorGridSettings::STAGGERED);
 
-	// Build solvable faces
-	for (size_t x = 1; x < solvable_faces.size(0)[0] - 1; ++x)
-		for (size_t y = 1; y < solvable_faces.size(0)[1] - 1; ++y)
-		{
-			if (center_volumes(x - 1, y) > 0. ||
-				center_volumes(x, y) > 0. ||
-				node_volumes(x, y) > 0. ||
-				node_volumes(x, y + 1) > 0.)
-			{
-				if (m_collision.interp(solvable_faces.idx_to_ws(Vec2R(x, y), 0)) <= 0.)
-					solvable_faces(x, y, 0) = COLLISION;
-				else
-					solvable_faces(x, y, 0) = FLUID;
-			}
-		}
+	// Build solvable faces. Assumes the grid limits are solid boundaries and left out
+	// of the system.
+	for (int axis = 0; axis < 2; ++axis)
+	{
+		Vec2st size = solvable_faces.size(axis);
 
-	// Ideally the collision solves this problem -1 index problem
-	for (size_t x = 1; x < solvable_faces.size(1)[0] - 1; ++x)
-		for (size_t y = 1; y < solvable_faces.size(1)[1] - 1; ++y)
-		{
-			if (center_volumes(x, y - 1) > 0. ||
-				center_volumes(x, y) > 0. ||
-				node_volumes(x, y) > 0. ||
-				node_volumes(x + 1, y) > 0.)
+		Vec2i start(0); ++start[axis];
+		Vec2i end(size); --end[axis];
+
+		for (int i = start[0]; i < end[0]; ++i)
+			for (int j = start[1]; j < end[1]; ++j)
 			{
-				if (m_collision.interp(solvable_faces.idx_to_ws(Vec2R(x, y), 1)) <= 0.)
-					solvable_faces(x, y, 1) = COLLISION;
-				else
-					solvable_faces(x, y, 1) = FLUID;
+				bool insolve = false;
+
+				Vec2i face(i, j);
+
+				for (int c = 0; c < 2; ++c)
+				{
+					Vec2i cell = face + face_to_cell[axis][c];
+					if (center_volumes(cell[0], cell[1]) > 0.) insolve = true;
+				}
+
+				if (!insolve)
+				{
+					for (int n = 0; n < 2; ++n)
+					{
+						Vec2i node = face + face_to_node[axis][n];
+
+						if (node_volumes(node[0], node[1]) > 0.) insolve = true;
+					}
+				}
+
+				if (insolve)
+				{ 
+					if (m_collision.interp(solvable_faces.idx_to_ws(Vec2R(i, j), axis)) <= 0.)
+						solvable_faces(i, j, axis) = COLLISION;
+					else
+						solvable_faces(i, j, axis) = FLUID;
+				}
 			}
-		}
+	}
 
 	int solvecount = 0;
 
-	for (size_t x = 0; x < solvable_faces.size(0)[0]; ++x)
-		for (size_t y = 0; y < solvable_faces.size(0)[1]; ++y)
-		{
-			if (solvable_faces(x, y, 0) == FLUID) solvable_faces(x, y, 0) = solvecount++;
-		}
+	for (int axis = 0; axis < 2; ++axis)
+	{
+		Vec2st size = solvable_faces.size(axis);
 
-	for (size_t x = 0; x < solvable_faces.size(1)[0]; ++x)
-		for (size_t y = 0; y < solvable_faces.size(1)[1]; ++y)
-		{
-			if (solvable_faces(x, y, 1) == FLUID) solvable_faces(x, y, 1) = solvecount++;
-		}
+		for (int i = 0; i < size[0]; ++i)
+			for (int j = 0; j < size[1]; ++j)
+			{
+				if (solvable_faces(i, j, axis) == FLUID) solvable_faces(i, j, axis) = solvecount++;
+			}
+	}
 	
 	// Build a single container of the viscosity weights (liquid volumes, gf weights, viscosity coefficients)
-	Real dx = m_surface.dx();
-	for(size_t x = 0; x < center_volumes.size()[0]; ++x)
-		for (size_t y = 0; y < center_volumes.size()[1]; ++y)
-		{
-			center_volumes(x, y) *= m_dt / dx / dx;
-			center_volumes(x, y) *= m_viscosity(x, y);
-			if (m_colweight_set)
-			{
-				Real weight = clamp((*m_col_center_vol)(x, y), 0.01, 1.);
-				center_volumes(x, y) *= weight;
-			}			
-		}
+	Real invdx = 1. / sqr(m_surface.dx());
+	{
+		Vec2st size = center_volumes.size();
 
-	for (size_t x = 0; x < node_volumes.size()[0]; ++x)
-		for (size_t y = 0; y < node_volumes.size()[1]; ++y)
-		{
-			node_volumes(x, y) *= m_dt / dx / dx;
-			node_volumes(x, y) *= m_viscosity.interp(node_volumes.idx_to_ws(Vec2R(x, y + 1)));
-			if (m_colweight_set)
+		for (int i = 0; i < size[0]; ++i)
+			for (int j = 0; j < size[1]; ++j)
 			{
-				Real weight = clamp((*m_col_node_vol)(x, y), 0.01, 1.);
-				node_volumes(x, y) *= weight;
+				center_volumes(i, j) *= m_dt * invdx;
+				center_volumes(i, j) *= m_viscosity(i, j);
+
+				if (m_colweight_set)
+				{
+					Real weight = clamp((*m_col_center_vol)(i, j), 0.01, 1.);
+					center_volumes(i, j) *= weight;
+				}
 			}
-		}
+	}
+
+	{
+		Vec2st size = node_volumes.size();
+		for (int i = 0; i < size[0]; ++i)
+			for (int j = 0; j < size[1]; ++j)
+			{
+				node_volumes(i, j) *= m_dt * invdx;
+				node_volumes(i, j) *= m_viscosity.interp(node_volumes.idx_to_ws(Vec2R(i, j)));
+				
+				if (m_colweight_set)
+				{
+					Real weight = clamp((*m_col_node_vol)(i, j), 0.01, 1.);
+					node_volumes(i, j) *= weight;
+				}
+			}
+	}
 
 	Solver solver(solvecount, solvecount * 9);
 
-	size_t x_size = m_vel.size(0)[0];
-	size_t y_size = m_vel.size(0)[1];
+	for (int axis = 0; axis < 2; ++axis)
+	{
+		Vec2st size = m_vel.size(axis);
 
-	// For simplicity, we will assume that fluid never reaches the volume limits
-	for (size_t x = 1; x < x_size - 1; ++x)
-		for (size_t y = 1; y < y_size - 1; ++y)
-		{
-			int idx = solvable_faces(x, y, 0);
-			if (idx >= 0)
+		for (int i = 0; i < size[0]; ++i)
+			for (int j = 0; j < size[1]; ++j)
 			{
-				solver.add_guess(idx, m_vel(x, y, 0));
+				int idx = solvable_faces(i, j, axis);
 
-				Real u_vol = face_volumes(x, y, 0);
-
-				solver.add_rhs(idx, m_vel(x, y, 0) * u_vol);
-
-				Real diag_coeff = u_vol;
-				
-				// TODO: do volume-based ghost fluid weights for solid boundaries
-
-				// Left cell-centered term
+				if (idx >= 0)
 				{
-					Real left_coeff = 2. * center_volumes(x - 1, y);
+					Vec2i face(i, j);
+			
+					Real vol = face_volumes(i, j, axis);
 					
-					diag_coeff += left_coeff;
+					// Build RHS with weight velocities
+					solver.add_rhs(idx, m_vel(i, j, axis) * vol);
+					solver.add_guess(idx, m_vel(i, j, axis));
 
-					int lidx = solvable_faces(x - 1, y, 0);
-					if (lidx >= 0)
-						solver.add_element(idx, lidx, -left_coeff);
-					else if (m_colvel_set && lidx == COLLISION)
-						solver.add_rhs(idx, left_coeff * m_collision_vel(x - 1, y, 0));
+					// Add control volume weight on the diagonal.
+					solver.add_element(idx, idx, vol);
+
+					// Build cell-centered stresses.
+					for (int c = 0; c < 2; ++c)
+					{
+						Vec2i cell = face + face_to_cell[axis][c];
+
+						Real coeff = 2. * center_volumes(cell[0], cell[1]);
+
+						Real csign = (c == 0) ? -1. : 1.;
+
+						for (int f = 0; f < 2; ++f)
+						{
+							// Since we've assumed grid boundaries are static solids
+							// we don't have any solveable faces with adjacent cells
+							// out of the grid bounds. We can skip that check here.
+
+							Vec2i adjface = cell + cell_to_face[axis * 2 + f];
+
+							Real fsign = (f == 0) ? -1. : 1.;
+
+							int fidx = solvable_faces(adjface[0], adjface[1], axis);
+							if (fidx >= 0)
+								solver.add_element(idx, fidx, -csign * fsign * coeff);
+							else if (fidx == COLLISION && m_colvel_set)
+								solver.add_rhs(idx, csign * fsign * coeff * m_collision_vel(adjface[0], adjface[1], axis));
+						}
+					}
+
+					// Build node stresses.
+					for (int n = 0; n < 2; ++n)
+					{
+						Vec2i node = face + face_to_node[axis][n];
+
+						Real nsign = (n == 0) ? -1. : 1.;
+						
+						Real coeff = node_volumes(node[0], node[1]);
+
+						for (int f = 0; f < 4; ++f)
+						{
+							Vec4i faceoffset = node_to_face[f];
+
+							int faxis = faceoffset[2];
+							int graddir = faceoffset[3];
+
+							Real fsign = (f % 2 == 0) ? -1. : 1.;
+
+							Vec2i adjface = node + Vec2i(faceoffset[0], faceoffset[1]);
+
+							// Check for in bounds
+							if (adjface[graddir] >= 0 && adjface[graddir] < size[graddir])
+							{
+								int fidx = solvable_faces(adjface[0], adjface[1], faxis);
+								
+								if (fidx >= 0)
+									solver.add_element(idx, fidx, -nsign * fsign * coeff);
+								else if (fidx == COLLISION && m_colvel_set)
+									solver.add_rhs(idx, nsign * fsign * coeff * m_collision_vel(adjface[0], adjface[1], faxis));
+							}
+						}
+					}
 				}
-				// Right cell-centered term
-				{
-					Real right_coeff = 2. * center_volumes(x, y);
-
-					diag_coeff += right_coeff;
-
-					int ridx = solvable_faces(x + 1, y, 0);
-					if (ridx >= 0)
-						solver.add_element(idx, ridx, -right_coeff);
-					else if (m_colvel_set && ridx == COLLISION)
-						solver.add_rhs(idx, right_coeff * m_collision_vel(x + 1, y, 0));
-				}
-				
-				// Top node
-				{
-					Real top_coeff = node_volumes(x, y + 1);
-
-					diag_coeff += top_coeff;
-
-					// u_yy term
-					int tidx = solvable_faces(x, y + 1, 0);
-					if (tidx >= 0)
-						solver.add_element(idx, tidx, -top_coeff);
-					else if (m_colvel_set && tidx == COLLISION)
-						solver.add_rhs(idx, top_coeff * m_collision_vel(x, y + 1, 0));
-
-					// v_xy terms
-					int tylidx = solvable_faces(x - 1, y + 1, 1);
-					if (tylidx >= 0)
-						solver.add_element(idx, tylidx, top_coeff);
-					else if(m_colvel_set && tylidx == COLLISION)
-						solver.add_rhs(idx,  -top_coeff * m_collision_vel(x - 1, y + 1, 1));
-
-					int tyridx = solvable_faces(x, y + 1, 1);
-					if (tyridx >= 0)
-						solver.add_element(idx, tyridx, -top_coeff);
-					else if (m_colvel_set && tyridx == COLLISION)
-						solver.add_rhs(idx, top_coeff * m_collision_vel(x, y + 1, 1));	
-				}
-
-				// Bottom
-				{
-					Real bottom_coeff = node_volumes(x, y);
-					
-					diag_coeff += bottom_coeff;
-
-					// u_yy term
-					int bidx = solvable_faces(x, y - 1, 0);
-					if (bidx >= 0)
-						solver.add_element(idx, bidx, -bottom_coeff);
-					else if (m_colvel_set && bidx == COLLISION)
-						solver.add_rhs(idx, bottom_coeff * m_collision_vel(x, y - 1, 0));
-
-					// v_xy terms
-					int bylidx = solvable_faces(x - 1, y, 1);
-					if (bylidx >= 0)
-						solver.add_element(idx, bylidx, -bottom_coeff);
-					else if (m_colvel_set && bylidx == COLLISION)
-						solver.add_rhs(idx, bottom_coeff * m_collision_vel(x - 1, y, 1));
-
-					int byridx = solvable_faces(x, y, 1);
-					if (byridx >= 0)
-						solver.add_element(idx, byridx, bottom_coeff);
-					else if (m_colvel_set && byridx == COLLISION)
-						solver.add_rhs(idx, -bottom_coeff * m_collision_vel(x, y, 1));
-
-				}
-		
-				solver.add_element(idx, idx, diag_coeff);
-
 			}
-		}
-		
-	x_size = m_vel.size(1)[0];
-	y_size = m_vel.size(1)[1];
-	for (size_t x = 1; x < x_size - 1; ++x)
-		for (size_t y = 1; y < y_size - 1; ++y)
-		{
-			int idx = solvable_faces(x, y, 1);
-			if (idx >= 0)
-			{
-				solver.add_guess(idx, m_vel(x, y, 1));
-
-				Real v_vol = face_volumes(x, y, 1);
-
-				solver.add_rhs(idx, m_vel(x, y, 1) * v_vol);
-
-				Real diag_coeff = v_vol;
-
-				// TODO: do volume-based ghost fluid weights for solid boundaries
-
-				// Bottom cell-centered term
-				{
-					Real bottom_coeff = 2. * center_volumes(x, y - 1);
-
-					diag_coeff += bottom_coeff;
-
-					int bidx = solvable_faces(x, y - 1, 1);
-					if (bidx >= 0)
-						solver.add_element(idx, bidx, -bottom_coeff);
-					else if (m_colvel_set && bidx == COLLISION)
-						solver.add_rhs(idx, bottom_coeff * m_collision_vel(x, y - 1, 1));
-				}
-				// Top cell-centered term
-				{
-					Real top_coeff = 2. * center_volumes(x, y);
-
-					diag_coeff += top_coeff;
-
-					int tidx = solvable_faces(x, y + 1, 1);
-					if (tidx >= 0)
-						solver.add_element(idx, tidx, -top_coeff);
-					else if (m_colvel_set && tidx == COLLISION)
-						solver.add_rhs(idx, top_coeff * m_collision_vel(x, y + 1, 1));
-				}
-				// Right node
-				{
-					Real right_coeff = node_volumes(x + 1, y);
-
-					diag_coeff += right_coeff;
-
-					// v_xx term
-					int ridx = solvable_faces(x + 1, y, 1);
-					if (ridx >= 0)
-						solver.add_element(idx, ridx, -right_coeff);
-					else if (m_colvel_set && ridx == COLLISION)
-						solver.add_rhs(idx, right_coeff * m_collision_vel(x + 1, y, 1));
-
-					// u_xy terms
-					int rybidx = solvable_faces(x + 1, y - 1, 0);
-					if (rybidx >= 0)
-						solver.add_element(idx, rybidx, right_coeff);
-					else if (m_colvel_set && rybidx == COLLISION)
-						solver.add_rhs(idx, -right_coeff * m_collision_vel(x + 1, y - 1, 0));
-
-					int rxtidx = solvable_faces(x + 1, y, 0);
-					if (rxtidx >= 0)
-						solver.add_element(idx, rxtidx, -right_coeff);
-					else if (m_colvel_set && rxtidx == COLLISION)
-						solver.add_rhs(idx, right_coeff * m_collision_vel(x + 1, y, 0));
-				}
-
-				// Left
-				{
-					Real left_coeff = node_volumes(x, y);
-
-					diag_coeff += left_coeff;
-
-					// v_xx term
-					int lidx = solvable_faces(x - 1, y, 1);
-					if (lidx >= 0)
-						solver.add_element(idx, lidx, -left_coeff);
-					else if (m_colvel_set && lidx == COLLISION)
-						solver.add_rhs(idx, left_coeff * m_collision_vel(x - 1, y, 1));
-
-					// u_xy terms
-					int lxbidx = solvable_faces(x, y - 1, 0);
-					if (lxbidx >= 0)
-						solver.add_element(idx, lxbidx, -left_coeff);
-					else if (m_colvel_set && lxbidx == COLLISION)
-						solver.add_rhs(idx, left_coeff * m_collision_vel(x, y - 1, 0));
-
-					int lxtidx = solvable_faces(x, y, 0);
-					if (lxtidx >= 0)
-						solver.add_element(idx, lxtidx, left_coeff);
-					else if (m_colvel_set && lxtidx == COLLISION)
-						solver.add_rhs(idx, -left_coeff * m_collision_vel(x, y, 0));
-
-				}
-
-				solver.add_element(idx, idx, diag_coeff);
-
-			}
-		}
+	}
 
 	std::cout << "Solving for viscosity" << std::endl;
+
 	bool solved = solver.solve_iterative();
+
 	if (!solved)
 	{
 		std::cout << "Viscosity failed" << std::endl;
 		assert(false);
 	}
+
 	// Update velocity
-	x_size = m_vel.size(0)[0];
-	y_size = m_vel.size(0)[1];
-	for (size_t x = 0; x < x_size; ++x)
-		for (size_t y = 0; y < y_size; ++y)
-		{
-			int idx = solvable_faces(x, y, 0);
-			if (idx >= 0)
-				m_vel(x, y, 0) = solver.sol(idx);
-			else if (idx == COLLISION)
+	for (int axis = 0; axis < 2; ++axis)
+	{
+		Vec2st size = m_vel.size(axis);
+		for (int i = 0; i < size[0]; ++i)
+			for (int j = 0; j < size[1]; ++j)
 			{
-				if (m_colvel_set)
-					m_vel(x, y, 0) = m_collision_vel(x, y, 0);
-				else
-					m_vel(x, y, 0) = 0.;
+				int idx = solvable_faces(i, j, axis);
+				if (idx >= 0)
+					m_vel(i, j, axis) = solver.sol(idx);
+				else if (idx == COLLISION)
+				{
+					if (m_colvel_set)
+						m_vel(i, j, axis) = m_collision_vel(i, j, axis);
+					else
+						m_vel(i, j, axis) = 0.;
+				}
 			}
-		}
-
-	x_size = m_vel.size(1)[0];
-	y_size = m_vel.size(1)[1];
-	for (size_t x = 0; x < x_size; ++x)
-		for (size_t y = 0; y < y_size; ++y)
-		{
-			int idx = solvable_faces(x, y, 1);
-			if (idx >= 0)
-				m_vel(x, y, 1) = solver.sol(idx);
-			else if (idx == COLLISION)
-			{
-				if (m_colvel_set)
-					m_vel(x, y, 1) = m_collision_vel(x, y, 1);
-				else
-					m_vel(x, y, 1) = 0.;
-			}
-
-		}
-	
-	//m_vel.draw_sample_point_vectors(renderer, Vec3f(1, 0, 0), m_dt * m_surface.dx());
+	}
 }
 
 void ViscositySolver::set_viscosity(Real mu)

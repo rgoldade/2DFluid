@@ -238,7 +238,7 @@ void EulerianLiquid::run_simulation(Real dt, Renderer& renderer)
 			viscosity.set_collision_velocity(m_collision_vel);
 		}
 
-		viscosity.solve(face_vol_weights, center_vol_weights, node_vol_weights, renderer);
+		viscosity.solve(face_vol_weights, center_vol_weights, node_vol_weights);
 
 		// Initialize and call pressure projection		
 		PressureProjection projectdivergence2(dt, m_vel, m_surface);
