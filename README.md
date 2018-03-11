@@ -1,9 +1,9 @@
 # 2dFluidSimulation
-This is a 2D fluid simulation project based largley on the material found in Robert Bridson's textbook "Fluid Simulation for Computer Graphics, 2nd Edition". The code contains implementations for the staggered-grid Eulerian pressure project and viscosity solve, as well as surface tracking methods for level sets, explicity simplicial meshes and fluid particles (markers, PIC, FLIP).
+This is a 2D fluid simulation project based largley on the material found in Robert Bridson's textbook "Fluid Simulation for Computer Graphics, 2nd Edition". The code contains implementations for the staggered-grid Eulerian pressure projection and viscosity solve, as well as surface tracking methods for level sets, explicit simplicial meshes and fluid particles (markers, PIC, FLIP).
 
 To build the project in Linux, create a new folder in the root directly (usually "build"), type cmake .. then make. The binaries to run the simulations should compile in the ./bin folder. The project requires Eigen3 and glut to be installed and findable.
 
-For VS, use the cmake-gui to generate the solution file. Make sure to include the path to your Eigen3 and freeglut folders.
+For VS, use the cmake-gui to generate the solution file. Make sure to include the path to your Eigen3, freeglut, and tbb folders.
 
 To-do:
 
