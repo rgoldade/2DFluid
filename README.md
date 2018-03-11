@@ -10,11 +10,10 @@ To-do:
 1. Add FLIP simulation scene (mechanics are present but no loop has be added to this repo).
 2. Make sure reseeding is deterministic (use a seed based on cell position, etc.,). This is important for repeatability.
 3. Add TBB parallelism to embarassingly parallel loops (e.g., labelling active cells for pressure projection or active faces for viscosity).
-4. Add fast iterative method to replace fast marching method for rebuilding level set (to be parallel and relatively cache efficient).
-5. Add a scene with moving collisions to demonstrate that it indeed works.
-6. Add support and a scene for variable viscosity.
-7. Test build with Mac.
-8. Consistency when indexing loops -- (i,j) or (x,y)
+4. Add a scene with moving collisions to demonstrate that it indeed works.
+5. Add support and a scene for variable viscosity.
+6. Test build with Mac.
+7. Consistency when indexing loops -- (i,j) or (x,y)
 
 Stretch to-do:
 
