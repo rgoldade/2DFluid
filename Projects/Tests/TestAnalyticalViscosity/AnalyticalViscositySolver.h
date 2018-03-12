@@ -2,6 +2,7 @@
 
 #include "VectorGrid.h"
 #include "ScalarGrid.h"
+#include "Transform.h"
 
 #include "Renderer.h"
 #include "Solver.h"
@@ -28,25 +29,31 @@ class AnalyticalViscositySolver
 {
 public:
 	AnalyticalViscositySolver(const Transform& xform, const Vec2st& nx)
+		: m_xform(xform)
 	{
 		m_vel_index = VectorGrid<int>(xform, nx, -1, VectorGridSettings::STAGGERED);
 	}
 
-	template<typename initial_functor, typename solution_functor>
-	Real solve(initial_functor &initial, solution_functor &solution,
-				Real dt, Real mu, int norm = 2); // 0 implies infinity norm
+	// Returns the infinity-norm error of the numerical solution
+	template<typename initial_functor, typename solution_functor, typename viscosity_functor>
+	Real solve(initial_functor& initial, solution_functor& solution, viscosity_functor& viscosity,
+				Real dt);
 
+	Vec2R cell_idx_to_ws(const Vec2R& ipos) const { return m_xform.idx_to_ws(ipos + Vec2R(.5)); }
+	Vec2R node_idx_to_ws(const Vec2R& ipos) const { return m_xform.idx_to_ws(ipos); }
+	
 	void draw_grid(Renderer& renderer) const;
 	void draw_active_velocity(Renderer& renderer) const;
 
 private:
 
+	Transform m_xform;
 	size_t set_velocity_index();
 	VectorGrid<int> m_vel_index;
 };
 
-template<typename initial_functor, typename solution_functor>
-Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor& solution, Real dt, Real mu, int norm)
+template<typename initial_functor, typename solution_functor, typename viscosity_functor>
+Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor& solution, viscosity_functor& viscosity, Real dt)
 {
 
 	size_t vcount = set_velocity_index();
@@ -58,7 +65,7 @@ Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor
 	Solver solver(vcount, vcount * 9);
 
 	Real dx = m_vel_index.dx();
-	Real base_coeff = dt * mu / sqr(dx);
+	Real base_coeff = dt / sqr(dx);
 
 	for (int axis = 0; axis < 2; ++axis)
 	{
@@ -74,7 +81,7 @@ Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor
 					Vec2i face(i, j);
 
 					Vec2R fpos = m_vel_index.idx_to_ws(Vec2R(face), axis);
-					solver.add_rhs(idx, initial(fpos));
+					solver.add_rhs(idx, initial(fpos, axis));
 					solver.add_element(idx, idx, 1.);
 
 					// Build cell-centered stresses.
@@ -82,7 +89,8 @@ Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor
 					{
 						Vec2i cell = face + face_to_cell[axis][c];
 
-						Real coeff = 2. * base_coeff;
+						Vec2R pos = cell_idx_to_ws(Vec2R(cell));
+						Real coeff = 2. * viscosity(pos) * base_coeff;
 
 						Real csign = (c == 0) ? -1. : 1.;
 
@@ -106,6 +114,9 @@ Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor
 
 						Real nsign = (n == 0) ? -1. : 1.;
 
+						Vec2R pos = node_idx_to_ws(Vec2R(node));
+						Real coeff = viscosity(pos) * base_coeff;
+
 						for (int f = 0; f < 4; ++f)
 						{
 							Vec4i faceoffset = node_to_face[f];
@@ -121,20 +132,20 @@ Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor
 							if (adjface[graddir] < 0 || adjface[graddir] >= size[graddir])
 							{
 								Vec2R adjpos = m_vel_index.idx_to_ws(Vec2R(adjface[0], adjface[1]), faxis);
-								solver.add_rhs(idx, nsign * fsign * base_coeff * solution(adjpos));
+								solver.add_rhs(idx, nsign * fsign * coeff * solution(adjpos, faxis));
 							}
 							// Check for on the bounds
 							else if (adjface[faxis] == 0 || adjface[faxis] == m_vel_index.size(faxis)[faxis] - 1)
 							{
 								Vec2R adjpos = m_vel_index.idx_to_ws(Vec2R(adjface[0], adjface[1]), faxis);
-								solver.add_rhs(idx, nsign * fsign * base_coeff * solution(adjpos));
+								solver.add_rhs(idx, nsign * fsign * coeff * solution(adjpos, faxis));
 							}
 							else
 							{
 								int fidx = m_vel_index(adjface[0], adjface[1], faxis);
 								assert(fidx >= 0);
 
-								solver.add_element(idx, fidx, -nsign * fsign * base_coeff);
+								solver.add_element(idx, fidx, -nsign * fsign * coeff);
 							}
 						}
 					}
@@ -145,34 +156,24 @@ Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor
 	bool solved = solver.solve();
 
 	Real error = 0;
-	switch (norm)
+
+	for (int axis = 0; axis < 2; ++axis)
 	{
-	case 0:
-		for (int axis = 0; axis < 2; ++axis)
-		{
-			Vec2st size = m_vel_index.size(axis);
+		Vec2st size = m_vel_index.size(axis);
 
-			for (int i = 0; i < size[0]; ++i)
-				for (int j = 0; j < size[1]; ++j)
+		for (int i = 0; i < size[0]; ++i)
+			for (int j = 0; j < size[1]; ++j)
+			{
+				int idx = m_vel_index(i, j, axis);
+
+				if (idx >= 0)
 				{
-					int idx = m_vel_index(i, j, axis);
+					Vec2R pos = m_vel_index.idx_to_ws(Vec2R(i, j), axis);
+					Real temperror = fabs(solver.sol(idx) - solution(pos, axis));
 
-					if (idx >= 0)
-					{
-						Vec2R pos = m_vel_index.idx_to_ws(Vec2R(i, j), axis);
-						Real temperror = fabs(solver.sol(idx) - solution(pos));
-
-						if (error < temperror) error = temperror;
-					}
+					if (error < temperror) error = temperror;
 				}
-		}
-		break;
-	case 1:
-		break;
-	case 2:
-		break;
-	default:
-		break;
+			}
 	}
 
 	return error;
