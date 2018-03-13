@@ -27,11 +27,12 @@
 
 class AnalyticalViscositySolver
 {
+	const int UNASSIGNED = -1;
 public:
 	AnalyticalViscositySolver(const Transform& xform, const Vec2st& nx)
 		: m_xform(xform)
 	{
-		m_vel_index = VectorGrid<int>(xform, nx, -1, VectorGridSettings::STAGGERED);
+		m_vel_index = VectorGrid<int>(xform, nx, UNASSIGNED, VectorGridSettings::STAGGERED);
 	}
 
 	// Returns the infinity-norm error of the numerical solution
@@ -55,7 +56,6 @@ private:
 template<typename initial_functor, typename solution_functor, typename viscosity_functor>
 Real AnalyticalViscositySolver::solve(initial_functor& initial, solution_functor& solution, viscosity_functor& viscosity, Real dt)
 {
-
 	size_t vcount = set_velocity_index();
 
 	// Build reduced system.

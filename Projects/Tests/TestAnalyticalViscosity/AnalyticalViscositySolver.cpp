@@ -42,9 +42,7 @@ size_t AnalyticalViscositySolver::set_velocity_index()
 				Vec2i face(i, j);
 
 				// Faces along the boundary are removed from the simulation
-				if (face[axis] == 0 || face[axis] == size[axis] - 1)
-					m_vel_index(face[0], face[1], axis) = -2;
-				else
+				if (!(face[axis] == 0 || face[axis] == size[axis] - 1))
 					m_vel_index(face[0], face[1], axis) = index++;
 			}
 	}
