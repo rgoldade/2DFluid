@@ -1,12 +1,10 @@
 #include <memory>
 
-#include "core.h"
+#include "Core.h"
 
 #include "Transform.h"
 
 #include "AnalyticalViscositySolver.h"
-
-static std::unique_ptr<AnalyticalViscositySolver> g_solver;
 
 int main(int argc, char** argv)
 {
@@ -37,8 +35,8 @@ int main(int argc, char** argv)
 		Vec2st size(round(M_PI / dx));
 		Transform xform(dx, origin);
 
-		g_solver = std::make_unique<AnalyticalViscositySolver>(xform, size);
-		Real error = g_solver->solve(initial, solution, viscosity, dt);
+		AnalyticalViscositySolver solver(xform, size);
+		Real error = solver.solve(initial, solution, viscosity, dt);
 
 		std::cout << "L-infinity error at " << base << "^2: " << error << std::endl;
 	}

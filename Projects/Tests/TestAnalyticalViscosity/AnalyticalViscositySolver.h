@@ -9,7 +9,7 @@
 
 #include "Eigen/Sparse"
 
-#include "core.h"
+#include "Core.h"
 
 ///////////////////////////////////
 //
