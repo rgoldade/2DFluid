@@ -29,8 +29,6 @@ class VectorGrid
 	typedef VectorGridSettings::VectorSampleType SampleType;
 public:
 
-	// TODO: fix up the scope stuff here with using
-
 	VectorGrid() : m_xform(1., Vec2R(0.)), m_nx(0) { m_grids.resize(2); }
 	VectorGrid(const Transform& xform, const Vec2st& nx,
 				SampleType stype = SampleType::CENTER, Border btype = CLAMP)

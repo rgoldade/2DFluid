@@ -23,6 +23,16 @@
 //
 ////////////////////////////////////
 
+// Grid layout:
+//
+// node ------	y-face 	------	node
+//   |							  |
+//   |							  |
+// x-face		center 			x-face
+//   |							  |
+//   |							  |
+// node ------	y-face	------ 	node
+
 // TODO: add harmonic borders
 namespace ScalarGridSettings
 {
