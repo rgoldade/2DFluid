@@ -83,7 +83,7 @@ Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor so
 					int cidx = solvable_cells(ncell[0], ncell[1]);
 					assert(cidx >= 0);
 
-					solver.add_element(idx, cidx, 1. * coeff);
+					solver.add_element(idx, cidx, coeff);
 				}
 			}
 
