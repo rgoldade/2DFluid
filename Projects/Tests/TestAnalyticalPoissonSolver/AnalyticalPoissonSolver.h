@@ -10,6 +10,7 @@
 
 #include "Integrator.h"
 #include "Solver.h"
+#include "Renderer.h"
 
 class AnalyticalPoissonSolver
 {
@@ -36,7 +37,7 @@ private:
 template<typename initial_functor, typename solution_functor>
 Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor solution)
 {
-	UniformGrid<int> solvable_cells(m_poissongrid.size(), 0);
+	UniformGrid<int> solvable_cells(m_poissongrid.size(), -1);
 
 	int solvecount = 0;
 
@@ -50,50 +51,43 @@ Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor so
 	Solver solver(solvecount, solvecount * 5);
 
 	Real dx = m_poissongrid.dx();
-	Real coeff = 1. / sqr(dx);
+	Real coeff = -sqr(dx);
 
 	for (int i = 0; i < size[0]; ++i)
 		for (int j = 0; j < size[1]; ++j)
 		{
 			int idx = solvable_cells(i, j);
-			if (idx >= 0)
+
+			assert(idx >= 0);
+			
+			Vec2i cell(i, j);
+
+			// Build RHS
+			Vec2R pos = m_poissongrid.idx_to_ws(Vec2R(i,j));
+			solver.add_rhs(idx, initial(pos) * coeff);
+
+			for (int dir = 0; dir < 4; ++dir)
 			{
-				Vec2i cell(i, j);
-
-				// Build RHS
-				Vec2R pos = m_poissongrid.idx_to_ws(Vec2R(i,j));
-				solver.add_rhs(idx, initial(pos));
-
-				// Build row
-				Real middle_coeff = 0;
-
-				for (int dir = 0; dir < 4; ++dir)
+				Vec2i ncell = cell + cell_offset[dir];
+				
+				// Bounds check. Use analytical solution for Dirichlet condition.
+				if (ncell[0] < 0 || ncell[1] < 0 || 
+					ncell[0] >= size[0] || ncell[1] >= size[1]) 
 				{
-					Vec2i ncell = cell + cell_offset[dir];
-					
-					// Bounds check. Use analytical solution for Dirichlet condition.
-					if (ncell[0] < 0 || ncell[1] < 0 || 
-						ncell[0] >= size[0] || ncell[1] >= size[1]) 
-					{
-						Vec2R npos = m_poissongrid.idx_to_ws(Vec2R(ncell));
-						solver.add_rhs(idx, solution(npos));
-					}
-					else
-					{
-						// If neighbouring cell is solvable, it should have an entry in the system
-						int cidx = solvable_cells(ncell[0], ncell[1]);
-
-						if (cidx >= 0)
-						{
-							solver.add_element(idx, cidx, -coeff);
-						}	
-					}
-					middle_coeff += coeff;
+					Vec2R npos = m_poissongrid.idx_to_ws(Vec2R(ncell));
+					//solver.add_rhs(idx, solution(npos));
 				}
+				else
+				{
+					// If neighbouring cell is solvable, it should have an entry in the system
+					int cidx = solvable_cells(ncell[0], ncell[1]);
+					assert(cidx >= 0);
 
-				if (middle_coeff > 0.)	solver.add_element(idx, idx, middle_coeff);
-				else solver.add_element(idx, idx, 1.);
+					solver.add_element(idx, cidx, -1.);
+				}
 			}
+
+			solver.add_element(idx, idx, 4.);
 		}
 
 	bool solved = solver.solve();
@@ -111,15 +105,15 @@ Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor so
 		{
 			int idx = solvable_cells(i, j);
 
-			if (idx >= 0)
-			{
-				Vec2R pos = m_poissongrid.idx_to_ws(Vec2R(i, j));
-				Real temperror = fabs(solver.sol(idx) - solution(pos));
+			assert(idx >= 0);
+			
+			Vec2R pos = m_poissongrid.idx_to_ws(Vec2R(i, j));
+			Real temperror = fabs(solver.sol(idx) - solution(pos));
 
-				if (error < temperror) error = temperror;
+			if (error < temperror) error = temperror;
 
-				m_poissongrid(i, j) = solver.sol(idx);
-			}
+			m_poissongrid(i, j) = solver.sol(idx);
 		}
 
+	return error;
 }

@@ -6,12 +6,12 @@
 
 int main(int argc, char** argv)
 {
-	auto initial = [&](const Vec2R& pos) -> Real
+	auto initial = [](const Vec2R& pos) -> Real
 	{
 		2. * exp(-pos[0] - pos[1]);
 	};
 
-	auto solution = [&](const Vec2R& pos) -> Real
+	auto solution = [](const Vec2R& pos) -> Real
 	{
 		exp(-pos[0] - pos[1]);
 	};
