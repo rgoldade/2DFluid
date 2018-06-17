@@ -2,7 +2,6 @@ add_library(2dfluid_trackers
 				FluidParticles.cpp
 				LevelSet2D.cpp
 				Mesh2D.cpp
-				MeshRebuilder.cpp
 				Predicates.cpp)
 
 target_link_libraries(2dfluid_trackers
