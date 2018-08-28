@@ -6,7 +6,7 @@
 
 int main(int argc, char** argv)
 {
-	auto initial = [](const Vec2R& pos) -> Real
+	auto rhs = [](const Vec2R& pos) -> Real
 	{
 		return 2. * exp(-pos[0] - pos[1]);
 	};
@@ -27,7 +27,7 @@ int main(int argc, char** argv)
 		Transform xform(dx, origin);
 
 		AnalyticalPoissonSolver solver(xform, size);
-		Real error = solver.solve(initial, solution);
+		Real error = solver.solve(rhs, solution);
 
 		std::cout << "L-infinity error at " << base << "^2: " << error << std::endl;
 	}

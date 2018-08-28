@@ -21,8 +21,8 @@ public:
 		m_poissongrid = ScalarGrid<Real>(m_xform, nx, 0);
 	}
 
-	template<typename initial_functor, typename solution_functor>
-	Real solve(initial_functor initial, solution_functor solution);
+	template<typename rhs_functor, typename solution_functor>
+	Real solve(rhs_functor rhs, solution_functor solution);
 
 	void draw_grid(Renderer& renderer) const;
 	void draw_values(Renderer& renderer) const;
@@ -34,8 +34,8 @@ private:
 	ScalarGrid<Real> m_poissongrid;
 };
 
-template<typename initial_functor, typename solution_functor>
-Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor solution)
+template<typename rhs_functor, typename solution_functor>
+Real AnalyticalPoissonSolver::solve(rhs_functor rhs, solution_functor solution)
 {
 	UniformGrid<int> solvable_cells(m_poissongrid.size(), -1);
 
@@ -51,7 +51,7 @@ Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor so
 	Solver solver(solvecount, solvecount * 5);
 
 	Real dx = m_poissongrid.dx();
-	Real coeff = 1. / sqr(dx);
+	Real coeff = sqr(dx);
 
 	for (int i = 0; i < size[0]; ++i)
 		for (int j = 0; j < size[1]; ++j)
@@ -64,7 +64,8 @@ Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor so
 
 			// Build RHS
 			Vec2R pos = m_poissongrid.idx_to_ws(Vec2R(i,j));
-			solver.add_rhs(idx, initial(pos));
+
+			solver.add_rhs(idx, rhs(pos) * coeff);
 
 			for (int dir = 0; dir < 4; ++dir)
 			{
@@ -75,7 +76,8 @@ Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor so
 					ncell[0] >= size[0] || ncell[1] >= size[1]) 
 				{
 					Vec2R npos = m_poissongrid.idx_to_ws(Vec2R(ncell));
-					solver.add_rhs(idx, -solution(npos) * coeff);
+
+					solver.add_rhs(idx, -solution(npos));
 				}
 				else
 				{
@@ -83,11 +85,12 @@ Real AnalyticalPoissonSolver::solve(initial_functor initial, solution_functor so
 					int cidx = solvable_cells(ncell[0], ncell[1]);
 					assert(cidx >= 0);
 
-					solver.add_element(idx, cidx, 1. * coeff);
+
+					solver.add_element(idx, cidx, 1.);
 				}
 			}
 
-			solver.add_element(idx, idx, -4. * coeff);
+			solver.add_element(idx, idx, -4.);
 		}
 
 	bool solved = solver.solve();
