@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core.h"
+#include "Common.h"
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
 #include "LevelSet2D.h"
@@ -28,7 +28,7 @@ public:
 
 	void compute_gf_weights(VectorGrid<Real>& liquid_weights);
 	void compute_cutcell_weights(VectorGrid<Real>& cc_weights);
-	void compute_supersampled_volumes(ScalarGrid<Real>& volume_weights, size_t samples, bool use_collision = false);
+	void compute_supersampled_volumes(ScalarGrid<Real>& volume_weights, unsigned samples, bool use_collision = false);
 
 private:
 

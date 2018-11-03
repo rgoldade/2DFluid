@@ -1,14 +1,14 @@
-add_executable(testanalyticalpoissonsolver AnalyticalPoissonSolver.cpp testanalyticalpoissonsolver.cpp )
+add_executable(TestAnalyticalPoissonSolver AnalyticalPoissonSolver.cpp TestAnalyticalPoissonSolver.cpp )
 
-target_link_libraries(testanalyticalpoissonsolver
+target_link_libraries(TestAnalyticalPoissonSolver
 						PRIVATE
-						2dfluid_trackers
-						2dfluid_simtools
-						2dfluid_common
-						2dfluid_render)
+						2DFluidTrackers
+						2DFluidSimTools
+						2DFluidCommon
+						2DFluidRenderer)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
-install(TARGETS testanalyticalpoissonsolver RUNTIME DESTINATION ${REL})
+install(TARGETS TestAnalyticalPoissonSolver RUNTIME DESTINATION ${REL})
 
-set_target_properties(testanalyticalpoissonsolver PROPERTIES FOLDER ${TEST_FOLDER})
+set_target_properties(TestAnalyticalPoissonSolver PROPERTIES FOLDER ${TEST_FOLDER})

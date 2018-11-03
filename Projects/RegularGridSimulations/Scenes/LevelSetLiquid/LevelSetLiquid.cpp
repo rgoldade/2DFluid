@@ -1,7 +1,7 @@
 #include <memory>
+#include <iostream>
 
-#include "Core.h"
-#include "Vec.h"
+#include "Common.h"
 #include "Integrator.h"
 
 #include "Renderer.h"
@@ -21,7 +21,8 @@ Real g_dt = 1./24;
 Real g_seed_time = 0;
 
 Real g_dx = 0.025;
-Vec2st g_size(200);
+Vec2ui g_size(200);
+
 void display()
 {
 	if (g_run || g_single_run)
@@ -37,10 +38,7 @@ void display()
 				// CFL is allows the velocity to track 3 cells 
 				dt = 3. * g_dx / velmag;
 				if (dt > (g_dt - frame_time))
-				{
 					dt = g_dt - frame_time;
-					std::cout << "Throttling timestep. CFL: " << dt << std::endl;
-				}
 			}
 			else dt = g_dt - frame_time;
 			// Store accumulated substep times
@@ -61,26 +59,26 @@ void display()
 				g_seed_time = 0.;
 			}
 			
-			g_sim->add_force(Vec2R(0., -9.8), dt);
+			g_sim->add_force(dt, Vec2R(0., -9.8));
 
 			g_sim->run_simulation(dt, *g_renderer.get());
 
 			g_seed_time += dt;
 		}
 
-		g_renderer->clear();
 		g_single_run = false;
 		g_dirty_display = true;
-
 	}
 	if (g_dirty_display)
 	{
+		g_renderer->clear();
 
-		//g_sim->draw_grid(*g_renderer.get());
 		g_sim->draw_surface(*g_renderer.get());
 		g_sim->draw_collision(*g_renderer.get());
-		g_sim->draw_velocity(*g_renderer.get(), 5*g_dt);
+
 		g_dirty_display = false;
+
+		glutPostRedisplay();
 	}
 }
 
@@ -97,16 +95,14 @@ int main(int argc, char** argv)
 	// Scene settings
 	Transform xform(g_dx, Vec2R(0));
 
-	g_renderer = std::unique_ptr<Renderer>(new Renderer("Mesh test", Vec2i(1000), xform.offset(), xform.dx() * (Real)(g_size[0]), &argc, argv));
+	g_renderer = std::make_unique<Renderer>("Mesh test", Vec2ui(1000), xform.offset(), xform.dx() * Real(g_size[0]), &argc, argv);
 
 	Vec2R center = xform.offset() + Vec2R(xform.dx()) * Vec2R(g_size / 2);
 	Mesh2D surface_mesh = circle_mesh(center - Vec2R(0.,.5), 1., 40);
-	//Mesh2D surface_mesh2 = circle_mesh(center, .5, 20);
-	//surface_mesh.insert_mesh(surface_mesh2);
 	
 	assert(surface_mesh.unit_test());
 
-	Mesh2D solid_mesh = circle_mesh(center,2, 40);
+	Mesh2D solid_mesh = circle_mesh(center, 2, 40);
 	solid_mesh.reverse();
 	assert(solid_mesh.unit_test());
 	
@@ -127,5 +123,6 @@ int main(int argc, char** argv)
 
 	std::function<void(unsigned char, int, int)> keyboard_func = keyboard;
 	g_renderer->set_user_keyboard(keyboard);
+
 	g_renderer->run();
 }

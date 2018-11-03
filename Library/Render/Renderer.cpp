@@ -51,10 +51,10 @@ private:
 
 Renderer* GlutHelper::m_render;
 
-Renderer::Renderer(const char *title, Vec2i window_size, Vec2R screen_min,
+Renderer::Renderer(const char *title, Vec2ui window_size, Vec2R screen_min,
 						Real height, int *argc, char **argv)
 	: m_wsize(window_size), m_smin(screen_min), m_sheight(height),
-	m_dmin(screen_min),	m_dheight(height), m_maction(INACTIVE)
+	m_dmin(screen_min),	m_dheight(height), m_maction(MouseAction::INACTIVE)
 {
 	glutInit(argc, argv);
 
@@ -120,27 +120,27 @@ void Renderer::mouse(int button, int state, int x, int y)
 			{
 				// PAN is only for drag
 				// TODO: add click specific movement
-				case ZOOM_IN:
-				{
-					// Zoom in by 2x
-					Real scale = .5;
+			case MouseAction::ZOOM_IN:
+			{
+				// Zoom in by 2x
+				Real scale = .5;
 
-					m_smin[0] -= .5 * (scale - 1.) * m_wsize[0] * m_sheight / m_wsize[1];
-					m_smin[1] -= .5 * (scale - 1.) * m_sheight;
-					m_sheight *= scale;
+				m_smin[0] -= .5 * (scale - 1.) * m_wsize[0] * m_sheight / m_wsize[1];
+				m_smin[1] -= .5 * (scale - 1.) * m_sheight;
+				m_sheight *= scale;
 
-					glutPostRedisplay();
-					break;
-				}
-				case ZOOM_OUT:
-				{
-					Real scale = 2.;
-					m_smin[0] -= .5 * (scale - 1.) * m_wsize[0] * m_sheight / m_wsize[1];
-					m_smin[1] -= .5 * (scale - 1.) * m_sheight;
-					m_sheight *= scale;
+				glutPostRedisplay();
+				break;
+			}
+			case MouseAction::ZOOM_OUT:
+			{
+				Real scale = 2.;
+				m_smin[0] -= .5 * (scale - 1.) * m_wsize[0] * m_sheight / m_wsize[1];
+				m_smin[1] -= .5 * (scale - 1.) * m_sheight;
+				m_sheight *= scale;
 
-					glutPostRedisplay();
-				}
+				glutPostRedisplay();
+			}
 			}
 		}
 		else
@@ -148,13 +148,13 @@ void Renderer::mouse(int button, int state, int x, int y)
 			switch (button)
 			{
 			case GLUT_LEFT_BUTTON:
-				m_maction = PAN;
+				m_maction = MouseAction::PAN;
 				break;
 			case GLUT_MIDDLE_BUTTON:
-				m_maction = ZOOM_IN;
+				m_maction = MouseAction::ZOOM_IN;
 				break;
 			case GLUT_RIGHT_BUTTON:
-				m_maction = ZOOM_OUT;
+				m_maction = MouseAction::ZOOM_OUT;
 			}
 		}
 
@@ -171,7 +171,7 @@ void Renderer::drag(int x, int y)
 		if (x != m_mouse_pos[0] || y != m_mouse_pos[1])
 		{
 			m_mmoved = true;
-			if (m_maction == PAN)
+			if (m_maction == MouseAction::PAN)
 			{
 				Real r = m_sheight / (Real)m_wsize[1];
 				m_smin[0] -= r * ((Real)x - m_mouse_pos[0]);
@@ -239,14 +239,14 @@ void Renderer::add_lines(const std::vector<Vec2R>& start, const std::vector<Vec2
 	m_line_colours.push_back(colour);
 }
 
-void Renderer::add_tris(const std::vector<Vec2R>& verts, const std::vector<Vec3st>& faces, const std::vector<Vec3f>& colour)
+void Renderer::add_tris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour)
 {
 	m_tri_verts.push_back(verts);
 	m_tri_faces.push_back(faces);
 	m_tri_colours.push_back(colour);
 }
 
-void Renderer::add_quads(const std::vector<Vec2R>& verts, const std::vector<Vec4st>& faces, const std::vector<Vec3f>& colours)
+void Renderer::add_quads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours)
 {
 	m_quad_verts.push_back(verts);
 	m_quad_faces.push_back(faces);
@@ -277,17 +277,18 @@ void Renderer::draw_primitives() const
 	// Render quads
 	glBegin(GL_QUADS);
 
-	for (size_t qs = 0; qs < m_quad_faces.size(); ++qs)
+	unsigned quad_list_size = m_quad_faces.size();
+	for (unsigned qs = 0; qs < quad_list_size; ++qs)
 	{
-		for (size_t f = 0; f < m_quad_faces[qs].size(); ++f)
+		unsigned quad_sublist_size = m_quad_faces[qs].size();
+		for (unsigned f = 0; f < quad_sublist_size; ++f)
 		{
 			Vec3f colour = m_quad_colours[qs][f];
 			glColor3f(colour[0], colour[1], colour[2]);
-
 			
-			for (size_t qp = 0; qp < 4; ++qp)
+			for (unsigned qp = 0; qp < 4; ++qp)
 			{
-				size_t face = m_quad_faces[qs][f][qp];
+				unsigned face = m_quad_faces[qs][f][qp];
 				Vec2R vert = m_quad_verts[qs][face];
 				glVertex2d(vert[0], vert[1]);
 			}
@@ -297,16 +298,18 @@ void Renderer::draw_primitives() const
 
 	// Render tris
 	glBegin(GL_TRIANGLES);
-	for (size_t ts = 0; ts < m_tri_faces.size(); ++ts)
+	unsigned tri_list_size = m_tri_faces.size();
+	for (unsigned ts = 0; ts < tri_list_size; ++ts)
 	{
-		for (size_t f = 0; f < m_tri_faces[ts].size(); ++f)
+		unsigned tri_sublist_size = m_tri_faces[ts].size();
+		for (unsigned f = 0; f < tri_sublist_size; ++f)
 		{
 			Vec3f colour = m_tri_colours[ts][f];
 			glColor3f(colour[0], colour[1], colour[2]);
 
-			for (size_t tp = 0; tp < 3; ++tp)
+			for (unsigned tp = 0; tp < 3; ++tp)
 			{
-				size_t face = m_tri_faces[ts][f][tp];
+				unsigned face = m_tri_faces[ts][f][tp];
 				Vec2R p = m_tri_verts[ts][face];
 				glVertex2d(p[0], p[1]);
 			}
@@ -315,11 +318,14 @@ void Renderer::draw_primitives() const
 	glEnd();
 
 	glBegin(GL_LINES);
-	for (size_t ls = 0; ls < m_start_lines.size(); ++ls)
+	unsigned line_list_size = m_start_lines.size();
+	for (unsigned ls = 0; ls < line_list_size; ++ls)
 	{
 		Vec3f c = m_line_colours[ls];
 		glColor3f(c[0], c[1], c[2]);
-		for (size_t l = 0; l < m_start_lines[ls].size(); ++l)
+
+		unsigned line_sublist_size = m_start_lines[ls].size();
+		for (unsigned l = 0; l < line_sublist_size; ++l)
 		{
 			Vec2R sp = m_start_lines[ls][l];
 			Vec2R ep = m_end_lines[ls][l];
@@ -329,14 +335,16 @@ void Renderer::draw_primitives() const
 	}
 	glEnd();	
 	
-	for (size_t ps = 0; ps < m_points.size(); ++ps)
+	unsigned point_list_size = m_points.size();
+	for (unsigned ps = 0; ps < point_list_size; ++ps)
 	{
 		Vec3f c = m_point_colours[ps];
 		glColor3f(c[0], c[1], c[2]);
 		glPointSize(m_point_size[ps]);
 		glBegin(GL_POINTS);
 
-		for (size_t p = 0; p < m_points[ps].size(); ++p)
+		unsigned point_sublist_size = m_points[ps].size();
+		for (size_t p = 0; p < point_sublist_size; ++p)
 		{
 			Vec2R pp = m_points[ps][p];
 			glVertex2d(pp[0], pp[1]);

@@ -1,13 +1,13 @@
-add_executable(testscalargrid testscalargrid.cpp)
+add_executable(TestScalarGrid TestScalarGrid.cpp)
 
-target_link_libraries(testscalargrid
-						PRIVATE
-						2dfluid_trackers
-						2dfluid_common
-						2dfluid_render)
+target_link_libraries(TestScalarGrid PRIVATE
+						2DFluidTrackers
+						2DFluidCommon
+						2DFluidRenderer
+						2DFluidSimTools)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
-install(TARGETS testscalargrid RUNTIME DESTINATION ${REL})
+install(TARGETS TestScalarGrid RUNTIME DESTINATION ${REL})
 
-set_target_properties(testscalargrid PROPERTIES FOLDER ${TEST_FOLDER})
+set_target_properties(TestScalarGrid PROPERTIES FOLDER ${TEST_FOLDER})

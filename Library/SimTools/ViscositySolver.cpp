@@ -1,225 +1,189 @@
+#include <iostream>
+
 #include "ViscositySolver.h"
 #include "VectorGrid.h"
 #include "Solver.h"
 
-static int UNSOLVED = -2;
-static int COLLISION = -1;
-static int FLUID = 0;
-
-void ViscositySolver::solve(const VectorGrid<Real>& face_volumes, ScalarGrid<Real> center_volumes, ScalarGrid<Real> node_volumes)
+void ViscositySolver::solve(const VectorGrid<Real>& face_volumes,
+							ScalarGrid<Real>& center_volumes,
+							ScalarGrid<Real>& node_volumes,
+							const ScalarGrid<Real>& collision_center_volumes,
+							const ScalarGrid<Real>& collision_node_volumes)
 {
 	// Debug check that grids are the same
-	assert(m_vel.size(0) == face_volumes.size(0) && m_vel.size(1) == face_volumes.size(1));
-	assert(m_surface.size() == center_volumes.size());
-	assert(m_surface.size() + Vec2st(1) == node_volumes.size());
+	assert(m_vel.is_matched(face_volumes));
+	assert(m_surface.is_matched(center_volumes));
+	assert(m_surface.is_matched(collision_center_volumes));
+	assert(m_surface.size() + Vec2ui(1) == collision_node_volumes.size());
+	assert(m_surface.size() + Vec2ui(1) == node_volumes.size());
 
-	VectorGrid<int> solvable_faces(m_surface.xform(), m_surface.size(), UNSOLVED, VectorGridSettings::STAGGERED);
+	VectorGrid<int> solvable_faces(m_surface.xform(), m_surface.size(), UNSOLVED, VectorGridSettings::SampleType::STAGGERED);
 
 	// Build solvable faces. Assumes the grid limits are solid boundaries and left out
 	// of the system.
-	for (int axis = 0; axis < 2; ++axis)
+
+	unsigned solve_count = 0;
+	for (unsigned axis = 0; axis < 2; ++axis)
 	{
-		Vec2st size = solvable_faces.size(axis);
+		Vec2ui vel_size = solvable_faces.size(axis);
 
-		Vec2i start(0); ++start[axis];
-		Vec2i end(size); --end[axis];
+		Vec2ui start(0); ++start[axis];
+		Vec2ui end(vel_size); --end[axis];
 
-		for (int i = start[0]; i < end[0]; ++i)
-			for (int j = start[1]; j < end[1]; ++j)
+		for_each_voxel_range(start, end, [&](const Vec2ui& face)
+		{
+			bool insolve = false;
+
+			for (unsigned dir = 0; dir < 2; ++dir)
 			{
-				bool insolve = false;
+				Vec2i cell = Vec2i(face) + face_to_cell[axis][dir];
+				if (center_volumes(Vec2ui(cell)) > 0.) insolve = true;
+			}
 
-				Vec2i face(i, j);
-
-				for (int c = 0; c < 2; ++c)
+			if (!insolve)
+			{
+				for (unsigned dir = 0; dir < 2; ++dir)
 				{
-					Vec2i cell = face + face_to_cell[axis][c];
-					if (center_volumes(cell[0], cell[1]) > 0.) insolve = true;
-				}
+					Vec2ui node = face + face_to_node[axis][dir];
 
-				if (!insolve)
-				{
-					for (int n = 0; n < 2; ++n)
-					{
-						Vec2i node = face + face_to_node[axis][n];
-
-						if (node_volumes(node[0], node[1]) > 0.) insolve = true;
-					}
-				}
-
-				if (insolve)
-				{ 
-					if (m_collision.interp(solvable_faces.idx_to_ws(Vec2R(i, j), axis)) <= 0.)
-						solvable_faces(i, j, axis) = COLLISION;
-					else
-						solvable_faces(i, j, axis) = FLUID;
+					if (node_volumes(node) > 0.) insolve = true;
 				}
 			}
-	}
 
-	int solvecount = 0;
-
-	for (int axis = 0; axis < 2; ++axis)
-	{
-		Vec2st size = solvable_faces.size(axis);
-
-		for (int i = 0; i < size[0]; ++i)
-			for (int j = 0; j < size[1]; ++j)
+			if (insolve)
 			{
-				if (solvable_faces(i, j, axis) == FLUID) solvable_faces(i, j, axis) = solvecount++;
+				if (m_collision.interp(solvable_faces.idx_to_ws(Vec2R(face), axis)) <= 0.)
+					solvable_faces(face, axis) = COLLISION;
+				else
+					solvable_faces(face, axis) = solve_count++;
 			}
+		});
 	}
-	
+
 	// Build a single container of the viscosity weights (liquid volumes, gf weights, viscosity coefficients)
-	Real invdx = 1. / sqr(m_surface.dx());
+	Real invdx2 = 1. / sqr(m_surface.dx());
 	{
-		Vec2st size = center_volumes.size();
-
-		for (int i = 0; i < size[0]; ++i)
-			for (int j = 0; j < size[1]; ++j)
-			{
-				center_volumes(i, j) *= m_dt * invdx;
-				center_volumes(i, j) *= m_viscosity(i, j);
-
-				if (m_colweight_set)
-				{
-					Real weight = clamp((*m_col_center_vol)(i, j), 0.01, 1.);
-					center_volumes(i, j) *= weight;
-				}
-			}
+		for_each_voxel_range(Vec2ui(0), center_volumes.size(), [&](const Vec2ui& cell)
+		{
+			center_volumes(cell) *= m_dt * invdx2;
+			center_volumes(cell) *= m_viscosity(cell);
+			center_volumes(cell) *= clamp(collision_center_volumes(cell), 0.01, 1.);
+		});
 	}
 
 	{
-		Vec2st size = node_volumes.size();
-		for (int i = 0; i < size[0]; ++i)
-			for (int j = 0; j < size[1]; ++j)
-			{
-				node_volumes(i, j) *= m_dt * invdx;
-				node_volumes(i, j) *= m_viscosity.interp(node_volumes.idx_to_ws(Vec2R(i, j)));
-				
-				if (m_colweight_set)
-				{
-					Real weight = clamp((*m_col_node_vol)(i, j), 0.01, 1.);
-					node_volumes(i, j) *= weight;
-				}
-			}
+		for_each_voxel_range(Vec2ui(0), node_volumes.size(), [&](const Vec2ui& node)
+		{
+			node_volumes(node) *= m_dt * invdx2;
+			node_volumes(node) *= m_viscosity.interp(node_volumes.idx_to_ws(Vec2R(node)));
+			node_volumes(node) *= clamp(collision_node_volumes(node), 0.01, 1.);
+		});
 	}
 
-	Solver solver(solvecount, solvecount * 9);
+	Solver<true> solver(solve_count, solve_count * 9);
 
 	for (int axis = 0; axis < 2; ++axis)
 	{
-		Vec2st size = m_vel.size(axis);
+		Vec2ui size = m_vel.size(axis);
 
-		for (int i = 0; i < size[0]; ++i)
-			for (int j = 0; j < size[1]; ++j)
+		for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& face)
+		{
+			int idx = solvable_faces(face, axis);
+			if (idx >= 0)
 			{
-				int idx = solvable_faces(i, j, axis);
+				Real vol = face_volumes(face, axis);
 
-				if (idx >= 0)
+				// Build RHS with weight velocities
+				solver.add_rhs(idx, m_vel(face, axis) * vol);
+				solver.add_guess(idx, m_vel(face, axis));
+
+				// Add control volume weight on the diagonal.
+				solver.add_element(idx, idx, vol);
+
+				// Build cell-centered stresses.
+				for (unsigned dir = 0; dir < 2; ++dir)
 				{
-					Vec2i face(i, j);
-			
-					Real vol = face_volumes(i, j, axis);
-					
-					// Build RHS with weight velocities
-					solver.add_rhs(idx, m_vel(i, j, axis) * vol);
-					solver.add_guess(idx, m_vel(i, j, axis));
+					Vec2i cell = Vec2i(face) + face_to_cell[axis][dir];
 
-					// Add control volume weight on the diagonal.
-					solver.add_element(idx, idx, vol);
+					Real coeff = 2. * center_volumes(Vec2ui(cell));
 
-					// Build cell-centered stresses.
-					for (int c = 0; c < 2; ++c)
+					Real csign = (dir == 0) ? -1. : 1.;
+
+					for (unsigned face_dir = 0; face_dir < 2; ++face_dir)
 					{
-						Vec2i cell = face + face_to_cell[axis][c];
+						// Since we've assumed grid boundaries are static solids
+						// we don't have any solveable faces with adjacent cells
+						// out of the grid bounds. We can skip that check here.
 
-						Real coeff = 2. * center_volumes(cell[0], cell[1]);
+						Vec2ui adjface = Vec2ui(cell) + cell_to_face[axis * 2 + face_dir];
 
-						Real csign = (c == 0) ? -1. : 1.;
+						Real fsign = (face_dir == 0) ? -1. : 1.;
 
-						for (int f = 0; f < 2; ++f)
-						{
-							// Since we've assumed grid boundaries are static solids
-							// we don't have any solveable faces with adjacent cells
-							// out of the grid bounds. We can skip that check here.
-
-							Vec2i adjface = cell + cell_to_face[axis * 2 + f];
-
-							Real fsign = (f == 0) ? -1. : 1.;
-
-							int fidx = solvable_faces(adjface[0], adjface[1], axis);
-							if (fidx >= 0)
-								solver.add_element(idx, fidx, -csign * fsign * coeff);
-							else if (fidx == COLLISION && m_colvel_set)
-								solver.add_rhs(idx, csign * fsign * coeff * m_collision_vel(adjface[0], adjface[1], axis));
-						}
+						int fidx = solvable_faces(adjface, axis);
+						if (fidx >= 0)
+							solver.add_element(idx, fidx, -csign * fsign * coeff);
+						else if (fidx == COLLISION)
+							solver.add_rhs(idx, csign * fsign * coeff * m_collision_vel(adjface, axis));
 					}
+				}
 
-					// Build node stresses.
-					for (int n = 0; n < 2; ++n)
+				// Build node stresses.
+				for (unsigned dir = 0; dir < 2; ++dir)
+				{
+					Vec2ui node = face + face_to_node[axis][dir];
+
+					Real nsign = (dir == 0) ? -1. : 1.;
+
+					Real coeff = node_volumes(node);
+
+					for (unsigned face_dir = 0; face_dir < 4; ++face_dir)
 					{
-						Vec2i node = face + face_to_node[axis][n];
+						Vec4i faceoffset = node_to_face[face_dir];
 
-						Real nsign = (n == 0) ? -1. : 1.;
-						
-						Real coeff = node_volumes(node[0], node[1]);
+						unsigned faxis = faceoffset[2];
+						unsigned graddir = faceoffset[3];
 
-						for (int f = 0; f < 4; ++f)
+						Real fsign = (face_dir % 2 == 0) ? -1. : 1.;
+
+						Vec2i adjface = Vec2i(node) + Vec2i(faceoffset[0], faceoffset[1]);
+
+						// Check for in bounds
+						if (adjface[graddir] >= 0 && adjface[graddir] < size[graddir])
 						{
-							Vec4i faceoffset = node_to_face[f];
+							int fidx = solvable_faces(Vec2ui(adjface), faxis);
 
-							int faxis = faceoffset[2];
-							int graddir = faceoffset[3];
-
-							Real fsign = (f % 2 == 0) ? -1. : 1.;
-
-							Vec2i adjface = node + Vec2i(faceoffset[0], faceoffset[1]);
-
-							// Check for in bounds
-							if (adjface[graddir] >= 0 && adjface[graddir] < size[graddir])
-							{
-								int fidx = solvable_faces(adjface[0], adjface[1], faxis);
-								
-								if (fidx >= 0)
-									solver.add_element(idx, fidx, -nsign * fsign * coeff);
-								else if (fidx == COLLISION && m_colvel_set)
-									solver.add_rhs(idx, nsign * fsign * coeff * m_collision_vel(adjface[0], adjface[1], faxis));
-							}
+							if (fidx >= 0)
+								solver.add_element(idx, fidx, -nsign * fsign * coeff);
+							else if (fidx == COLLISION)
+								solver.add_rhs(idx, nsign * fsign * coeff * m_collision_vel(Vec2ui(adjface), faxis));
 						}
 					}
 				}
 			}
+		});
 	}
-
-	std::cout << "Solving for viscosity" << std::endl;
 
 	bool solved = solver.solve_iterative();
 
 	if (!solved)
 	{
-		std::cout << "Viscosity failed" << std::endl;
+		std::cout << "Viscosity failed to solve" << std::endl;
 		assert(false);
 	}
 
 	// Update velocity
-	for (int axis = 0; axis < 2; ++axis)
+	for (unsigned axis = 0; axis < 2; ++axis)
 	{
-		Vec2st size = m_vel.size(axis);
-		for (int i = 0; i < size[0]; ++i)
-			for (int j = 0; j < size[1]; ++j)
-			{
-				int idx = solvable_faces(i, j, axis);
-				if (idx >= 0)
-					m_vel(i, j, axis) = solver.sol(idx);
-				else if (idx == COLLISION)
-				{
-					if (m_colvel_set)
-						m_vel(i, j, axis) = m_collision_vel(i, j, axis);
-					else
-						m_vel(i, j, axis) = 0.;
-				}
-			}
+		Vec2ui size = m_vel.size(axis);
+
+		for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& face)
+		{
+			int idx = solvable_faces(face, axis);
+			if (idx >= 0)
+				m_vel(face, axis) = solver.sol(idx);
+			else if (idx == COLLISION)
+				m_vel(face, axis) = m_collision_vel(face, axis);
+		});
 	}
 }
 

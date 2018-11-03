@@ -1,14 +1,13 @@
-add_executable(testparticlesurfacing testparticlesurfacing.cpp)
+add_executable(TestParticleSurfacing TestParticleSurfacing.cpp)
 
-target_link_libraries(testparticlesurfacing
-						PRIVATE
-						2dfluid_trackers
-						2dfluid_simtools
-						2dfluid_common
-						2dfluid_render)
+target_link_libraries(TestParticleSurfacing PRIVATE
+						2DFluidTrackers
+						2DFluidSimTools
+						2DFluidCommon
+						2DFluidRenderer)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
-install(TARGETS testparticlesurfacing RUNTIME DESTINATION ${REL})
+install(TARGETS TestParticleSurfacing RUNTIME DESTINATION ${REL})
 
-set_target_properties(testparticlesurfacing PROPERTIES FOLDER ${TEST_FOLDER})
+set_target_properties(TestParticleSurfacing PROPERTIES FOLDER ${TEST_FOLDER})

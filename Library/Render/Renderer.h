@@ -5,8 +5,7 @@
 
 #include <GL/glut.h>
 
-#include "Core.h"
-#include "Vec.h"
+#include "Common.h"
 
 ///////////////////////////////////
 //
@@ -23,7 +22,7 @@
 class Renderer
 {
 public:
-	Renderer(const char *title, Vec2i window_size, Vec2R screen_min,
+	Renderer(const char *title, Vec2ui window_size, Vec2R screen_min,
 				Real height, int *argc, char **argv);
 
 	void display();
@@ -42,13 +41,14 @@ public:
 
 	void add_line(const Vec2R& start, const Vec2R& end, const Vec3f& colour = Vec3f(0, 0, 0));
 	void add_lines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour);
-	void add_tris(const std::vector<Vec2R>& verts, const std::vector<Vec3st>& faces, const std::vector<Vec3f>& colour);
-	void add_quads(const std::vector<Vec2R>& verts, const std::vector<Vec4st>& faces, const std::vector<Vec3f>& colours);
+	void add_tris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour);
+	void add_quads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours);
 	
 	void draw_primitives() const;
 
 	void clear();
 	void run();
+
 private:
 
 	std::vector<std::vector<Vec2R>> m_points;
@@ -60,15 +60,15 @@ private:
 	std::vector<Vec3f> m_line_colours;
 
 	std::vector<std::vector<Vec2R>> m_tri_verts;
-	std::vector<std::vector<Vec3st>> m_tri_faces;
+	std::vector<std::vector<Vec3ui>> m_tri_faces;
 	std::vector<std::vector<Vec3f>> m_tri_colours;
 
 	std::vector<std::vector<Vec2R>> m_quad_verts;
-	std::vector<std::vector<Vec4st>> m_quad_faces;
+	std::vector<std::vector<Vec4ui>> m_quad_faces;
 	std::vector<std::vector<Vec3f>> m_quad_colours;
 
 	// width, height
-	Vec2i m_wsize;
+	Vec2ui m_wsize;
 
 	Vec2R m_smin;
 	Real m_sheight;
@@ -79,7 +79,7 @@ private:
 	// Mouse specific state
 	Vec2i m_mouse_pos;
 	bool m_mmoved;
-	enum MouseAction {INACTIVE, PAN, ZOOM_IN, ZOOM_OUT};
+	enum class MouseAction {INACTIVE, PAN, ZOOM_IN, ZOOM_OUT};
 	MouseAction m_maction;
 
 	// User specific extensions for each glut callback

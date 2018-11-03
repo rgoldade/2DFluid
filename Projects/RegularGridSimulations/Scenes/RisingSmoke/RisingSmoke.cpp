@@ -1,7 +1,7 @@
 #include <memory>
+#include <iostream>
 
-#include "Core.h"
-#include "Vec.h"
+#include "Common.h"
 #include "Integrator.h"
 
 #include "Renderer.h"
@@ -16,19 +16,18 @@
 std::unique_ptr<Renderer> g_renderer;
 std::unique_ptr<EulerianSmoke> g_sim;
 
-ScalarGrid<Real> g_smokedensity;
-ScalarGrid<Real> g_smoketemperature;
+ScalarGrid<Real> g_smoke_density;
+ScalarGrid<Real> g_smoke_temperature;
 
 bool g_run = false;
 bool g_single_run = false;
 bool g_dirty_display = true;
-Real g_dt = 1./24;
-Real g_seed_time = 0;
 
-Real g_tambient = 300;
+const Real g_dt = 1./24;
+const Real g_ambient = 300;
+const Real g_dx = 0.025;
+const Vec2ui g_size(200);
 
-Real g_dx = 0.025;
-Vec2st g_size(200);
 void display()
 {
 	if (g_run || g_single_run)
@@ -44,10 +43,7 @@ void display()
 				// CFL is allows the velocity to track 3 cells 
 				dt = 5. * g_dx / velmag;
 				if (dt > (g_dt - frame_time))
-				{
 					dt = g_dt - frame_time;
-					std::cout << "Throttling timestep. CFL: " << dt << std::endl;
-				}
 			}
 			else dt = g_dt - frame_time;
 			// Store accumulated substep times
@@ -56,25 +52,25 @@ void display()
 			// Safety checks
 			if (dt <= 0.) break;
 
-			g_sim->run_simulation(dt, *g_renderer.get());
+			g_sim->run_simulation(dt, *g_renderer);
 
 			// Add smoke density and temperature source to simulation frame
-			g_sim->set_smoke_source(g_smokedensity, g_smoketemperature);
-
-			g_seed_time += dt;
+			g_sim->set_smoke_source(g_smoke_density, g_smoke_temperature);
 		}
 
-		g_renderer->clear();
 		g_single_run = false;
 		g_dirty_display = true;
-
 	}
 	if (g_dirty_display)
 	{
-		g_sim->draw_smoke(*g_renderer.get(), 1);
-		g_sim->draw_collision(*g_renderer.get());
-		//g_sim->draw_velocity(*g_renderer.get(), 5*g_dt);
+		g_renderer->clear();
+
+		g_sim->draw_smoke(*g_renderer, 1);
+		g_sim->draw_collision(*g_renderer);
+
 		g_dirty_display = false;
+
+		glutPostRedisplay();
 	}
 }
 
@@ -91,32 +87,36 @@ void set_smoke_source(const LevelSet2D &source_volume,
 						Real defaultdensity, ScalarGrid<Real> &smokedensity,
 						Real defaulttemp, ScalarGrid<Real> &smoketemperature)
 {
-	Vec2st size = source_volume.size();
+	Vec2ui size = source_volume.size();
 
-	int samples = 2;
-	Real sample_dx = 1. / (Real)samples;
+	Real samples = 2;
+	Real sample_dx = 1. / samples;
 
 	Real dx = source_volume.dx();
 
-	for (int i = 0; i < size[0]; ++i)
-		for (int j = 0; j < size[1]; ++j)
+	for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& cell)
+	{
+		// Super sample to determine 
+		if (fabs(source_volume.interp(source_volume.idx_to_ws(Vec2R(cell))) < dx * 2.))
 		{
-			// Super sample to determine 
-			if (fabs(source_volume.interp(source_volume.idx_to_ws(Vec2R(i, j))) < dx * 2.))
-			{
-				// Loop over super samples internally. i -.5 is the index space boundary of the sample. The 
-				// first sample point is the .5 * sample_dx closer to (i,j).
-				int volcount = 0;
-				for (Real x = ((Real)i - .5) + (.5 * sample_dx); x < (Real)i + .5; x += sample_dx)
-					for (Real y = ((Real)j - .5) + (.5 * sample_dx); y < (Real)j + .5; y += sample_dx)
-					{
-						if (source_volume.interp(source_volume.idx_to_ws(Vec2R(i, j))) <= 0.) ++volcount;
-					}
+			// Loop over super samples internally. i -.5 is the index space boundary of the sample. The 
+			// first sample point is the .5 * sample_dx closer to (i,j).
+			int volcount = 0;
+			for (Real x = (Real(cell[0]) - .5) + (.5 * sample_dx); x < Real(cell[0]) + .5; x += sample_dx)
+				for (Real y = (Real(cell[1]) - .5) + (.5 * sample_dx); y < Real(cell[1]) + .5; y += sample_dx)
+				{
+					if (source_volume.interp(source_volume.idx_to_ws(Vec2R(cell))) <= 0.) ++volcount;
+				}
 
-				smokedensity(i, j) = defaultdensity * (Real)volcount * sample_dx * sample_dx;
-				smoketemperature(i, j) = defaulttemp * (Real)volcount * sample_dx * sample_dx;
+			if (volcount > 0)
+			{
+				Real temp_density = defaultdensity +.05 * randhashd(cell[0] + cell[1] * source_volume.size()[0]);
+				Real temp_temperature = defaulttemp + 50 * randhashd(cell[0] + cell[1] * source_volume.size()[0]);
+				smokedensity(cell) = temp_density * Real(volcount) * sample_dx * sample_dx;
+				smoketemperature(cell) = temp_temperature * Real(volcount) * sample_dx * sample_dx;
 			}
 		}
+	});
 }
 
 int main(int argc, char** argv)
@@ -124,7 +124,7 @@ int main(int argc, char** argv)
 	// Scene settings
 	Transform xform(g_dx, Vec2R(0));
 
-	g_renderer = std::unique_ptr<Renderer>(new Renderer("Mesh test", Vec2i(1000), xform.offset(), xform.dx() * (Real)(g_size[0]), &argc, argv));
+	g_renderer = std::make_unique<Renderer>("Mesh test", Vec2ui(1000), xform.offset(), xform.dx() * Real(g_size[0]), &argc, argv);
 
 	Vec2R center = xform.offset() + Vec2R(xform.dx()) * Vec2R(g_size / 2);
 	
@@ -136,7 +136,7 @@ int main(int argc, char** argv)
 	solid.set_inverted();
 	solid.init(solid_mesh, false);
 
-	g_sim = std::unique_ptr<EulerianSmoke>(new EulerianSmoke(xform, g_size, 300));
+	g_sim = std::make_unique<EulerianSmoke>(xform, g_size, 300);
 	g_sim->set_collision_volume(solid);
 
 	// Set up source for smoke density and smoke temperature
@@ -146,17 +146,18 @@ int main(int argc, char** argv)
 	source_volume.init(source_mesh, false);
 	
 	// Super sample source volume to get a smooth volumetric representation.
-	g_smokedensity = ScalarGrid<Real>(xform, g_size, 0);
-	g_smoketemperature = ScalarGrid<Real>(xform, g_size, g_tambient);
+	g_smoke_density = ScalarGrid<Real>(xform, g_size, 0);
+	g_smoke_temperature = ScalarGrid<Real>(xform, g_size, g_ambient);
 
-	set_smoke_source(source_volume, .1, g_smokedensity, 310, g_smoketemperature);
+	set_smoke_source(source_volume, .2, g_smoke_density, 400, g_smoke_temperature);
 
-	g_sim->set_smoke_source(g_smokedensity, g_smoketemperature);
+	g_sim->set_smoke_source(g_smoke_density, g_smoke_temperature);
 
 	std::function<void()> display_func = display;
 	g_renderer->set_user_display(display_func);
 
 	std::function<void(unsigned char, int, int)> keyboard_func = keyboard;
 	g_renderer->set_user_keyboard(keyboard);
+
 	g_renderer->run();
 }

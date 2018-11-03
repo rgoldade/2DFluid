@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "EulerianSmoke.h"
 #include "PressureProjection.h"
 #include "ViscositySolver.h"
@@ -14,7 +16,7 @@ void EulerianSmoke::draw_grid(Renderer& renderer) const
 
 void EulerianSmoke::draw_smoke(Renderer& renderer, Real max_density)
 {
-	m_smokedensity.draw_volumetric(renderer, Vec3f(1), Vec3f(0), 0, max_density);
+	m_smoke_density.draw_volumetric(renderer, Vec3f(1), Vec3f(0), 0, max_density);
 }
 
 void EulerianSmoke::draw_collision(Renderer& renderer)
@@ -24,8 +26,7 @@ void EulerianSmoke::draw_collision(Renderer& renderer)
 
 void EulerianSmoke::draw_collision_vel(Renderer& renderer, Real length) const
 {
-	//if (m_moving_solids)
-		m_collision_vel.draw_sample_point_vectors(renderer, Vec3f(0, 1, 0), m_collision_vel.dx() * length);
+	m_collision_vel.draw_sample_point_vectors(renderer, Vec3f(0, 1, 0), m_collision_vel.dx() * length);
 }
 
 void EulerianSmoke::draw_velocity(Renderer& renderer, Real length) const
@@ -51,82 +52,92 @@ void EulerianSmoke::set_collision_volume(const LevelSet2D& collision)
 void EulerianSmoke::set_collision_velocity(const VectorGrid<Real>& collision_vel)
 {
 	assert(collision_vel.is_matched(m_collision_vel));
-	for (size_t axis = 0; axis < 2; ++axis)
+	for (unsigned axis = 0; axis < 2; ++axis)
 	{
-		size_t x_size = m_collision_vel.size(axis)[0];
-		size_t y_size = m_collision_vel.size(axis)[1];
+		Vec2ui size = m_collision_vel.size(axis);
 
-		for (size_t x = 0; x < x_size; ++x)
-			for (size_t y = 0; y < y_size; ++y)
-			{
-				Vec2R wpos = m_collision_vel.idx_to_ws(Vec2R(x, y), axis);
-				m_collision_vel.set(x, y, axis, collision_vel.interp(wpos, axis));
-			}
+		for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& cell)
+		{
+			Vec2R wpos = m_collision_vel.idx_to_ws(Vec2R(cell), axis);
+			m_collision_vel(cell, axis) =  collision_vel.interp(wpos, axis);
+		});
 	}
-
-	//m_moving_solids = true;
 }
 
 void EulerianSmoke::set_smoke_velocity(const VectorGrid<Real>& vel)
 {
 	assert(vel.is_matched(m_vel));
 
-	for (size_t axis = 0; axis < 2; ++axis)
+	for (unsigned axis = 0; axis < 2; ++axis)
 	{
-		size_t x_size = m_vel.size(axis)[0];
-		size_t y_size = m_vel.size(axis)[1];
+		Vec2ui size = m_vel.size(axis);
 
-		for (size_t x = 0; x < x_size; ++x)
-			for (size_t y = 0; y < y_size; ++y)
-			{
-				Vec2R pos = m_vel.idx_to_ws(Vec2R(x, y), axis);
-				m_vel.set(x, y, axis, vel.interp(pos, axis));
-			}
+		for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& cell)
+		{
+			Vec2R pos = m_vel.idx_to_ws(Vec2R(cell), axis);
+			m_vel(cell, axis) = vel.interp(pos, axis);
+		});
 	}
 }
 
 void EulerianSmoke::set_smoke_source(const ScalarGrid<Real>& density, const ScalarGrid<Real>& temperature)
 {
-	assert(density.is_matched(m_smokedensity));
-	assert(temperature.is_matched(m_smoketemperature));
+	assert(density.is_matched(m_smoke_density));
+	assert(temperature.is_matched(m_smoke_temperature));
 
-	Vec2st size = m_smokedensity.size();
+	Vec2ui size = m_smoke_density.size();
 
-	for (int i = 0; i < size[0]; ++i)
-		for (int j = 0; j < size[1]; ++j)
+	for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& cell)
+	{
+		if (density(cell) > 0)
 		{
-			if (density(i, j) > 0)
-			{
-				m_smokedensity(i, j) = density(i, j);
-				m_smoketemperature(i, j) = temperature(i, j);
-			}
+			Real temp = density(cell);
+			temp = temperature(cell);
+			m_smoke_density(cell) = density(cell);
+			m_smoke_temperature(cell) = temperature(cell);
 		}
+	});
 }
 
-void EulerianSmoke::advect_smoke(Real dt, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp)
+void EulerianSmoke::advect_smoke(Real dt, const InterpolationOrder& order)
 {
-	ScalarGrid<Real> tempdensity(m_smokedensity.xform(), m_smokedensity.size());
-	AdvectField<ScalarGrid<Real>> densityadvector(m_vel, m_smokedensity);
-	densityadvector.set_collision_volumes(m_collision);
+	auto vel_func = [&](Real, const Vec2R& pos) { return m_vel.interp(pos); };
+
+	{
+		AdvectField<ScalarGrid<Real>> density_advector(m_smoke_density);
+
+		ScalarGrid<Real> temp_density(m_smoke_density.xform(), m_smoke_density.size());
+		// TODO: add some sort of collision management
+		density_advector.advect_field(dt, temp_density, vel_func, IntegrationOrder::FORWARDEULER, order);
+		
+		std::swap(m_smoke_density, temp_density);
+	}
+
+	{
+		AdvectField<ScalarGrid<Real>> temperature_advector(m_smoke_temperature);
+
+		ScalarGrid<Real> temp_temperature(m_smoke_temperature.xform(), m_smoke_temperature.size());
+
+		temperature_advector.advect_field(dt, temp_temperature, vel_func, IntegrationOrder::FORWARDEULER, order);
+
+		std::swap(m_smoke_temperature, temp_temperature);
+	}
+}
+
+void EulerianSmoke::advect_velocity(Real dt, const InterpolationOrder& order)
+{
+	auto vel_func = [&](Real, const Vec2R& pos) { return m_vel.interp(pos);  };
 	
-	densityadvector.advect_field(dt, tempdensity, order, interp);
-	m_smokedensity = tempdensity;
+	VectorGrid<Real> temp_vel(m_vel.xform(), m_vel.grid_size(), 0, VectorGridSettings::SampleType::STAGGERED);
 
-	ScalarGrid<Real> temptemp(m_smoketemperature.xform(), m_smoketemperature.size());
-	AdvectField<ScalarGrid<Real>> temperatureadvector(m_vel, m_smoketemperature);
-	temperatureadvector.set_collision_volumes(m_collision);
+	for (unsigned axis = 0; axis < 2; ++axis)
+	{
+		AdvectField<ScalarGrid<Real>> advector(m_vel.grid(axis));
 
-	temperatureadvector.advect_field(dt, temptemp, order, interp);
-	m_smoketemperature = temptemp;
-}
+		advector.advect_field(dt, temp_vel.grid(axis), vel_func, IntegrationOrder::RK3, order);
+	}
 
-void EulerianSmoke::advect_velocity(Real dt, IntegratorSettings::Integrator order)
-{
-	AdvectField<VectorGrid<Real>> advector(m_vel, m_vel);
-	advector.set_collision_volumes(m_collision);
-	VectorGrid<Real> temp_vel = m_vel;
-	advector.advect_field(dt, temp_vel, order);
-	m_vel = temp_vel;
+	std::swap(m_vel, temp_vel);
 }
 
 void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
@@ -138,29 +149,31 @@ void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
 	// Add bouyancy forces
 	Real alpha = 1;
 	Real beta = 1;
-	for (int i = 0; i < m_vel.size(1)[0]; ++i)
-		for (int j = 0; j < m_vel.size(1)[1]; ++j)
-		{
-			// Average density and temperature values at velocity face
-			Vec2R pos = m_vel.idx_to_ws(Vec2R(i, j), 1);
-			Real density = m_smokedensity.interp(pos);
-			Real temperature = m_smoketemperature.interp(pos);
 
-			m_vel(i, j, 1) += dt * (-alpha * density + beta * (temperature - m_ambienttemp));
-		}
+	for_each_voxel_range(Vec2ui(0), m_vel.size(1), [&](const Vec2ui& face)
+	{
+		// Average density and temperature values at velocity face
+		Vec2R pos = m_vel.idx_to_ws(Vec2R(face), 1);
+		Real density = m_smoke_density.interp(pos);
+		Real temperature = m_smoke_temperature.interp(pos);
+
+		Real force = dt * (-alpha * density + beta * (temperature - m_ambient_temperature));
+		m_vel(face, 1) += force;
+
+	});
 	
 	std::cout << "Add forces: " << add_forces.stop() << "s" << std::endl;
 
 	Timer compute_weights;
 
-	LevelSet2D dummysurface(m_collision.xform(), m_collision.size(), 5, false, -5);
+	LevelSet2D dummysurface(m_collision.xform(), m_collision.size(), 5, false);
 		
 	ComputeWeights pressureweightcomputer(dummysurface, m_collision);
 
 	// Compute weights for both liquid-solid side and air-liquid side
-	VectorGrid<Real> liquid_weights(m_collision.xform(), m_collision.size(), 1., VectorGridSettings::STAGGERED);
+	VectorGrid<Real> liquid_weights(m_collision.xform(), m_collision.size(), 1., VectorGridSettings::SampleType::STAGGERED);
 
-	VectorGrid<Real> cc_weights(m_collision.xform(), m_collision.size(), VectorGridSettings::STAGGERED);
+	VectorGrid<Real> cc_weights(m_collision.xform(), m_collision.size(), VectorGridSettings::SampleType::STAGGERED);
 	pressureweightcomputer.compute_cutcell_weights(cc_weights);
 
 	std::cout << "Compute weights: " << compute_weights.stop() << "s" << std::endl;
@@ -168,14 +181,10 @@ void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
 	Timer pressure_projection;
 
 	// Initialize and call pressure projection
-	PressureProjection projectdivergence(dt, m_vel, dummysurface);
+	PressureProjection projectdivergence(dt, dummysurface, m_vel, m_collision, m_collision_vel);
+	// TODO: handle moving boundaries.
 
-	//if (m_moving_solids)
-	//{
-	//	projectdivergence.set_collision_velocity(m_collision_vel);
-	//}
-
-	VectorGrid<Real> valid(m_collision.xform(), m_collision.size(), VectorGridSettings::STAGGERED);
+	VectorGrid<Real> valid(m_collision.xform(), m_collision.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 	
 	projectdivergence.project(liquid_weights, cc_weights);
 
@@ -187,29 +196,29 @@ void EulerianSmoke::run_simulation(Real dt, Renderer& renderer)
 	std::cout << "Pressure projection: " << pressure_projection.stop() << "s" << std::endl;
 
 	Timer fix_velocity;
-	// Extrapolate velocity
-	ExtrapolateField<VectorGrid<Real>> extrapolator(m_vel);
-	extrapolator.extrapolate(valid, 10);
+	//// Extrapolate velocity
+	//ExtrapolateField<VectorGrid<Real>> extrapolator(m_vel);
+	//extrapolator.extrapolate(valid, 10);
 
 	// Enforce collision velocity
 	for (size_t axis = 0; axis < 2; ++axis)
 	{
-		for (size_t x = 0; x < m_vel.size(axis)[0]; ++x)
-			for (size_t y = 0; y < m_vel.size(axis)[1]; ++y)
+		Vec2ui size = m_vel.size(axis);
+		for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& face)
+		{
+			if (cc_weights(face, axis) == 0.)
 			{
-				if (cc_weights(x, y, axis) == 0.)
-				{
-					m_vel(x, y, axis) = m_collision_vel(x, y, axis);
-				}
+				m_vel(face, axis) = m_collision_vel(face, axis);
 			}
+		});
 	}
 
 	std::cout << "Clean up velocity: " << fix_velocity.stop() << "s" << std::endl;
 
 	Timer advection;
 
-	advect_smoke(dt, IntegratorSettings::RK3, IntegratorSettings::Interpolator::CUBIC);
-	advect_velocity(dt, IntegratorSettings::RK3);
+	advect_smoke(dt, InterpolationOrder::CUBIC);
+	advect_velocity(dt, InterpolationOrder::LINEAR);
 
 	std::cout << "Advection: " << advection.stop() << "s" << std::endl;
 }

@@ -1,9 +1,9 @@
 #pragma once
 
-#include<memory>
+#include "Common.h"
 
-#include "Core.h"
-#include "Vec.h"
+#include "VectorGrid.h"
+#include "Integrator.h"
 
 #include "Renderer.h"
 
@@ -29,29 +29,29 @@ public:
 	Vertex2D(const Vec2R& point) : m_point(point)
 	{}
 
-	inline Vec2R point() const
+	const Vec2R& point() const
 	{
 		return m_point;
 	}
 
-	inline void set_point(const Vec2R& p)
+	void set_point(const Vec2R& point)
 	{
-		m_point = p;
+		m_point = point;
 	}
 
-	inline void operator=(const Vec2R& p)
+	void operator=(const Vec2R& point)
 	{
-		m_point = p;
+		m_point = point;
 	}
 
 	// Get edge stored at the eidx position in the m_edges list
-	inline int edge(int eidx) const
+	unsigned edge(unsigned eidx) const
 	{
 		assert(eidx < m_edges.size());
 		return m_edges[eidx];
 	}
 
-	inline void add_edge(int eidx)
+	void add_edge(unsigned eidx)
 	{
 		m_edges.push_back(eidx);
 	}
@@ -59,46 +59,39 @@ public:
 	// Search through the edge list for a matching edge
 	// index to old_eidx. If found, replace that edge
 	// index with new_eidx.
-	inline void replace_edge(int old_eidx, int new_eidx)
+	bool replace_edge(unsigned old_eidx, unsigned new_eidx)
 	{
-		int fidx = m_edges.size();
-		for (int e = 0; e < m_edges.size(); ++e)
+		auto result = std::find(m_edges.begin(), m_edges.end(), old_eidx);
+
+		if (result == m_edges.end()) return false;
+		else
 		{
-			if (m_edges[e] == old_eidx)
-			{
-				fidx = e;
-				continue;
-			}
+			*result = new_eidx;
 		}
-
-		assert(fidx != m_edges.size());
-
-		m_edges[fidx] = new_eidx;
+		return true;
 	}
 
 	// Search through the edge list and return true if 
 	// there is an edge index that matches eidx
-	inline bool find_edge(int eidx) const
+	bool find_edge(unsigned eidx) const
 	{
-		for (int e = 0; e < m_edges.size(); ++e)
-			if (m_edges[e] == eidx) return true;
-
-		return false;
+		auto result = std::find(m_edges.begin(), m_edges.end(), eidx);
+		return result != m_edges.end();
 	}
 
-	inline size_t valence() const
+	unsigned valence() const
 	{
 		return m_edges.size();
 	}
 
 	template<typename T>
-	inline void operator*=(const T& s)
+	void operator*=(const T& s)
 	{
 		m_point *= s;
 	}
 
 	template<typename T>
-	inline void operator+=(const T& s)
+	void operator+=(const T& s)
 	{
 		m_point += s;
 	}
@@ -106,7 +99,7 @@ public:
 private:
 
 	Vec2R m_point;
-	std::vector<int> m_edges;
+	std::vector<unsigned> m_edges;
 };
 
 class Edge2D
@@ -114,21 +107,18 @@ class Edge2D
 public:
 	// Negative magic numbers mean unassigned. There should never be a negative
 	// vertex index or a negative material.
-	Edge2D() : m_verts(Vec2i(-1))
+	//Edge2D() : m_verts(Vec2i(-1))
+	//{}
+
+	Edge2D(const Vec2ui& verts) : m_verts(verts)
 	{}
 
-	Edge2D(const Vec2i& verts) : m_verts(verts)
-	{}
-
-	Edge2D(const Vec2i& verts, const Vec2i& mat) : m_verts(verts)
-	{}
-
-	inline Vec2i verts() const
+	Vec2ui verts() const
 	{
 		return m_verts;
 	}
 
-	inline int vert(int vidx) const
+	unsigned vert(unsigned vidx) const
 	{
 		assert(vidx < 2);
 		return m_verts[vidx];
@@ -137,16 +127,18 @@ public:
 	// Given a vertex index, find the opposite vertex index
 	// on the edge. An assert fail will be thrown if there
 	// is no match as a debug warning.
-	inline int adjacent_vert(int vidx) const
+	unsigned adjacent_vert(unsigned vidx) const
 	{
 		if (m_verts[0] == vidx)
 			return m_verts[1];
 		else if (m_verts[1] == vidx)
 			return m_verts[0];
-		else assert(false);
+		
+		assert(false);
+		return 0;
 	}
 
-	inline void replace_vert(int old_vidx, int new_vidx)
+	void replace_vert(unsigned old_vidx, unsigned new_vidx)
 	{
 		if (m_verts[0] == old_vidx)
 			m_verts[0] = new_vidx;
@@ -155,13 +147,13 @@ public:
 		else assert(false);
 	}
 
-	inline bool find_vert(int vidx) const
+	bool find_vert(unsigned vidx) const
 	{
 		if (m_verts[0] == vidx || m_verts[1] == vidx) return true;
 		return false;
 	}
 
-	inline void reverse()
+	void reverse()
 	{
 		std::swap(m_verts[0], m_verts[1]);
 	}
@@ -170,7 +162,7 @@ private:
 	// Each edge can be viewed as having a "tail" and a "head"
 	// vertex. The orientation is used in reference to "left" and
 	// "right" turns when talking about the materials on the edge.
-	Vec2i m_verts;
+	Vec2ui m_verts;
 };
 
 class Mesh2D
@@ -183,136 +175,128 @@ public:
 	// Initialize mesh container with edges and the associated vertices.
 	// Input mesh should be water-tight with no dangling edges
 	// (i.e. no vertex has a valence less than 2).
-	Mesh2D(const std::vector<Vec2i>& edges, const std::vector<Vec2R>& verts)
+	Mesh2D(const std::vector<Vec2ui>& edges, const std::vector<Vec2R>& verts)
 	{
 		m_edges.reserve(edges.size());
-		for (auto e : edges) m_edges.push_back(Edge2D(e));
+		for (const auto& edge : edges) m_edges.push_back(Edge2D(edge));
 
 		m_verts.reserve(verts.size());
-		for (auto v : verts) m_verts.push_back(Vertex2D(v));
+		for (const auto& vert : verts) m_verts.push_back(Vertex2D(vert));
 
 		// Update vertices to store adjacent edges in their edge lists
-		for (size_t e = 0; e < m_edges.size(); ++e)
+		for (unsigned e = 0; e < m_edges.size(); ++e)
 		{
-			int v0 = m_edges[e].vert(0);
-			assert(v0 >= 0);
+			unsigned v0 = m_edges[e].vert(0);
 			m_verts[v0].add_edge(e);
 
-			int v1 = m_edges[e].vert(1);
-			assert(v1 >= 0);
+			unsigned v1 = m_edges[e].vert(1);
 			m_verts[v1].add_edge(e);
 		}
 	}
 
-	void initialize(const std::vector<Vec2i>& edges, const std::vector<Vec2R>& verts)
+	void reinitialize(const std::vector<Vec2ui>& edges, const std::vector<Vec2R>& verts)
 	{
 		m_edges.clear();
 		m_edges.reserve(edges.size());
-		for (auto e : edges) m_edges.push_back(Edge2D(e));
+		for (const auto& edge : edges) m_edges.push_back(Edge2D(edge));
 
 		m_verts.clear();
 		m_verts.reserve(verts.size());
-		for (auto v : verts) m_verts.push_back(Vertex2D(v));
+		for (const auto& vert : verts) m_verts.push_back(Vertex2D(vert));
 
 		// Update vertices to store adjacent edges in their edge lists
-		for (size_t e = 0; e < m_edges.size(); ++e)
+		for (unsigned e = 0; e < m_edges.size(); ++e)
 		{
-			int v0 = m_edges[e].vert(0);
-			assert(v0 >= 0);
+			unsigned v0 = m_edges[e].vert(0);
 			m_verts[v0].add_edge(e);
 
-			int v1 = m_edges[e].vert(1);
-			assert(v1 >= 0);
+			unsigned v1 = m_edges[e].vert(1);
 			m_verts[v1].add_edge(e);
 		}
 	}
-
-
+	
 	// Add more mesh pieces to an already existing mesh (although the existing mesh could
 	// empty). The incoming mesh edges point to vertices (and vice versa) from 0 to ne-1 locally. They need
 	// to be offset by the edge/vertex size in the existing mesh.
 	void insert_mesh(const Mesh2D& mesh)
 	{
-		size_t ne = m_edges.size();
-		size_t nv = m_verts.size();
+		unsigned edge_count = m_edges.size();
+		unsigned vert_count = m_verts.size();
 
 		m_verts.insert(m_verts.end(), mesh.m_verts.begin(), mesh.m_verts.end());
 		m_edges.insert(m_edges.end(), mesh.m_edges.begin(), mesh.m_edges.end());
 
 		// Update vertices to new edges
-		for (size_t v = nv; v < m_verts.size(); ++v)
+		for (unsigned v = vert_count; v < m_verts.size(); ++v)
 		{
-			for (size_t e = 0; e < m_verts[v].valence(); ++e)
+			for (unsigned e = 0; e < m_verts[v].valence(); ++e)
 			{
-				size_t ei = m_verts[v].edge(e);
-				m_verts[v].replace_edge(ei, ei + ne);
+				unsigned ei = m_verts[v].edge(e);
+				m_verts[v].replace_edge(ei, ei + edge_count);
 			}
 		}
-		for (size_t e = ne; e < m_edges.size(); ++e)
+		for (unsigned e = edge_count; e < m_edges.size(); ++e)
 		{
-			size_t v0 = m_edges[e].vert(0);
-			m_edges[e].replace_vert(v0, v0 + nv);
+			unsigned v0 = m_edges[e].vert(0);
+			m_edges[e].replace_vert(v0, v0 + vert_count);
 
-			size_t v1 = m_edges[e].vert(1);
-			m_edges[e].replace_vert(v1, v1 + nv);
+			unsigned v1 = m_edges[e].vert(1);
+			m_edges[e].replace_vert(v1, v1 + vert_count);
 		}
 	}
 
-	inline const std::vector<Edge2D>& edges() const
+	const std::vector<Edge2D>& edges() const
 	{
 		return m_edges;
 	}
 
-	inline Edge2D edge(size_t idx) const
+	const Edge2D& edge(unsigned idx) const
 	{
 		return m_edges[idx];
 	}
 
-	inline const std::vector<Vertex2D>& verts() const
+	const std::vector<Vertex2D>& verts() const
 	{
 		return m_verts;
 	}
 
-	inline Vertex2D vert(size_t idx) const
+	Vertex2D vert(size_t idx) const
 	{
 		return m_verts[idx];
 	}
 
-	inline void set_vert(size_t idx, const Vec2R& vert)
+	void set_vert(unsigned idx, const Vec2R& vert)
 	{
 		m_verts[idx].set_point(vert);
 	}
 
-	inline void clear()
+	void clear()
 	{
 		m_verts.clear();
 		m_edges.clear();
 	}
 
-	inline size_t edge_size() const
+	unsigned edge_size() const
 	{
 		return m_edges.size();
 	}
 
-	inline size_t vert_size() const
+	unsigned vert_size() const
 	{
 		return m_verts.size();
 	}
 
-	inline Vec2R unnormal(size_t e) const
+	Vec2R unnormal(unsigned e) const
 	{
 		Edge2D edge = m_edges[e];
 		Vec2R tan = m_verts[edge.vert(1)].point() - m_verts[edge.vert(0)].point();
 		if (tan == Vec2R(0.))
-		{
-			std::cout << "Degenerate edge" << std::endl;
-			return Vec2R(0.); //Return nothing if degernate edge
-		}
+			return Vec2R(0.); //Return nothing if degenerate edge
 
 		return Vec2R(-tan[1], tan[0]);
 	}
 
-	inline Vec2R normal(size_t e) const
+	Vec2R normal(unsigned e) const
 	{
 		return normalized(unnormal(e));
 	}
@@ -323,7 +307,7 @@ public:
 		for (auto& e : m_edges) e.reverse();
 	}
 
-	void scale(const Real s)
+	void scale(Real s)
 	{
 		for (auto& v : m_verts) v *= s;
 	}
@@ -334,9 +318,9 @@ public:
 	}
 
 	// Test for degenerate edge (i.e. an edge with zero length)
-	bool is_edge_degenerate(size_t eidx) const
+	bool is_edge_degenerate(unsigned eidx) const
 	{
-		auto edge = m_edges[eidx];
+		const auto& edge = m_edges[eidx];
 		return m_verts[edge.vert(0)].point() == m_verts[edge.vert(1)].point();
 	}
 
@@ -348,8 +332,8 @@ public:
 		bool render_verts = false,
 		Vec3f vert_colour = Vec3f(0));
 
-	template<typename VelField, typename Integrator>
-	void advect(Real dt, const VelField& vel, const Integrator& f);
+	template<typename VelocityField>
+	void advect(Real dt, const VelocityField& vel, const IntegrationOrder order);
 
 private:
 
@@ -357,11 +341,11 @@ private:
 		std::vector<Vertex2D> m_verts;
 };
 
-template<typename VelField, typename Integrator>
-void Mesh2D::advect(Real dt, const VelField& vel, const Integrator& f)
+template<typename VelocityField>
+void Mesh2D::advect(Real dt, const VelocityField& vel, const IntegrationOrder order)
 {
 	for (auto& v : m_verts)
 	{
-		v.set_point(f(v.point(), dt, vel));
+		v.set_point(Integrator(dt, v.point(), vel, order));
 	}
 }

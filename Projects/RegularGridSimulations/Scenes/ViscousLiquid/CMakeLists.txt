@@ -1,15 +1,15 @@
-add_executable(viscousliquid viscousliquid.cpp)
+add_executable(ViscousLiquid ViscousLiquid.cpp)
 
-target_link_libraries(viscousliquid 
+target_link_libraries(ViscousLiquid 
 						PRIVATE
-						2dfluid_library
-						2dfluid_trackers
-						2dfluid_simtools
-						2dfluid_common
-						2dfluid_render)
+						2DFluidLibrary
+						2DFluidTrackers
+						2DFluidSimTools
+						2DFluidCommon
+						2DFluidRenderer)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
-install(TARGETS viscousliquid RUNTIME DESTINATION ${REL})
+install(TARGETS ViscousLiquid RUNTIME DESTINATION ${REL})
 
-set_target_properties(viscousliquid PROPERTIES FOLDER ${REGULAR_FOLDER})
+set_target_properties(ViscousLiquid PROPERTIES FOLDER ${REGULAR_FOLDER})

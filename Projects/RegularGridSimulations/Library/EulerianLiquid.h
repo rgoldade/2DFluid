@@ -2,8 +2,7 @@
 #include <limits>
 #include <vector>
 
-#include "Core.h"
-#include "Vec.h"
+#include "Common.h"
 
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
@@ -30,17 +29,16 @@
 class EulerianLiquid
 {
 public:
-	EulerianLiquid(const Transform& xform, Vec2st nx, size_t nb = 5)
+	EulerianLiquid(const Transform& xform, Vec2ui size, Real narrow_band = 5.)
 		: m_xform(xform)
-		, m_moving_solids(false)
 		, m_solve_viscosity(false)
-		, m_st_scale(0.)
+		, m_surfacetension_scale(0.)
 	{
-		m_vel = VectorGrid<Real>(m_xform, nx, VectorGridSettings::STAGGERED);
-		m_collision_vel = VectorGrid<Real>(m_xform, nx, 0., VectorGridSettings::STAGGERED);
+		m_vel = VectorGrid<Real>(m_xform, size, VectorGridSettings::SampleType::STAGGERED);
+		m_collision_vel = VectorGrid<Real>(m_xform, size, 0., VectorGridSettings::SampleType::STAGGERED);
 
-		m_surface = LevelSet2D(m_xform, nx, nb);
-		m_collision = LevelSet2D(m_xform, nx, nb);
+		m_surface = LevelSet2D(m_xform, size, narrow_band);
+		m_collision = LevelSet2D(m_xform, size, narrow_band);
 	}
 
 	void set_collision_volume(const LevelSet2D& collision);
@@ -49,34 +47,32 @@ public:
 	void set_surface_velocity(const VectorGrid<Real>& vel);
 	void set_surface_tension(Real st_scale)
 	{
-		m_st_scale = st_scale;
+		m_surfacetension_scale = st_scale;
 	}
 
 	void set_viscosity(const ScalarGrid<Real>& visc_coeff)
 	{
 		assert(m_surface.is_matched(visc_coeff));
-		m_variableviscosity = visc_coeff;
+		m_variable_viscosity = visc_coeff;
 		m_solve_viscosity = true;
 	}
 
 	void set_viscosity(Real visc_coeff = 1.)
 	{
-		m_variableviscosity = ScalarGrid<Real>(m_surface.xform(), m_surface.size(), visc_coeff);
+		m_variable_viscosity = ScalarGrid<Real>(m_surface.xform(), m_surface.size(), visc_coeff);
 		m_solve_viscosity = true;
 	}
 
-	void disable_moving_solids() { m_moving_solids = false; }
-	
 	void add_surface_volume(const LevelSet2D& surface);
 
 	template<typename ForceSampler>
-	void add_force(const ForceSampler& force, Real dt);
+	void add_force(Real dt, const ForceSampler& force);
 	
-	void add_force(const Vec2R& force, Real dt);
+	void add_force(Real dt, const Vec2R& force);
 
-	void advect_surface(Real dt, IntegratorSettings::Integrator order);
-	void advect_viscosity(Real dt, IntegratorSettings::Integrator order);
-	void advect_velocity(Real dt, IntegratorSettings::Integrator order);
+	void advect_surface(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
+	void advect_viscosity(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
+	void advect_velocity(Real dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
 	void run_simulation(Real dt, Renderer& renderer);
@@ -96,10 +92,10 @@ private:
 	// Simulation containers
 	VectorGrid<Real> m_vel, m_collision_vel;
 	LevelSet2D m_surface, m_collision;
-	ScalarGrid<Real> m_variableviscosity;
+	ScalarGrid<Real> m_variable_viscosity;
 
 	Transform m_xform;
 
-	bool m_moving_solids, m_solve_viscosity;
-	Real m_st_scale;
+	bool m_solve_viscosity;
+	Real m_surfacetension_scale;
 };

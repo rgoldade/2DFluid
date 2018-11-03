@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core.h"
+#include "Common.h"
 
 #include "LevelSet2D.h"
 #include "Renderer.h"
@@ -26,7 +26,7 @@ public:
 	// The count is the target number of particles to see into a particle grid cell. The\
 	// oversample is how many more particles should be created at cells near the supplied
 	// surface.
-	FluidParticles(Real particle_radius, size_t count, Real oversample = 1., bool track_vel = false)
+	FluidParticles(Real particle_radius, unsigned count, Real oversample = 1., bool track_vel = false)
 		: m_prad(particle_radius)
 		, m_count(count)
 		, m_oversample(oversample)
@@ -48,7 +48,7 @@ public:
 						Real blend);
 
 	void construct_surface(LevelSet2D& surface) const;
-	void draw_points(Renderer& renderer, const Vec3f& colour = Vec3f(1,0,0), size_t size = 1) const;
+	void draw_points(Renderer& renderer, const Vec3f& colour = Vec3f(1,0,0), unsigned size = 1) const;
 	void draw_velocity(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
 
 	// Seed particles into areas of the surface that are under represented
@@ -61,13 +61,12 @@ public:
 	// Push particles inside collision objects back to the surface
 	void bump_particles(const LevelSet2D& collision);
 
-	size_t size() const { return m_parts.size(); }
-	Vec2R get_position(size_t part) const { assert(part < size());  return m_parts[part]; }
+	unsigned size() const { return m_parts.size(); }
+	Vec2R get_position(unsigned part) const { assert(part < size());  return m_parts[part]; }
 
 	const std::vector<Vec2R>& get_positions() const { return m_parts; }
 
-	template<typename VelField, typename Integrator>
-	void forward_advect(Real dt, const VelField& vel, const Integrator& f);
+	void advect(Real dt, const VectorGrid<Real>& vel, const IntegrationOrder order);
 
 protected:
 	std::vector<Vec2R> m_parts, m_add_parts;
@@ -75,14 +74,6 @@ protected:
 	bool m_track_vel;
 	Real m_prad;
 
-	size_t m_count;
+	unsigned m_count;
 	Real m_oversample;
 };
-
-template<typename VelField, typename Integrator>
-void FluidParticles::forward_advect(Real dt, const VelField& vel, const Integrator& f)
-{
-	assert(dt >= 0);
-	for (auto& p : m_parts)
-		p = f(p, dt, vel);
-}

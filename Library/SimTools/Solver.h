@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Core.h"
-#include "Vec.h"
+#include "Common.h"
+
 #include "Eigen/Sparse"
 
 ///////////////////////////////////
@@ -16,45 +16,52 @@
 //
 ////////////////////////////////////
 
+template<bool use_double_precision = false>
 class Solver
 {
+	using SolverReal = typename std::conditional<use_double_precision, double, float>::type;
+	using Vector = typename std::conditional<use_double_precision, Eigen::VectorXd, Eigen::VectorXf>::type;
 public:
-	Solver(size_t rowcount, size_t nonzeros = 0)
+	Solver(unsigned rowcount, unsigned nonzeros = 0)
 	{
 		m_A.reserve(nonzeros);
-		m_b = Eigen::VectorXd::Zero(rowcount);
-		m_x = Eigen::VectorXd::Zero(rowcount);
-		m_guess = Eigen::VectorXd::Zero(rowcount);
+		m_b = Vector::Zero(rowcount);
+		m_x = Vector::Zero(rowcount);
+		m_guess = Vector::Zero(rowcount);
 	}
 
 	// Insert element item into sparse vector. Duplicates are allowed and will be summed together
-	inline void add_element(size_t col, size_t row, double val)
+	void add_element(unsigned row, unsigned col, SolverReal val)
 	{
-		m_A.push_back(Eigen::Triplet<double>(row, col, val));
+		m_A.push_back(Eigen::Triplet<SolverReal>(row, col, val));
 	}
 
 	// Adds value to RHS. It's safe to assume that it is initialized to zeros
-	inline void add_rhs(size_t row, double val)
+	void add_rhs(unsigned row, SolverReal val)
 	{
 		m_b(row) += val;
 	}
 	
 	// Caller should make sure solution is up-to-date
-	inline double sol(size_t row) const
+	SolverReal sol(unsigned row) const
 	{		
 		return m_x(row);
 	}
 
-	inline void add_guess(size_t row, double val)
+	inline void add_guess(unsigned row, SolverReal val)
 	{
 		m_guess(row) += val;
 	}
 	//Call to solve linear system
 	bool solve()
 	{
-		Eigen::SparseMatrix<double> A_sparse(m_b.rows(), m_b.rows());
+		Eigen::SparseMatrix<SolverReal> A_sparse(m_b.rows(), m_b.rows());
 		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
-		Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> solver;
+		A_sparse.makeCompressed();
+		Eigen::SparseLU<Eigen::SparseMatrix<SolverReal>> solver;
+
+		solver.analyzePattern(A_sparse);
+		solver.factorize(A_sparse);
 		solver.compute(A_sparse);
 
 		if (solver.info() != Eigen::Success) return false;
@@ -66,25 +73,59 @@ public:
 	}
 
 	//Call to solve linear system
-	bool solve_iterative()
+	bool solve_iterative(Real tolerance = 1E-5)
 	{
-		Eigen::SparseMatrix<double> A_sparse(m_b.rows(), m_b.rows());
+		Eigen::SparseMatrix<SolverReal> A_sparse(m_b.rows(), m_b.rows());
 		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
-		Eigen::ConjugateGradient <Eigen::SparseMatrix<double>, Eigen::Lower | Eigen::Upper> solver;
+		Eigen::ConjugateGradient <Eigen::SparseMatrix<SolverReal>, Eigen::Lower | Eigen::Upper> solver;
 		solver.compute(A_sparse);
 
-		if (solver.info() != Eigen::Success) return false;
-		solver.setTolerance(1E-5);
+		if (solver.info() != Eigen::Success)
+		{
+			std::cout << "Solve failed on build" << std::endl;
+			return false;
+		}
+
+		solver.setTolerance(tolerance);
 		m_x = solver.solveWithGuess(m_b, m_guess);
-		if (solver.info() != Eigen::Success) return false;
+
+		if (solver.info() != Eigen::Success)
+		{
+			std::cout << "Solve failed to converge" << std::endl;
+			return false;
+		}
+
+		return true;
+	}
+
+	//Call to solve linear system
+	bool solve_nonsymmetric(Real tolerance = 1E-5)
+	{
+		Eigen::SparseMatrix<SolverReal> A_sparse(m_b.rows(), m_b.rows());
+		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
+		Eigen::BiCGSTAB<Eigen::SparseMatrix<SolverReal>, Eigen::Lower | Eigen::Upper> solver;
+		solver.compute(A_sparse);
+
+		if (solver.info() != Eigen::Success)
+		{
+			std::cout << "Solve failed on build" << std::endl;
+			return false;
+		}
+
+		solver.setTolerance(tolerance);
+		m_x = solver.solveWithGuess(m_b, m_guess);
+
+		if (solver.info() != Eigen::Success)
+		{
+			std::cout << "Solve failed to converge" << std::endl;
+			return false;
+		}
 
 		return true;
 	}
 
 private:
-	Eigen::VectorXd m_b;
-	Eigen::VectorXd m_x;
-	Eigen::VectorXd m_guess;
+	Vector m_b, m_x, m_guess;
 
-	std::vector<Eigen::Triplet<double>> m_A;
+	std::vector<Eigen::Triplet<SolverReal>> m_A;
 };

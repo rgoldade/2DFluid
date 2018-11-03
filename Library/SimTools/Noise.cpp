@@ -1,28 +1,24 @@
 #include "Noise.h"
 
-namespace {
-
-	template<unsigned int N>
-	Vec<N, Real> sample_sphere(unsigned int &seed)
-	{
-		Vec<N, Real> v;
-		Real m2;
-		do {
-			for (unsigned int i = 0; i<N; ++i) {
-				v[i] = randhashf(seed++, -1, 1);
-			}
-			m2 = mag2(v);
-		} while (m2>1 || m2 == 0);
-		return v / std::sqrt(m2);
-	}
-
-} // namespace
+template<unsigned N>
+Vec<Real, N> sample_sphere(unsigned &seed)
+{
+	Vec<Real, N> v;
+	Real m2;
+	do {
+		for (unsigned i = 0; i < N; ++i) {
+			v[i] = randhashf(seed++, -1, 1);
+		}
+		m2 = mag2(v);
+	} while (m2 > 1 || m2 == 0);
+	return v / std::sqrt(m2);
+}
 
 //============================================================================
 
-Noise3::Noise3(unsigned int seed)
+Noise3::Noise3(unsigned seed)
 {
-	for (unsigned int i = 0; i < n; ++i)
+	for (unsigned i = 0; i < n; ++i)
 	{
 		basis[i] = sample_sphere<3>(seed);
 		perm[i] = i;
@@ -30,27 +26,29 @@ Noise3::Noise3(unsigned int seed)
 	reinitialize(seed);
 }
 
-void Noise3::reinitialize(unsigned int seed)
+void Noise3::reinitialize(unsigned seed)
 {
-	for (unsigned int i = 1; i < n; ++i)
+	for (unsigned i = 1; i < n; ++i)
 	{
 		int j = randhash(seed++) % (i + 1);
-		swap(perm[i], perm[j]);
+		std::swap(perm[i], perm[j]);
 	}
 }
 
 Real Noise3::operator()(Real x, Real y, Real z) const
 {
 	Real floorx = std::floor(x), floory = std::floor(y), floorz = std::floor(z);
+
 	int i = (int)floorx, j = (int)floory, k = (int)floorz;
-	const Vec3d &n000 = basis[hash_index(i, j, k)];
-	const Vec3d &n100 = basis[hash_index(i + 1, j, k)];
-	const Vec3d &n010 = basis[hash_index(i, j + 1, k)];
-	const Vec3d &n110 = basis[hash_index(i + 1, j + 1, k)];
-	const Vec3d &n001 = basis[hash_index(i, j, k + 1)];
-	const Vec3d &n101 = basis[hash_index(i + 1, j, k + 1)];
-	const Vec3d &n011 = basis[hash_index(i, j + 1, k + 1)];
-	const Vec3d &n111 = basis[hash_index(i + 1, j + 1, k + 1)];
+	const Vec3R &n000 = basis[hash_index(i, j, k)];
+	const Vec3R &n100 = basis[hash_index(i + 1, j, k)];
+	const Vec3R &n010 = basis[hash_index(i, j + 1, k)];
+	const Vec3R &n110 = basis[hash_index(i + 1, j + 1, k)];
+	const Vec3R &n001 = basis[hash_index(i, j, k + 1)];
+	const Vec3R &n101 = basis[hash_index(i + 1, j, k + 1)];
+	const Vec3R &n011 = basis[hash_index(i, j + 1, k + 1)];
+	const Vec3R &n111 = basis[hash_index(i + 1, j + 1, k + 1)];
+
 	Real fx = x - floorx, fy = y - floory, fz = z - floorz;
 	Real sx = fx * fx * fx * (10 - fx * (15 - fx * 6)),
 			sy = fy * fy * fy * (10 - fy * (15 - fy * 6)),
@@ -69,11 +67,11 @@ Real Noise3::operator()(Real x, Real y, Real z) const
 
 //============================================================================
 
-FlowNoise3::FlowNoise3(unsigned int seed, Real spin_variation)
+FlowNoise3::FlowNoise3(unsigned seed, Real spin_variation)
 	: Noise3(seed)
 {
 	seed += 8 * n; // probably avoids overlap with sequence used in initializing superclass Noise3
-	for (unsigned int i = 0; i < n; ++i)
+	for (unsigned i = 0; i < n; ++i)
 	{
 		original_basis[i] = basis[i];
 		spin_axis[i] = sample_sphere<3>(seed);
@@ -83,7 +81,7 @@ FlowNoise3::FlowNoise3(unsigned int seed, Real spin_variation)
 
 void FlowNoise3::set_time(Real t)
 {
-	for (unsigned int i = 0; i < n; ++i) {
+	for (unsigned i = 0; i < n; ++i) {
 		Real theta = spin_rate[i] * t;
 		Real c = std::cos(theta), s = std::sin(theta);
 		// form rotation matrix

@@ -1,9 +1,8 @@
 #pragma once
 
-#include <algorithm>
-#include "Vec.h"
+#include <vector>
 
-#include "Core.h"
+#include "Common.h"
 
 ///////////////////////////////////
 //
@@ -20,83 +19,77 @@ class UniformGrid
 {
 public:
 
-	UniformGrid() : m_nx(Vec2st(0)) {}
+	UniformGrid() : m_size(Vec2ui(0)) {}
 
-	UniformGrid(const Vec2st& nx) : m_nx(nx)
+	UniformGrid(const Vec2ui& size) : m_size(size)
 	{
-		m_grid.resize(m_nx[0] * m_nx[1]);
+		m_grid.resize(m_size[0] * m_size[1]);
 	}
 
-	UniformGrid(const Vec2st& nx, const T& val) : m_nx(nx)
+	UniformGrid(const Vec2ui& size, const T& val) : m_size(size)
 	{
-		m_grid.resize(m_nx[0] * m_nx[1], val);
+		m_grid.resize(m_size[0] * m_size[1], val);
 	}
 	
-	//Accessor is y-major because the inside loop for most processes is naturally y. Should give better cache coherence.
-	//Clamping should only occur for interpolation. Direct index access that's outside of the grid should
-	//be a sign of an error.
-	T& operator()(int x, int y)
+	// Accessor is y-major because the inside loop for most processes is naturally y. Should give better cache coherence.
+	// Clamping should only occur for interpolation. Direct index access that's outside of the grid should
+	// be a sign of an error.
+	T& operator()(unsigned i, unsigned j) { return (*this)(Vec2ui(i, j)); }
+
+	T& operator()(const Vec2ui& coord)
 	{ 
-		assert(x < m_nx[0] && y < m_nx[1] &&
-				x >= 0 && y >= 0);
-
-		return m_grid[stride(Vec2st(x, y))];
+		assert(coord[0] < m_size[0] && coord[1] < m_size[1]);
+		return m_grid[flatten(coord)];
 	}
 
-	const T& operator()(int x, int y) const
+	const T& operator()(unsigned i, unsigned j) const { return (*this)(Vec2ui(i, j)); }
+
+	const T& operator()(const Vec2ui& coord) const
 	{
-		assert(x < m_nx[0] && y < m_nx[1] &&
-			x >= 0 && y >= 0);
-
-		return m_grid[stride(Vec2st(x, y))];
-	}
-
-	T val(int x, int y) const
-	{
-		assert(x < m_nx[0] && y < m_nx[1] &&
-			x >= 0 && y >= 0);
-
-		return m_grid[stride(Vec2st(x, y))];
+		assert(coord[0] < m_size[0] && coord[1] < m_size[1]);
+		return m_grid[flatten(coord)];
 	}
 
 	void clear()
 	{
-		m_nx = Vec2st(0);
+		m_size = Vec2ui(0);
 		m_grid.clear();
 	}
 
 	bool empty() const { return m_grid.empty(); }
 
-	void resize(const Vec2st& nx)
+	void resize(const Vec2ui& size)
 	{
-		m_nx = nx;
+		m_size = size;
 		m_grid.clear();
-		m_grid.resize(m_nx[0] * m_nx[1]);
+		m_grid.resize(m_size[0] * m_size[1]);
 	}
 
-	void resize(const Vec2st& nx, const T& val)
+	void resize(const Vec2ui& size, const T& val)
 	{
-		m_nx = nx;
+		m_size = size;
 		m_grid.clear();
-		m_grid.resize(m_nx[0] * m_nx[1], val);
+		m_grid.resize(m_size[0] * m_size[1], val);
 	}
 
-	const Vec2st& size() const { return m_nx; }
+	const Vec2ui& size() const { return m_size; }
 		
-	inline size_t stride(const Vec2st& coord) const
+	unsigned flatten(const Vec2ui& coord) const
 	{
-		return coord[1] + m_nx[1] * coord[0];
+		return coord[1] + m_size[1] * coord[0];
 	}
 
-	inline Vec2st unstride(size_t elem) const
+	Vec2ui unflatten(unsigned elem) const
 	{
-		Vec2st coord;
-		coord[0] = elem / m_nx[1];
-		coord[1] = elem % m_nx[1];
+		Vec2ui coord;
+		coord[0] = elem / m_size[1];
+		coord[1] = elem % m_size[1];
 		return coord;
 	}
+
 protected:
+
 	//Grid center container
 	std::vector<T> m_grid;
-	Vec2st m_nx;
+	Vec2ui m_size;
 };

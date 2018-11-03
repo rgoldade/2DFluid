@@ -1,5 +1,6 @@
-#include "Core.h"
-#include "Vec.h"
+#include <iostream>
+
+#include "Common.h"
 #include "Integrator.h"
 
 #include "AnalyticalPoissonSolver.h"
@@ -16,14 +17,14 @@ int main(int argc, char** argv)
 		return exp(-pos[0] - pos[1]);
 	};
 
-	int base = 32;
-	int maxbase = base * pow(2,4);
+	unsigned base = 32;
+	unsigned maxbase = base * pow(2,4);
 	
 	for (; base < maxbase; base *= 2)
 	{
 		Real dx = M_PI / (Real) base;
 		Vec2R origin(0);
-		Vec2st size(round(M_PI / dx));
+		Vec2ui size(round(M_PI / dx));
 		Transform xform(dx, origin);
 
 		AnalyticalPoissonSolver solver(xform, size);

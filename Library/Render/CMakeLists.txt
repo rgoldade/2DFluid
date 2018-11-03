@@ -1,7 +1,7 @@
-add_library(2dfluid_render Renderer.cpp)
+add_library(2DFluidRenderer Renderer.cpp)
 
-target_include_directories(2dfluid_render PUBLIC
+target_include_directories(2DFluidRenderer  PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 							  $<INSTALL_INTERFACE:include>)
 
-set_target_properties(2dfluid_render PROPERTIES FOLDER ${SOURCE_FOLDER})
+set_target_properties(2DFluidRenderer PROPERTIES FOLDER ${SOURCE_FOLDER})

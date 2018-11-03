@@ -1,18 +1,17 @@
-add_library(2dfluid_simtools
-				AdvectField.cpp
+add_library(2DFluidSimTools
 				ComputeWeights.cpp
 				ExtrapolateField.cpp
-				Noise.cpp
 				PressureProjection.cpp
-				ViscositySolver.cpp)
+				ViscositySolver.cpp
+				Noise.cpp)
 
-target_link_libraries(2dfluid_simtools
+target_link_libraries(2DFluidSimTools
 						PRIVATE
-						2dfluid_common
-						2dfluid_trackers)
+						2DFluidCommon
+						2DFluidTrackers)
 
-target_include_directories(2dfluid_simtools PUBLIC
+target_include_directories(2DFluidSimTools PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 							  $<INSTALL_INTERFACE:include>)
 
-set_target_properties(2dfluid_simtools PROPERTIES FOLDER ${SOURCE_FOLDER})
+set_target_properties(2DFluidSimTools PROPERTIES FOLDER ${SOURCE_FOLDER})

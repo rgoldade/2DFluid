@@ -2,7 +2,6 @@
 
 #include "VectorGrid.h"
 #include "ScalarGrid.h"
-#include "LevelSet2D.h"
 #include "Integrator.h"
 
 ///////////////////////////////////
@@ -16,97 +15,48 @@
 //
 ////////////////////////////////////
 
-namespace IntegratorSettings
-{
-	enum Interpolator {LINEAR, CUBIC};
-	enum Integrator { FE, RK3 };
-}
+class LevelSet2D;
+
+enum class InterpolationOrder { LINEAR, CUBIC };
 
 template<typename Field>
 class AdvectField
 {
 public:
-	AdvectField(VectorGrid<Real>& vel, const Field& source)
-		: m_vel(vel), m_field(source), m_boundary(NULL)
+
+	AdvectField(const Field& source)
+		: m_field(source)
 		{}
 
-	void set_collision_volumes(const LevelSet2D& boundary)
-	{
-		m_boundary = &boundary;
-	}
-
-	void advect_field(Real dt, Field& field, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp = IntegratorSettings::Interpolator::LINEAR);
-
-	template<typename Integrator>
-	void advect_field(Real dt, Field& field, const Integrator& f, IntegratorSettings::Interpolator interp = IntegratorSettings::Interpolator::LINEAR);
-
-	// Operator overload to sample the velocity field while taking into account
-	// solid objects
-	Vec2R operator()(Real dt, const Vec2R& wpos) const;
+	template<typename VelocityField>
+	void advect_field(Real dt, Field& field, const VelocityField& vel, const IntegrationOrder order, const InterpolationOrder interp_order = InterpolationOrder::LINEAR);
 
 private:
-	VectorGrid<Real>& m_vel;
-	
 	const Field &m_field;
-	// The solid volume is used to *bump* back to the surface
-	const LevelSet2D* m_boundary;
 };
 
 template<typename Field>
-void AdvectField<Field>::advect_field(Real dt, Field& field, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp)
+template<typename VelocityField>
+void AdvectField<Field>::advect_field(Real dt, Field& field, const VelocityField& vel, const IntegrationOrder order, const InterpolationOrder interp_order)
 {
-	switch (order)
+	assert(&field != &m_field);
+
+	for_each_voxel_range(Vec2ui(0), field.size(), [&](const Vec2ui& cell)
 	{
-	case IntegratorSettings::FE:
-		advect_field(dt, field, Integrator::forward_euler<Vec2R, AdvectField<Field>>(), interp);
-		break;
-	case IntegratorSettings::RK3:
-		advect_field(dt, field, Integrator::rk3<Vec2R, AdvectField<Field>>(), interp);
-		break;
-	default:
-		assert(false);
-	}
-}
+		Vec2R pos = field.idx_to_ws(Vec2R(cell));
+		pos = Integrator(-dt, pos, vel, order);
 
-template<>
-void AdvectField<VectorGrid<Real>>::advect_field(Real dt, VectorGrid<Real>& field, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp);
-
-// Advect the source field (m_field) into the destination field. The destination field
-// should never be the same field as m_field since it would corrupt the information mid-loop
-template<typename Field>
-template<typename Integrator>
-void AdvectField<Field>::advect_field(Real dt, Field& dest_field, const Integrator& f, IntegratorSettings::Interpolator interp)
-{
-	size_t x_size = dest_field.size()[0];
-	size_t y_size = dest_field.size()[1];
-
-	for (size_t x = 0; x < x_size; ++x)
-		for (size_t y = 0; y < y_size; ++y)
+		switch (interp_order)
 		{
-			Vec2R pos = dest_field.idx_to_ws(Vec2R(x, y));
-			pos = f(pos, -dt, *this);
-			switch (interp)
-			{
-			case IntegratorSettings::Interpolator::LINEAR:
-				dest_field(x, y) = m_field.interp(pos);
-				break;
-			case IntegratorSettings::Interpolator::CUBIC:
-				dest_field(x, y) = m_field.cubic_interp(pos, false, true);
-				break;
-			default:
-				assert(false);
-			}
-			
+		case InterpolationOrder::LINEAR:
+			field(cell) = m_field.interp(pos);
+			break;
+		case InterpolationOrder::CUBIC:
+			field(cell) = m_field.cubic_interp(pos, false, true);
+			break;
+		default:
+			assert(false);
+			break;
 		}
-}
-
-template<typename Field>
-Vec2R AdvectField<Field>::operator()(Real dt, const Vec2R& wpos) const
-{
-	// Bump to boundary surface if there is a boundary field set
-	//if (m_boundary && m_boundary->interp(wpos) <= 0.)
-	//{
-	//	return - m_boundary->interp(wpos) * m_boundary->normal_const(wpos) / dt;
-	//}
-	return m_vel.interp(wpos);
+	});
 }

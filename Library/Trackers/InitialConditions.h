@@ -10,16 +10,14 @@
 //
 ////////////////////////////////////
 
-#include "Core.h"
-#include "Vec.h"
-
+#include "Common.h"
 #include "Mesh2D.h"
 
 // This convention follows from normals are "left" turns
 Mesh2D circle_mesh(const Vec2R& center = Vec2R(0), Real radius = 1., Real divisions = 10.)
 {
 	std::vector<Vec2R> verts;
-	std::vector<Vec2i> edges;
+	std::vector<Vec2ui> edges;
 
 	Real start_angle = 0;
 	Real end_angle = 2. * M_PI;
@@ -38,15 +36,15 @@ Mesh2D circle_mesh(const Vec2R& center = Vec2R(0), Real radius = 1., Real divisi
 
 		verts.push_back(v1);
 
-		int idx = verts.size();
+		unsigned idx = verts.size();
 
-		edges.push_back(Vec2i(idx - 2, idx - 1));
+		edges.push_back(Vec2ui(idx - 2, idx - 1));
 
 		v0 = v1;
 	}
 
 	//Close mesh
-	edges.push_back(Vec2i(verts.size() - 1, 0));
+	edges.push_back(Vec2ui(verts.size() - 1, 0));
 
 	Mesh2D mesh = Mesh2D(edges, verts);
 
@@ -56,18 +54,17 @@ Mesh2D circle_mesh(const Vec2R& center = Vec2R(0), Real radius = 1., Real divisi
 Mesh2D square_mesh(const Vec2R& center = Vec2R(0), const Vec2R& scale = Vec2R(1.))
 {
 	std::vector<Vec2R> verts;
-	std::vector<Vec2i> edges;
+	std::vector<Vec2ui> edges;
 
 	verts.push_back(Vec2R( 1.0 * scale[0], -1.0 * scale[1]));
 	verts.push_back(Vec2R(-1.0 * scale[0], -1.0 * scale[1]));
 	verts.push_back(Vec2R(-1.0 * scale[0],  1.0 * scale[1]));
 	verts.push_back(Vec2R( 1.0 * scale[0],  1.0 * scale[1]));
 	
-	edges.push_back(Vec2i(0, 1));
-	edges.push_back(Vec2i(1, 2));
-	edges.push_back(Vec2i(2, 3));
-	edges.push_back(Vec2i(3, 0));
-
+	edges.push_back(Vec2ui(0, 1));
+	edges.push_back(Vec2ui(1, 2));
+	edges.push_back(Vec2ui(2, 3));
+	edges.push_back(Vec2ui(3, 0));
 
 	Mesh2D mesh = Mesh2D(edges, verts);
 
@@ -81,7 +78,7 @@ Mesh2D square_mesh(const Vec2R& center = Vec2R(0), const Vec2R& scale = Vec2R(1.
 Mesh2D notched_disk_mesh()
 {
 	std::vector<Vec2R> verts;
-	std::vector<Vec2i> edges;
+	std::vector<Vec2ui> edges;
 
 	//Make circle portion
 	Real start_angle = -M_PI / 2.0 + acos(1 - 2.5*2.5 / (2 * 15 * 15));
@@ -105,9 +102,9 @@ Mesh2D notched_disk_mesh()
 
 		verts.push_back(v1);
 
-		size_t idx = verts.size();
+		unsigned idx = verts.size();
 
-		edges.push_back(Vec2i(idx - 1, idx - 2));
+		edges.push_back(Vec2ui(idx - 1, idx - 2));
 
 		v0 = v1;
 	}
@@ -116,17 +113,17 @@ Mesh2D notched_disk_mesh()
 	Vec2R v1 = v0 + Vec2R(0.0, 25.0);
 
 	verts.push_back(v1);
-	size_t idx = verts.size();
-	edges.push_back(Vec2i(idx - 1, idx - 2));
+	unsigned idx = verts.size();
+	edges.push_back(Vec2ui(idx - 1, idx - 2));
 
 	Vec2R v2 = v1 + Vec2R(5.0, 0.0);
 
 	verts.push_back(v2);
 	idx = verts.size();
-	edges.push_back(Vec2i(idx - 1, idx - 2));
+	edges.push_back(Vec2ui(idx - 1, idx - 2));
 
 	//Close mesh
-	edges.push_back(Vec2i(0, idx - 1));
+	edges.push_back(Vec2ui(0, idx - 1));
 
 	Mesh2D mesh = Mesh2D(edges, verts);
 
@@ -137,7 +134,7 @@ Mesh2D notched_disk_mesh()
 Mesh2D vortex_mesh()
 {
 	std::vector<Vec2R> verts;
-	std::vector<Vec2i> edges;
+	std::vector<Vec2ui> edges;
 
 	//Make circle
 	Real start_angle = 0.0;
@@ -160,15 +157,15 @@ Mesh2D vortex_mesh()
 
 		verts.push_back(v1);
 
-		size_t idx = verts.size();
+		unsigned idx = verts.size();
 
-		edges.push_back(Vec2i(idx - 1, idx - 2));
+		edges.push_back(Vec2ui(idx - 1, idx - 2));
 
 		v0 = v1;
 	}
 
 	//Close mesh
-	edges.push_back(Vec2i(verts.size() - 1, 0));
+	edges.push_back(Vec2ui(verts.size() - 1, 0));
 
 	Mesh2D mesh = Mesh2D(edges, verts);
 

@@ -2,7 +2,6 @@ set(TEST_FOLDER TestProjects)
 
 add_subdirectory(TestLevelSet)
 add_subdirectory(TestScalarGrid)
-add_subdirectory(TestMeshAndLevelSet)
 add_subdirectory(TestParticleSurfacing)
 add_subdirectory(TestAnalyticalViscosity)
 add_subdirectory(TestAnalyticalPoissonSolver)

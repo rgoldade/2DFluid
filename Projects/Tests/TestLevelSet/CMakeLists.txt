@@ -1,13 +1,14 @@
-add_executable(testlevelset testlevelset.cpp)
+add_executable(TestLevelSet TestLevelSet.cpp)
 
-target_link_libraries(testlevelset
+target_link_libraries(TestLevelSet 
 						PRIVATE
-						2dfluid_trackers
-						2dfluid_common
-						2dfluid_render)
+						2DFluidTrackers
+						2DFluidCommon
+						2DFluidRenderer
+						2DFluidSimTools)
 
 file(RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 
-install(TARGETS testlevelset RUNTIME DESTINATION ${REL})
+install(TARGETS TestLevelSet RUNTIME DESTINATION ${REL})
 
-set_target_properties(testlevelset PROPERTIES FOLDER ${TEST_FOLDER})
+set_target_properties(TestLevelSet PROPERTIES FOLDER ${TEST_FOLDER})

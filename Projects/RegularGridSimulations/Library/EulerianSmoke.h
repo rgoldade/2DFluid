@@ -2,8 +2,7 @@
 #include <limits>
 #include <vector>
 
-#include "Core.h"
-#include "Vec.h"
+#include "Common.h"
 
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
@@ -30,16 +29,16 @@
 class EulerianSmoke
 {
 public:
-	EulerianSmoke(const Transform& xform, Vec2st nx, Real ambienttemp = 300)
-		: m_xform(xform), m_ambienttemp(ambienttemp)
+	EulerianSmoke(const Transform& xform, Vec2ui size, Real ambienttemp = 300)
+		: m_xform(xform), m_ambient_temperature(ambienttemp)
 	{
-		m_vel = VectorGrid<Real>(m_xform, nx, VectorGridSettings::STAGGERED);
-		m_collision_vel = VectorGrid<Real>(m_xform, nx, 0., VectorGridSettings::STAGGERED);
+		m_vel = VectorGrid<Real>(m_xform, size, VectorGridSettings::SampleType::STAGGERED);
+		m_collision_vel = VectorGrid<Real>(m_xform, size, 0., VectorGridSettings::SampleType::STAGGERED);
 
-		m_collision = LevelSet2D(m_xform, nx, 5);
+		m_collision = LevelSet2D(m_xform, size, 5);
 
-		m_smokedensity = ScalarGrid<Real>(m_xform, nx, 0);
-		m_smoketemperature = ScalarGrid<Real>(m_xform, nx, m_ambienttemp);
+		m_smoke_density = ScalarGrid<Real>(m_xform, size, 0);
+		m_smoke_temperature = ScalarGrid<Real>(m_xform, size, m_ambient_temperature);
 	}
 
 	void set_collision_volume(const LevelSet2D& collision);
@@ -49,8 +48,8 @@ public:
 
 	void set_smoke_source(const ScalarGrid<Real>& density, const ScalarGrid<Real>& temperature);
 
-	void advect_smoke(Real dt, IntegratorSettings::Integrator order, IntegratorSettings::Interpolator interp);
-	void advect_velocity(Real dt, IntegratorSettings::Integrator order);
+	void advect_smoke(Real dt, const InterpolationOrder& order);
+	void advect_velocity(Real dt, const InterpolationOrder& order);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
 	void run_simulation(Real dt, Renderer& renderer);
@@ -70,9 +69,9 @@ private:
 	// Simulation containers
 	VectorGrid<Real> m_vel, m_collision_vel;
 	LevelSet2D m_collision;
-	ScalarGrid<Real> m_smokedensity, m_smoketemperature;
+	ScalarGrid<Real> m_smoke_density, m_smoke_temperature;
 
-	Real m_ambienttemp;
+	Real m_ambient_temperature;
 
 	Transform m_xform;
 };

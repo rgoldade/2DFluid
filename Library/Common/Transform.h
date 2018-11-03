@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Core.h"
+#include "Common.h"
 
 ///////////////////////////////////
 //
@@ -21,27 +21,27 @@ public:
 		, m_offset(offset)
 		{}
 
-	inline Vec2R idx_to_ws(const Vec2R& ipos) const
+	Vec2R idx_to_ws(Vec2R ipos) const
 	{
 		return ipos * m_dx + m_offset;
 	}
 
-	inline Vec2R ws_to_idx(const Vec2R& wpos) const
+	Vec2R ws_to_idx(Vec2R wpos) const
 	{
 		return (wpos - m_offset) / m_dx;
 	}
 
-	inline Real dx() const { return m_dx; }
-	inline Vec2R offset() const { return m_offset; }
+	Real dx() const { return m_dx; }
+	Vec2R offset() const { return m_offset; }
 
-	inline bool operator==(const Transform &rhs)
+	bool operator==(const Transform &rhs) const
 	{
 		if (m_dx != rhs.m_dx) return false;
 		if (m_offset != rhs.m_offset) return false;
 		return true;
 	}
 
-	inline bool operator!=(const Transform &rhs)
+	bool operator!=(const Transform &rhs) const
 	{
 		if (m_dx == rhs.m_dx) return false;
 		if (m_offset == rhs.m_offset) return false;

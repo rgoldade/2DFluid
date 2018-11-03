@@ -1,7 +1,7 @@
 #include <memory>
+#include <iostream>
 
-#include "Core.h"
-#include "Vec.h"
+#include "Common.h"
 #include "Integrator.h"
 
 #include "Renderer.h"
@@ -19,11 +19,12 @@ std::unique_ptr<CircularSim2D> g_solid_sim;
 bool g_run = false;
 bool g_single_run = false;
 bool g_dirty_display = true;
-Real g_dt = 1. / 30;
-Real g_seed_time = 0;
 
-Real g_dx = 0.025;
-Vec2st g_size(200);
+const Real g_dt = 1. / 30;
+const Real g_seed_time = 0;
+
+const Real g_dx = 0.025;
+const Vec2ui g_size(200);
 
 Vec2R g_seed_center;
 Mesh2D g_seed_mesh;
@@ -40,8 +41,6 @@ void display()
 		Real frame_time = 0.;
 		while (frame_time < g_dt)
 		{
-			g_renderer->clear();
-
 			// Set CFL condition
 			Real velmag = g_sim->max_vel_mag();
 			Real dt;
@@ -50,10 +49,7 @@ void display()
 				// CFL is allows the velocity to track 3 cells 
 				dt = 2. * g_dx / velmag;
 				if (dt > (g_dt - frame_time))
-				{
 					dt = g_dt - frame_time;
-					std::cout << "Throttling timestep. CFL: " << dt << std::endl;
-				}
 			}
 			else dt = g_dt - frame_time;
 			// Store accumulated substep times
@@ -63,17 +59,16 @@ void display()
 			if (dt <= 0.) break;
 
 			// Seed every frame
-			g_sim->add_force(Vec2R(0., -9.8), dt);
+			g_sim->add_force(dt, Vec2R(0., -9.8));
 
 			// Update moving solid
-			typedef Integrator::forward_euler<Vec2R, CircularSim2D> integrator_functor;
-			g_moving_solids.advect(dt, *g_solid_sim.get(), integrator_functor());
+			g_moving_solids.advect(dt, *g_solid_sim, IntegrationOrder::FORWARDEULER);
 
 			// Need moving solid volume to build sampled velocity
 			LevelSet2D moving_solid = LevelSet2D(xform, g_size, 10);
 			moving_solid.init(g_moving_solids, false);
 
-			VectorGrid<Real> solid_vel(xform, g_size, 0, VectorGridSettings::STAGGERED);
+			VectorGrid<Real> solid_vel(xform, g_size, 0, VectorGridSettings::SampleType::STAGGERED);
 			// Simple solid velocity updater
 			for (size_t x = 0; x < solid_vel.size(0)[0]; ++x)
 				for (size_t y = 0; y < solid_vel.size(0)[1]; ++y)
@@ -111,11 +106,11 @@ void display()
 	}
 	if (g_dirty_display)
 	{
+		g_renderer->clear();
 
-		//g_sim->draw_grid(*g_renderer.get());
 		g_sim->draw_surface(*g_renderer.get());
 		g_sim->draw_collision(*g_renderer.get());
-		//g_sim->draw_velocity(*g_renderer.get(), 5 * g_dt);
+
 		g_dirty_display = false;
 	}
 }
@@ -133,7 +128,7 @@ int main(int argc, char** argv)
 	// Scene settings
 	Transform xform(g_dx, Vec2R(0));
 
-	g_renderer = std::unique_ptr<Renderer>(new Renderer("Mesh test", Vec2i(1000), xform.offset(), xform.dx() * (Real)(g_size[0]), &argc, argv));
+	g_renderer = std::make_unique<Renderer>("Mesh test", Vec2ui(1000), xform.offset(), xform.dx() * Real(g_size[0]), &argc, argv);
 
 	Vec2R center = xform.offset() + Vec2R(xform.dx()) * Vec2R(g_size / 2);
 	g_seed_center = center;

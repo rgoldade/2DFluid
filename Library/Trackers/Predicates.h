@@ -1,31 +1,32 @@
-#ifndef PREDICATES_H
-#define PREDICATES_H
+#pragma once
 
-double
-exactinit(void); // call this before anything else
+#include "Common.h"
 
-double
-orient2d(const double *pa,
-         const double *pb,
-         const double *pc);
+Real exactinit(); // call this before anything else
 
-double
-orient3d(const double *pa,
-         const double *pb,
-         const double *pc,
-         const double *pd);
+Real orient2d(const Real *pa,
+			    const Real *pb,
+				const Real *pc);
 
-double
-incircle(const double *pa,
-         const double *pb,
-         const double *pc,
-         const double *pd);
+Real orient3d(const Real *pa,
+				const Real *pb,
+				const Real *pc,
+				const Real *pd);
 
-double
-insphere(const double *pa,
-         const double *pb,
-         const double *pc,
-         const double *pd,
-         const double *pe);
+Real incircle(const Real *pa,
+				const Real *pb,
+				const Real *pc,
+				const Real *pd);
 
-#endif
+Real insphere(const Real *pa,
+				const Real *pb,
+				const Real *pc,
+				const Real *pd,
+				const Real *pe);
+
+enum class Axis { XAXIS, YAXIS };
+enum class Intersection { YES, ON, NO };
+
+// Check that a mesh edge crosses over a grid edge.
+// Rotate grid edge to x-axis to perform check.
+Intersection exact_edge_intersect(const Vec2R &a, const Vec2R &b, const Vec2R &c, Axis axis = Axis::XAXIS);
