@@ -58,7 +58,7 @@ public:
 		Eigen::SparseMatrix<SolverReal> A_sparse(m_b.rows(), m_b.rows());
 		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
 		A_sparse.makeCompressed();
-		Eigen::SparseLU<Eigen::SparseMatrix<SolverReal>> solver;
+		Eigen::SimplicialCholesky<Eigen::SparseMatrix<SolverReal>> solver;
 
 		solver.analyzePattern(A_sparse);
 		solver.factorize(A_sparse);
@@ -99,11 +99,15 @@ public:
 	}
 
 	//Call to solve linear system
-	bool solve_nonsymmetric(Real tolerance = 1E-5)
+	bool solve_nonsymmetric()
 	{
 		Eigen::SparseMatrix<SolverReal> A_sparse(m_b.rows(), m_b.rows());
 		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
-		Eigen::BiCGSTAB<Eigen::SparseMatrix<SolverReal>, Eigen::Lower | Eigen::Upper> solver;
+		A_sparse.makeCompressed();
+		Eigen::SparseLU<Eigen::SparseMatrix<SolverReal>> solver;
+
+		solver.analyzePattern(A_sparse);
+		solver.factorize(A_sparse);
 		solver.compute(A_sparse);
 
 		if (solver.info() != Eigen::Success)
@@ -112,12 +116,11 @@ public:
 			return false;
 		}
 
-		solver.setTolerance(tolerance);
-		m_x = solver.solveWithGuess(m_b, m_guess);
+		m_x = solver.solve(m_b);
 
 		if (solver.info() != Eigen::Success)
 		{
-			std::cout << "Solve failed to converge" << std::endl;
+			std::cout << "Solve failed" << std::endl;
 			return false;
 		}
 
