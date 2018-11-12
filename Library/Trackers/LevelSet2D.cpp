@@ -581,26 +581,6 @@ void LevelSet2D::init(const Mesh2D& init_mesh, bool resize)
 	fast_marching(marked_cells);
 }
 
-static constexpr int mc_template[16][4] = { { -1,-1,-1,-1 },
-											{ 3, 0,-1,-1 },
-											{ 0, 1,-1,-1 },
-											{ 3, 1,-1,-1 },
-
-											{ 1, 2,-1,-1 },
-											{ 3, 0, 1, 2 },
-											{ 0, 2,-1,-1 },
-											{ 3, 2,-1,-1 },
-
-											{ 2, 3,-1,-1 },
-											{ 2, 0,-1,-1 },
-											{ 0, 1, 2, 3 },
-											{ 2, 1,-1,-1 },
-
-											{ 1, 3,-1,-1 },
-											{ 1, 0,-1,-1 },
-											{ 0, 3,-1,-1 },
-											{ -1,-1,-1,-1 } };
-
 void LevelSet2D::fast_marching(UniformGrid<MarkedCells>& marked_cells)
 {
 	assert(marked_cells.size() == size());

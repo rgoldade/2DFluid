@@ -455,13 +455,13 @@ void minmax(Vec<T, N>& vecMin, Vec<T, N>& vecMax, const Args&... args)
 }
 
 template<typename T, unsigned N>
-void update_minmax(Vec<T, N>& vecMin, Vec<T, N>& vecMax, const Vec<T, N> &vec)
+void update_minmax(Vec<T, N> &vecMin, Vec<T, N> &vecMax, const Vec<T, N> &vec)
 {
 	for (unsigned i = 0; i < N; ++i) update_minmax(vec[i], vecMin[i], vecMax[i]);
 }
 
 template<typename T, unsigned N>
-void update_both_minmax(Vec<T, N>& vecMin, Vec<T, N>& vecMax, const Vec<T, N> &vec)
+void update_both_minmax(Vec<T, N> &vecMin, Vec<T, N> &vecMax, const Vec<T, N> &vec)
 {
 	for (unsigned i = 0; i < N; ++i) update_both_minmax(vecMin[i], vecMax[i], vec[i]);
 }
