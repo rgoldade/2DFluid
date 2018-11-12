@@ -442,6 +442,24 @@ Vec<T, N> clamp(Vec<T, N> vec, const Vec<T, N>& low, const Vec<T, N>& high)
 }
 
 template<typename T, unsigned N>
+Vec<T, N> min(const Vec<T, N> &min0, Vec<T, N> min1)
+{
+	for (unsigned i = 0; i < N; ++i)
+		min1[i] = std::min(min0[i], min1[i]);
+
+	return min1;
+}
+
+template<typename T, unsigned N>
+Vec<T, N> max(const Vec<T, N> &max0, Vec<T, N> max1)
+{
+	for (unsigned i = 0; i < N; ++i)
+		max1[i] = std::max(max0[i], max1[i]);
+
+	return max1;
+}
+
+template<typename T, unsigned N>
 void minmax(Vec<T, N>& vecMin, Vec<T, N>& vecMax, const Vec<T, N>& vec0, const Vec<T, N>& vec1)
 {
 	for (unsigned i = 0; i < N; ++i)
