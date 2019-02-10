@@ -84,9 +84,7 @@ void EulerianLiquid::addSurfaceVolume(const LevelSet2D& surface)
 	// Need to zero out velocity in this added region as it could get extrapolated values
 	for (auto axis : { 0,1 })
 	{
-		Vec2ui size = myVelocity.size(axis);
-
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2ui(0), myVelocity.size(axis), [&](const Vec2ui& face)
 		{
 			Vec2R facePosition = myVelocity.indexToWorld(Vec2R(face), axis);
 			if (surface.interp(facePosition) <= 0. && mySurface.interp(facePosition) > 0.)
@@ -104,9 +102,7 @@ void EulerianLiquid::addForce(Real dt, const ForceSampler& force)
 {
 	for (auto axis : { 0,1 })
 	{
-		Vec2ui size = myVelocity.size(axis);
-
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2ui(0), myVelocity.size(axis), [&](const Vec2ui& face)
 		{
 			Vec2R facePosition = myVelocity.indexToWorld(Vec2R(face), axis);
 			myVelocity(face, axis) = myVelocity(face, axis) + dt * force(facePosition, axis);
@@ -193,6 +189,7 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 
 	// Initialize and call pressure projection
 	PressureProjection projectdivergence(dt, extrapolatedSurface, myVelocity, myCollisionSurface, myCollisionVelocity);
+
 
 	//if (m_surfacetension_scale != 0.)
 	//{
