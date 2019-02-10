@@ -15,76 +15,76 @@ class AnalyticalPoissonSolver
 {
 public:
 	AnalyticalPoissonSolver(const Transform& xform, const Vec2ui& size)
-		: m_xform(xform)
+		: myXform(xform)
 	{
-		m_poissongrid = ScalarGrid<Real>(m_xform, size, 0);
+		myPoissonGrid = ScalarGrid<Real>(myXform, size, 0);
 	}
 
 	template<typename RHS, typename Solution>
-	Real solve(const RHS& rhs, const Solution& solution);
+	Real solve(const RHS& rhsFunction, const Solution& solutionFunction);
 
-	void draw_grid(Renderer& renderer) const;
-	void draw_values(Renderer& renderer) const;
+	void drawGrid(Renderer& renderer) const;
+	void drawValues(Renderer& renderer) const;
 
 private:
 	
-	Transform m_xform;
-	ScalarGrid<Real> m_poissongrid;
+	Transform myXform;
+	ScalarGrid<Real> myPoissonGrid;
 };
 
 template<typename RHS, typename Solution>
-Real AnalyticalPoissonSolver::solve(const RHS& rhs, const Solution& solution)
+Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solutionFunction)
 {
-	UniformGrid<int> solvable_cells(m_poissongrid.size(), -1);
+	UniformGrid<int> solvableCells(myPoissonGrid.size(), -1);
 
-	unsigned solvecount = 0;
+	unsigned solutionDOFCount = 0;
 
-	Vec2ui size = solvable_cells.size();
+	Vec2ui gridSize = myPoissonGrid.size();
 
-	for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
 	{
-		solvable_cells(cell) = solvecount++;
+		solvableCells(cell) = solutionDOFCount++;
 	});
 
-	Solver<true> solver(solvecount, solvecount * 5);
+	Solver<true> solver(solutionDOFCount, solutionDOFCount * 5);
 
-	Real dx = m_poissongrid.dx();
-	Real coeff = sqr(dx);
+	Real dx = myPoissonGrid.dx();
+	Real coeff = Util::sqr(dx);
 
-	for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
 	{
-		int idx = solvable_cells(cell);
+		int row = solvableCells(cell);
 
-		assert(idx >= 0);
+		assert(row >= 0);
 
 		// Build RHS
-		Vec2R pos = m_poissongrid.idx_to_ws(Vec2R(cell));
+		Vec2R gridPoint = myPoissonGrid.indexToWorld(Vec2R(cell));
 
-		solver.add_rhs(idx, rhs(pos) * coeff);
+		solver.addRhs(row, coeff * rhsFuction(gridPoint));
 
-		for (unsigned dir = 0; dir < 4; ++dir)
-		{
-			Vec2i ncell = Vec2i(cell) + cell_to_cell[dir];
-
-			// Bounds check. Use analytical solution for Dirichlet condition.
-			if (ncell[0] < 0 || ncell[1] < 0 ||
-				ncell[0] >= size[0] || ncell[1] >= size[1])
+		for (auto axis : { 0, 1 })
+			for (auto direction : { 0,1 })
 			{
-				Vec2R npos = m_poissongrid.idx_to_ws(Vec2R(ncell));
+				Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
 
-				solver.add_rhs(idx, -solution(npos));
+				// Bounds check. Use analytical solution for Dirichlet condition.
+				if ((direction == 0 && adjacentCell[axis] < 0) ||
+					(direction == 1 && adjacentCell[axis] >= gridSize[axis]))
+				{
+					Vec2R adjacentPoint = myPoissonGrid.indexToWorld(Vec2R(adjacentCell));
+					solver.addRhs(row, -solutionFunction(adjacentPoint));
+				}
+				else
+				{
+					// If neighbouring cell is solvable, it should have an entry in the system
+					int adjacentRow = solvableCells(Vec2ui(adjacentCell));
+					assert(adjacentRow >= 0);
+
+					solver.addElement(row, adjacentRow, 1.);
+				}
 			}
-			else
-			{
-				// If neighbouring cell is solvable, it should have an entry in the system
-				int cidx = solvable_cells(Vec2ui(ncell));
-				assert(cidx >= 0);
 
-				solver.add_element(idx, cidx, 1.);
-			}
-		}
-
-		solver.add_element(idx, idx, -4.);
+		solver.addElement(row, row, -4.);
 	});
 
 	bool solved = solver.solve();
@@ -97,18 +97,18 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhs, const Solution& solution)
 
 	Real error = 0;
 
-	for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
 	{
-		int idx = solvable_cells(cell);
+		int row = solvableCells(cell);
 
-		assert(idx >= 0);
+		assert(row >= 0);
 
-		Vec2R pos = m_poissongrid.idx_to_ws(Vec2R(cell));
-		Real temperror = fabs(solver.sol(idx) - solution(pos));
+		Vec2R gridPoint = myPoissonGrid.indexToWorld(Vec2R(cell));
+		Real localError = fabs(solver.solution(row) - solutionFunction(gridPoint));
 
-		if (error < temperror) error = temperror;
+		if (error < localError) error = localError;
 
-		m_poissongrid(cell) = solver.sol(idx);
+		myPoissonGrid(cell) = solver.solution(row);
 	});
 
 	return error;

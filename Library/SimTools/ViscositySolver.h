@@ -1,10 +1,11 @@
-#pragma once
+#ifndef LIBRARY_VISCOSITYSOLVER_H
+#define LIBRARY_VISCOSITYSOLVER_H
 
-#include "VectorGrid.h"
 #include "LevelSet2D.h"
-#include "ScalarGrid.h"
 
 #include "Renderer.h"
+#include "ScalarGrid.h"
+#include "VectorGrid.h"
 
 ///////////////////////////////////
 //
@@ -26,48 +27,50 @@ class ViscositySolver
 
 public:
 
-	ViscositySolver(Real dt, const LevelSet2D& surface, VectorGrid<Real>& vel,
+	ViscositySolver(Real dt, const LevelSet2D& surface, VectorGrid<Real>& velocity,
 					const LevelSet2D& collision, const VectorGrid<Real>& collision_vel)
-		: m_dt(dt)
-		, m_vel(vel)
-		, m_surface(surface)
-		, m_collision_vel(collision_vel)
-		, m_collision(collision)
+		: myDt(dt)
+		, myVelocity(velocity)
+		, mySurface(surface)
+		, myCollisionVelocity(collision_vel)
+		, myCollisionSurface(collision)
 		{
 			// For efficiency sake, this should only take in velocity on a staggered grid
 			// that matches the center sampled surface and collision
-			assert(m_surface.is_matched(m_collision));
+			assert(mySurface.isMatched(myCollisionSurface));
 
 			// For efficiency sake, this should only take in velocity on a staggered grid
 			// that matches the center sampled surface and collision
-			assert(m_vel.size(0)[0] - 1 == m_surface.size()[0] &&
-				m_vel.size(0)[1] == m_surface.size()[1] &&
-				m_vel.size(1)[0] == m_surface.size()[0] &&
-				m_vel.size(1)[1] - 1 == m_surface.size()[1]);
+			assert(myVelocity.size(0)[0] - 1 == mySurface.size()[0] &&
+				myVelocity.size(0)[1] == mySurface.size()[1] &&
+				myVelocity.size(1)[0] == mySurface.size()[0] &&
+				myVelocity.size(1)[1] - 1 == mySurface.size()[1]);
 
-			assert(m_collision_vel.size(0)[0] - 1 == m_surface.size()[0] &&
-				m_collision_vel.size(0)[1] == m_surface.size()[1] &&
-				m_collision_vel.size(1)[0] == m_surface.size()[0] &&
-				m_collision_vel.size(1)[1] - 1 == m_surface.size()[1]);
+			assert(myCollisionVelocity.size(0)[0] - 1 == mySurface.size()[0] &&
+				myCollisionVelocity.size(0)[1] == mySurface.size()[1] &&
+				myCollisionVelocity.size(1)[0] == mySurface.size()[0] &&
+				myCollisionVelocity.size(1)[1] - 1 == mySurface.size()[1]);
 		}
 
-	void set_viscosity(Real mu);
-	void set_viscosity(const ScalarGrid<Real>& mu);
+	void setViscosity(Real mu);
+	void setViscosity(const ScalarGrid<Real>& mu);
 
-	void solve(const VectorGrid<Real>& face_volumes,
-				ScalarGrid<Real>& center_volumes,
-				ScalarGrid<Real>& node_volumes,
-				const ScalarGrid<Real>& collision_center_volumes,
-				const ScalarGrid<Real>& collision_node_volumes);
+	void solve(const VectorGrid<Real>& faceVolumes,
+				ScalarGrid<Real>& centerVolumes,
+				ScalarGrid<Real>& nodeVolumes,
+				const ScalarGrid<Real>& collisionCenterVolumes,
+				const ScalarGrid<Real>& collisionNodeVolumes);
 private:
 
-	VectorGrid<Real>& m_vel;
-	const VectorGrid<Real>& m_collision_vel;
+	VectorGrid<Real>& myVelocity;
+	const VectorGrid<Real>& myCollisionVelocity;
 	
-	const LevelSet2D& m_surface;
-	const LevelSet2D& m_collision;
+	const LevelSet2D& mySurface;
+	const LevelSet2D& myCollisionSurface;
 
-	ScalarGrid<Real> m_viscosity;
+	ScalarGrid<Real> myViscosity;
 
-	Real m_dt;
+	Real myDt;
 };
+
+#endif

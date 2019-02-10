@@ -2,116 +2,115 @@
 
 #include "Mesh2D.h"
 
-void Mesh2D::draw_mesh(Renderer& renderer,
-	Vec3f edge_colour,
-	bool render_edge_normals,
-	bool render_verts,
-	Vec3f vert_colour)
+void Mesh2D::drawMesh(Renderer& renderer,
+	Vec3f edgeColour,
+	bool renderEdgeNormals,
+	bool renderVertices,
+	Vec3f vertexColour)
 {
-	std::vector<Vec2R> start_points;
-	std::vector<Vec2R> end_points;
+	std::vector<Vec2R> startPoints;
+	std::vector<Vec2R> endPoints;
 
-	for (const auto& edge : m_edges)
+	for (const auto& edge : myEdges)
 	{
-		Vec2R sp = m_verts[edge.vert(0)].point();
-		start_points.push_back(sp);
+		Vec2R start = myVertices[edge.vertex(0)].point();
+		startPoints.push_back(start);
 
-		Vec2R ep = m_verts[edge.vert(1)].point();
-		end_points.push_back(ep);
+		Vec2R end = myVertices[edge.vertex(1)].point();
+		endPoints.push_back(end);
 	}
 
-	renderer.add_lines(start_points, end_points, edge_colour);
+	renderer.addLines(startPoints, endPoints, edgeColour);
 	
-	if (render_edge_normals)
+	if (renderEdgeNormals)
 	{
-		std::vector<Vec2R> start_norms;
-		std::vector<Vec2R> end_norms;
+		std::vector<Vec2R> startNormals;
+		std::vector<Vec2R> endNormals;
 
 		// Scale by average edge length
-		Real avg_length = 0.;
-		Real inv_edges = 1.0 / (Real)(m_edges.size());
-		for (const auto& edge : m_edges)
-			avg_length += mag(m_verts[edge.vert(0)].point() - m_verts[edge.vert(1)].point()) * inv_edges;
+		Real averageLength = 0.;
+		for (const auto& edge : myEdges)
+			averageLength += mag(myVertices[edge.vertex(0)].point() - myVertices[edge.vertex(1)].point());
 	
-		for (unsigned e = 0; e < m_edges.size(); ++e)
+		averageLength /= Real(myEdges.size());
+
+		for (unsigned edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
 		{
-			Vec2R p = (m_verts[m_edges[e].vert(0)].point() + m_verts[m_edges[e].vert(1)].point()) * .5;
-			Vec2R norm = normal(e);
+			Vec2R midPoint = .5 * (myVertices[myEdges[edgeIndex].vertex(0)].point() + myVertices[myEdges[edgeIndex].vertex(1)].point());
+			Vec2R edgeNormal = normal(edgeIndex);
 			
-			start_norms.push_back(p);
-			end_norms.push_back(p + norm * avg_length);
+			startNormals.push_back(midPoint);
+			endNormals.push_back(midPoint + edgeNormal * averageLength);
 		}
 
-		renderer.add_lines(start_norms, end_norms, Vec3f(0.));
+		renderer.addLines(startNormals, endNormals, Vec3f(0.));
 	}
 
-	if (render_verts)
+	if (renderVertices)
 	{
-		std::vector<Vec2R> vert_points;
+		std::vector<Vec2R> vertexPoints;
 
-		for (const auto& v : m_verts) vert_points.push_back(v.point());
+		for (const auto& vertex : myVertices) vertexPoints.push_back(vertex.point());
 
-		renderer.add_points(vert_points, vert_colour, 2);
+		renderer.addPoints(vertexPoints, vertexColour, 2);
 	}
 }
 
-bool Mesh2D::unit_test() const
+bool Mesh2D::unitTest() const
 {
-	bool passed = true;
-
 	// Verify vertex has two or more adjacent edges. Meaning no dangling edge.
-	for (unsigned v = 0; v < m_verts.size(); ++v)
+	for (unsigned vertexIndex = 0; vertexIndex < myVertices.size(); ++vertexIndex)
 	{
-		if (m_verts[v].valence() < 2)
+		if (myVertices[vertexIndex].valence() < 2)
 		{
-			std::cout << "Unit test failed in valence check. Vertex: " << v << ". Valence: " << m_verts[v].valence() << std::endl;
-			passed = false;
+			std::cout << "Unit test failed in valence check. Vertex: " << vertexIndex << ". Valence: " << myVertices[vertexIndex].valence() << std::endl;
+			return false;
 		}
 	}
 
 	// Verify edge has two adjacent vertices. Meaning no dangling edge.
-	for (unsigned e = 0; e < m_edges.size(); ++e)
+	for (unsigned edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
 	{
-		if (m_edges[e].vert(0) < 0 || m_edges[e].vert(1) < 0)
+		if (myEdges[edgeIndex].vertex(0) < 0 || myEdges[edgeIndex].vertex(1) < 0)
 		{
-			std::cout << "Unit test failed in edge's vertex count test. Edge: " << e << std::endl;
-			passed = false;
+			std::cout << "Unit test failed in edge's vertex count test. Edge: " << edgeIndex << std::endl;
+			return false;
 		}
 	}
 
 	// Verify vertex's adjacent edge reciprocates
-	for (unsigned v = 0; v < m_verts.size(); ++v)
+	for (unsigned vertexIndex = 0; vertexIndex < myVertices.size(); ++vertexIndex)
 	{
-		for (unsigned vi = 0; vi < m_verts[v].valence(); ++vi)
+		for (unsigned adjacentEdge = 0; adjacentEdge < myVertices[vertexIndex].valence(); ++adjacentEdge)
 		{
-			unsigned e = m_verts[v].edge(vi);
-			if (!m_edges[e].find_vert(v))
+			unsigned edgeIndex = myVertices[vertexIndex].edge(adjacentEdge);
+			if (!myEdges[edgeIndex].findVertex(vertexIndex))
 			{
-				std::cout << "Unit test failed in adjacent edge test. Vertex: " << v << ". Edge: " << e << std::endl;
-				passed = false;
+				std::cout << "Unit test failed in adjacent edge test. Vertex: " << vertexIndex << ". Edge: " << edgeIndex << std::endl;
+				return false;
 			}
 		}
 	}
 
 	// Verify edge's adjacent vertex reciprocates
-	for (unsigned e = 0; e < m_edges.size(); ++e)
+	for (unsigned edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
 	{
-		unsigned v0 = m_edges[e].vert(0);
-		if (!m_verts[v0].find_edge(e))
+		unsigned vertexIndex = myEdges[edgeIndex].vertex(0);
+		if (!myVertices[vertexIndex].findEdge(edgeIndex))
 		{
-			passed = false;
-			std::cout << "Unit test failed in adjacent vertex test. Vertex: " << v0 << ". Edge: " << e << std::endl;
+			std::cout << "Unit test failed in adjacent vertex test. Vertex: " << vertexIndex << ". Edge: " << edgeIndex << std::endl;
+			return false;
 		}
 
-		unsigned v1 = m_edges[e].vert(1);
-		if (!m_verts[v1].find_edge(e))
+		vertexIndex = myEdges[edgeIndex].vertex(1);
+		if (!myVertices[vertexIndex].findEdge(edgeIndex))
 		{
-			std::cout << "Unit test failed in adjacent vertex test. Vertex: " << v1 << ". Edge: " << e << std::endl;
-			passed = false;
+			std::cout << "Unit test failed in adjacent vertex test. Vertex: " << vertexIndex << ". Edge: " << edgeIndex << std::endl;
+			return false;
 		}
 	}
 
 	// TODO: write a test that verifies winding order
 
-	return passed;
+	return true;
 }

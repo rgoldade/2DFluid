@@ -1,9 +1,10 @@
-#pragma once
+#ifndef LIBRARY_COMPUTEWEIGHTS_H
+#define LIBRARY_COMPUTEWEIGHTS_H
 
 #include "Common.h"
+#include "LevelSet2D.h"
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
-#include "LevelSet2D.h"
 
 ///////////////////////////////////
 //
@@ -16,21 +17,11 @@
 //
 ////////////////////////////////////
 
-class ComputeWeights
-{
-public:
-	ComputeWeights(const LevelSet2D &surface, const LevelSet2D &collision)
-		: m_surface(surface)
-		, m_collision(collision)
-		{
-			assert(m_surface.is_matched(m_collision));
-		}
+VectorGrid<Real> computeGhostFluidWeights(const LevelSet2D& surface);
+VectorGrid<Real> computeCutCellWeights(const LevelSet2D &surface, bool invert = false);
+ScalarGrid<Real> computeSupersampledAreas(const LevelSet2D& surface,
+	ScalarGridSettings::SampleType sampleType,
+	unsigned samples);
+VectorGrid<Real> computeSupersampledFaceAreas(const LevelSet2D& surface, unsigned samples);
 
-	void compute_gf_weights(VectorGrid<Real>& liquid_weights);
-	void compute_cutcell_weights(VectorGrid<Real>& cc_weights);
-	void compute_supersampled_volumes(ScalarGrid<Real>& volume_weights, unsigned samples, bool use_collision = false);
-
-private:
-
-	const LevelSet2D &m_surface, &m_collision;
-};
+#endif

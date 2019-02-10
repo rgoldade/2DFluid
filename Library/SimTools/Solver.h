@@ -1,8 +1,9 @@
-#pragma once
-
-#include "Common.h"
+#ifndef LIBRARY_SOLVER_H
+#define LIBRARY_SOLVER_H
 
 #include "Eigen/Sparse"
+
+#include "Common.h"
 
 ///////////////////////////////////
 //
@@ -16,69 +17,100 @@
 //
 ////////////////////////////////////
 
-template<bool use_double_precision = false>
+template<bool useDoublePrecision = false>
 class Solver
 {
-	using SolverReal = typename std::conditional<use_double_precision, double, float>::type;
-	using Vector = typename std::conditional<use_double_precision, Eigen::VectorXd, Eigen::VectorXf>::type;
+	using SolverReal = typename std::conditional<useDoublePrecision, double, float>::type;
+	using Vector = typename std::conditional<useDoublePrecision, Eigen::VectorXd, Eigen::VectorXf>::type;
+
 public:
 	Solver(unsigned rowcount, unsigned nonzeros = 0)
 	{
-		m_A.reserve(nonzeros);
-		m_b = Vector::Zero(rowcount);
-		m_x = Vector::Zero(rowcount);
-		m_guess = Vector::Zero(rowcount);
+		myMatrix.reserve(nonzeros);
+		myRhs = Vector::Zero(rowcount);
+		mySolution = Vector::Zero(rowcount);
+		myGuess = Vector::Zero(rowcount);
 	}
 
 	// Insert element item into sparse vector. Duplicates are allowed and will be summed together
-	void add_element(unsigned row, unsigned col, SolverReal val)
+	void addElement(unsigned row, unsigned col, SolverReal val)
 	{
-		m_A.push_back(Eigen::Triplet<SolverReal>(row, col, val));
+		myMatrix.push_back(Eigen::Triplet<SolverReal>(row, col, val));
 	}
 
 	// Adds value to RHS. It's safe to assume that it is initialized to zeros
-	void add_rhs(unsigned row, SolverReal val)
+	void addRhs(unsigned row, SolverReal val)
 	{
-		m_b(row) += val;
+		myRhs(row) += val;
 	}
 	
-	// Caller should make sure solution is up-to-date
-	SolverReal sol(unsigned row) const
-	{		
-		return m_x(row);
+	SolverReal rhs(unsigned row)
+	{
+		return myRhs(row);
 	}
 
-	inline void add_guess(unsigned row, SolverReal val)
+	void removeDOF(unsigned element)
 	{
-		m_guess(row) += val;
+		myRemovedDOFs.push_back(element);
 	}
+
+	// Caller should make sure solution is up-to-date
+	SolverReal solution(unsigned row) const
+	{		
+		return mySolution(row);
+	}
+
+	inline void addGuess(unsigned row, SolverReal val)
+	{
+		myGuess(row) += val;
+	}
+
 	//Call to solve linear system
 	bool solve()
 	{
-		Eigen::SparseMatrix<SolverReal> A_sparse(m_b.rows(), m_b.rows());
-		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
-		A_sparse.makeCompressed();
-		Eigen::SimplicialCholesky<Eigen::SparseMatrix<SolverReal>> solver;
+		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
+		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
+		sparseMatrix.makeCompressed();
+		Eigen::SparseLU<Eigen::SparseMatrix<SolverReal>> solver;
 
-		solver.analyzePattern(A_sparse);
-		solver.factorize(A_sparse);
-		solver.compute(A_sparse);
+		/*solver.analyzePattern(sparseMatrix);
+		solver.factorize(sparseMatrix);*/
+		solver.compute(sparseMatrix);
 
 		if (solver.info() != Eigen::Success) return false;
 		
-		m_x = solver.solve(m_b);
+		mySolution = solver.solve(myRhs);
 		if (solver.info() != Eigen::Success) return false;
 		
 		return true;
 	}
 
 	//Call to solve linear system
-	bool solve_iterative(Real tolerance = 1E-5)
+	bool solveIterative(Real tolerance = 1E-5)
 	{
-		Eigen::SparseMatrix<SolverReal> A_sparse(m_b.rows(), m_b.rows());
-		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
-		Eigen::ConjugateGradient <Eigen::SparseMatrix<SolverReal>, Eigen::Lower | Eigen::Upper> solver;
-		solver.compute(A_sparse);
+		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
+		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
+
+		for (auto removeElement : myRemovedDOFs)
+		{
+			for (int k = 0; k < sparseMatrix.outerSize(); ++k)
+				for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
+				{
+					if (it.row() == removeElement && it.col() == removeElement)
+						sparseMatrix.coeffRef(it.row(), it.col()) = 1.;
+
+					if (it.row() == removeElement && it.col() != removeElement)
+						sparseMatrix.coeffRef(it.row(), it.col()) = 0.;
+
+					if (it.row() != removeElement && it.col() == removeElement)
+						sparseMatrix.coeffRef(it.row(), it.col()) = 0.;
+				}
+
+			myRhs[removeElement] = 0.;
+		}
+
+		Eigen::ConjugateGradient<Eigen::SparseMatrix<SolverReal>, Eigen::Upper | Eigen::Lower> solver;
+		solver.compute(sparseMatrix);
 
 		if (solver.info() != Eigen::Success)
 		{
@@ -87,7 +119,7 @@ public:
 		}
 
 		solver.setTolerance(tolerance);
-		m_x = solver.solveWithGuess(m_b, m_guess);
+		mySolution = solver.solveWithGuess(myRhs, myGuess);
 
 		if (solver.info() != Eigen::Success)
 		{
@@ -101,14 +133,14 @@ public:
 	//Call to solve linear system
 	bool solve_nonsymmetric()
 	{
-		Eigen::SparseMatrix<SolverReal> A_sparse(m_b.rows(), m_b.rows());
-		A_sparse.setFromTriplets(m_A.begin(), m_A.end());
-		A_sparse.makeCompressed();
+		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
+		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
+		sparseMatrix.makeCompressed();
 		Eigen::SparseLU<Eigen::SparseMatrix<SolverReal>> solver;
 
-		solver.analyzePattern(A_sparse);
-		solver.factorize(A_sparse);
-		solver.compute(A_sparse);
+		solver.analyzePattern(sparseMatrix);
+		solver.factorize(sparseMatrix);
+		solver.compute(sparseMatrix);
 
 		if (solver.info() != Eigen::Success)
 		{
@@ -116,7 +148,7 @@ public:
 			return false;
 		}
 
-		m_x = solver.solve(m_b);
+		mySolution = solver.solve(myRhs);
 
 		if (solver.info() != Eigen::Success)
 		{
@@ -127,8 +159,44 @@ public:
 		return true;
 	}
 
-private:
-	Vector m_b, m_x, m_guess;
+	bool isSymmetric()
+	{
+		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
+		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
+		sparseMatrix.makeCompressed();
 
-	std::vector<Eigen::Triplet<SolverReal>> m_A;
+		for (int k = 0; k < sparseMatrix.outerSize(); ++k)
+			for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
+			{
+				if (!Util::isEqual(sparseMatrix.coeff(it.row(), it.col()), sparseMatrix.coeff(it.col(), it.row())))
+					return false;
+			}
+
+		return true;
+	}
+
+	bool isFinite()
+	{
+		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
+		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
+		sparseMatrix.makeCompressed();
+
+		for (int k = 0; k < sparseMatrix.outerSize(); ++k)
+			for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
+			{
+				if (!std::isfinite(it.value()))
+					return false;
+			}
+
+		return true;
+	}
+
+private:
+	Vector myRhs, mySolution, myGuess;
+
+	std::vector<Eigen::Triplet<SolverReal>> myMatrix;
+
+	std::vector<unsigned> myRemovedDOFs;
 };
+
+#endif

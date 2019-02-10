@@ -1,10 +1,13 @@
-#pragma once
+#ifndef LIBRARY_TIMER_H
+#define LIBRARY_TIMER_H
+
 #ifdef _MSC_VER
 	#include <Windows.h>
 #else
 	#include <sys/time.h>
 #endif 
 
+#include "Common.h"
 #include "Util.h"
 
 ///////////////////////////////////
@@ -25,7 +28,7 @@ public:
 		QueryPerformanceCounter(&StartingTime);
 #else
 		struct timezone tz;
-		gettimeofday(&m_start, &tz);
+		gettimeofday(&myStart, &tz);
 #endif
 	}
 
@@ -35,13 +38,13 @@ public:
 		QueryPerformanceCounter(&EndingTime);
 		ElapsedMicroseconds.QuadPart = EndingTime.QuadPart - StartingTime.QuadPart;
 
-		return (Real)ElapsedMicroseconds.QuadPart / (Real) Frequency.QuadPart;
+		return Real(ElapsedMicroseconds.QuadPart) / Real(Frequency.QuadPart);
 #else
 
 		struct timezone tz;
-		gettimeofday(&m_end, &tz);
+		gettimeofday(&myEnd, &tz);
 
-		return (m_end.tv_sec + m_end.tv_usec * 1E-6) - (m_start.tv_sec + m_start.tv_usec * 1E-6);
+		return (myEnd.tv_sec + myEnd.tv_usec * 1E-6) - (myStart.tv_sec + myStart.tv_usec * 1E-6);
 #endif
 	}
 
@@ -52,7 +55,7 @@ public:
 		QueryPerformanceCounter(&StartingTime);
 #else
 		struct timezone tz;
-		gettimeofday(&m_start, &tz);
+		gettimeofday(&myStart, &tz);
 #endif
 	}
 
@@ -62,7 +65,8 @@ private:
 	LARGE_INTEGER StartingTime, EndingTime, ElapsedMicroseconds;
 	LARGE_INTEGER Frequency;
 #else
-	struct timeval m_start, m_end;
+	struct timeval myStart, myEend;
 #endif
 };
 
+#endif

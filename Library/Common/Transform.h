@@ -1,6 +1,9 @@
-#pragma once
+#ifndef LIBRARY_TRANSFORM_H
+#define LIBRARY_TRANSFORM_H
 
 #include "Common.h"
+#include "Util.h"
+#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -17,38 +20,40 @@ class Transform
 {
 public:
 	Transform(Real dx = 1., const Vec2R& offset = Vec2R(0))
-		: m_dx(dx)
-		, m_offset(offset)
+		: myDx(dx)
+		, myOffset(offset)
 		{}
 
-	Vec2R idx_to_ws(Vec2R ipos) const
+	Vec2R indexToWorld(Vec2R indexPoint) const
 	{
-		return ipos * m_dx + m_offset;
+		return indexPoint * myDx + myOffset;
 	}
 
-	Vec2R ws_to_idx(Vec2R wpos) const
+	Vec2R worldToIndex(Vec2R worldPoint) const
 	{
-		return (wpos - m_offset) / m_dx;
+		return (worldPoint - myOffset) / myDx;
 	}
 
-	Real dx() const { return m_dx; }
-	Vec2R offset() const { return m_offset; }
+	Real dx() const { return myDx; }
+	Vec2R offset() const { return myOffset; }
 
 	bool operator==(const Transform &rhs) const
 	{
-		if (m_dx != rhs.m_dx) return false;
-		if (m_offset != rhs.m_offset) return false;
+		if (myDx != rhs.myDx) return false;
+		if (myOffset != rhs.myOffset) return false;
 		return true;
 	}
 
 	bool operator!=(const Transform &rhs) const
 	{
-		if (m_dx == rhs.m_dx) return false;
-		if (m_offset == rhs.m_offset) return false;
+		if (myDx == rhs.myDx) return false;
+		if (myOffset == rhs.myOffset) return false;
 		return true;
 	}
 
 private:
-	Real m_dx;
-	Vec2R m_offset;
+	Real myDx;
+	Vec2R myOffset;
 };
+
+#endif

@@ -14,44 +14,40 @@
 #include "Mesh2D.h"
 
 // This convention follows from normals are "left" turns
-Mesh2D circle_mesh(const Vec2R& center = Vec2R(0), Real radius = 1., Real divisions = 10.)
+Mesh2D circleMesh(const Vec2R& center = Vec2R(0), Real radius = 1., Real divisions = 10.)
 {
 	std::vector<Vec2R> verts;
 	std::vector<Vec2ui> edges;
 
-	Real start_angle = 0;
-	Real end_angle = 2. * M_PI;
+	Real startAngle = 0;
+	Real endAngle = 2. * Util::PI;
 
-	Real arc_res = (end_angle - start_angle) / divisions;
+	Real angleResolution = (endAngle - startAngle) / divisions;
 
-	Vec2R v0(radius * cos(end_angle) + center[0],
-		radius * sin(end_angle) + center[1]);
-	verts.push_back(v0);
+	Vec2R startPoint(radius * cos(endAngle) + center[0],
+		radius * sin(endAngle) + center[1]);
+	verts.push_back(startPoint);
 
 	// Loop in CW order, allowing for the "left" turn to be outside circle
-	for (Real theta = end_angle; theta > start_angle; theta -= arc_res)
+	for (Real theta = endAngle; theta > startAngle; theta -= angleResolution)
 	{
-		Vec2R v1(radius * cos(theta - arc_res) + center[0],
-			radius * sin(theta - arc_res) + center[1]);
+		Vec2R nextPoint(radius * cos(theta - angleResolution) + center[0],
+			radius * sin(theta - angleResolution) + center[1]);
 
-		verts.push_back(v1);
+		verts.push_back(nextPoint);
 
-		unsigned idx = verts.size();
+		unsigned vertIndex = verts.size();
 
-		edges.push_back(Vec2ui(idx - 2, idx - 1));
-
-		v0 = v1;
+		edges.push_back(Vec2ui(vertIndex - 2, vertIndex - 1));
 	}
 
 	//Close mesh
 	edges.push_back(Vec2ui(verts.size() - 1, 0));
 
-	Mesh2D mesh = Mesh2D(edges, verts);
-
-	return mesh;
+	return Mesh2D(edges, verts);
 }
 
-Mesh2D square_mesh(const Vec2R& center = Vec2R(0), const Vec2R& scale = Vec2R(1.))
+Mesh2D squareMesh(const Vec2R& center = Vec2R(0), const Vec2R& scale = Vec2R(1.))
 {
 	std::vector<Vec2R> verts;
 	std::vector<Vec2ui> edges;
@@ -75,99 +71,94 @@ Mesh2D square_mesh(const Vec2R& center = Vec2R(0), const Vec2R& scale = Vec2R(1.
 
 // Initial conditions for testing level set methods.
 
-Mesh2D notched_disk_mesh()
+Mesh2D notchedDiskMesh()
 {
 	std::vector<Vec2R> verts;
 	std::vector<Vec2ui> edges;
 
 	//Make circle portion
-	Real start_angle = -M_PI / 2.0 + acos(1 - 2.5*2.5 / (2 * 15 * 15));
-	Real end_angle = 3.0*M_PI / 2.0 - acos(1 - 2.5*2.5 / (2 * 15 * 15));
+	Real startAngle = -Util::PI / 2. + acos(1. - Util::sqr(2.5) / (2. * Util::sqr(15.)));
+	Real endAngle = 3. * Util::PI / 2. - acos(1. - Util::sqr(2.5) / (2 * Util::sqr(15.)));
 
-	Real arc_res = (end_angle - start_angle) / 100.0;
+	Real angleResolution = (endAngle - startAngle) / 100.;
 
-	Vec2R center(50.0, 75.0);
-	Real radius = 15.0;
+	Vec2R center(50, 75);
+	Real radius = 15;
 
 
-	Vec2R v0(radius * cos(start_angle) + center[0],
-		radius * sin(start_angle) + center[1]);
+	Vec2R startPoint(radius * cos(startAngle) + center[0],
+		radius * sin(startAngle) + center[1]);
 
-	verts.push_back(v0);
+	verts.push_back(startPoint);
 
-	for (Real theta = start_angle; theta < end_angle; theta += arc_res)
+	for (Real theta = startAngle; theta < endAngle; theta += angleResolution)
 	{
-		Vec2R v1(radius * cos(theta + arc_res) + center[0],
-			radius * sin(theta + arc_res) + center[1]);
+		Vec2R nextPoint(radius * cos(theta + angleResolution) + center[0],
+			radius * sin(theta + angleResolution) + center[1]);
 
-		verts.push_back(v1);
+		verts.push_back(nextPoint);
 
-		unsigned idx = verts.size();
+		unsigned vertIndex = verts.size();
 
-		edges.push_back(Vec2ui(idx - 1, idx - 2));
+		edges.push_back(Vec2ui(vertIndex - 1, vertIndex - 2));
 
-		v0 = v1;
+		startPoint = nextPoint;
 	}
 
 	//Make gap
-	Vec2R v1 = v0 + Vec2R(0.0, 25.0);
+	Vec2R gapPoint = startPoint + Vec2R(0.0, 25.0);
 
-	verts.push_back(v1);
-	unsigned idx = verts.size();
-	edges.push_back(Vec2ui(idx - 1, idx - 2));
+	verts.push_back(gapPoint);
+	unsigned vertIndex = verts.size();
+	edges.push_back(Vec2ui(vertIndex - 1, vertIndex - 2));
 
-	Vec2R v2 = v1 + Vec2R(5.0, 0.0);
+	Vec2R nextGapPoint = gapPoint + Vec2R(5.0, 0.0);
 
-	verts.push_back(v2);
-	idx = verts.size();
-	edges.push_back(Vec2ui(idx - 1, idx - 2));
+	verts.push_back(nextGapPoint);
+	vertIndex = verts.size();
+	edges.push_back(Vec2ui(vertIndex - 1, vertIndex - 2));
 
 	//Close mesh
-	edges.push_back(Vec2ui(0, idx - 1));
+	edges.push_back(Vec2ui(0, vertIndex - 1));
 
-	Mesh2D mesh = Mesh2D(edges, verts);
-
-	return mesh;
+	return Mesh2D(edges, verts);
 }
 
-
-Mesh2D vortex_mesh()
+Mesh2D vortexMesh()
 {
 	std::vector<Vec2R> verts;
 	std::vector<Vec2ui> edges;
 
 	//Make circle
-	Real start_angle = 0.0;
-	Real end_angle = 2.0 * M_PI;
+	Real startAngle = 0;
+	Real endAngle = 2. * Util::PI;
 
-	Real arc_res = (end_angle - start_angle) / 100.0;
+	Real angleResolution = (endAngle - startAngle) / 100.0;
 
 	Vec2R center(0.50, 0.75);
 	Real radius = 0.15;
 
-	Vec2R v0(radius * cos(start_angle) + center[0],
-		radius * sin(start_angle) + center[1]);
+	Vec2R startPoint(radius * cos(startAngle) + center[0],
+		radius * sin(startAngle) + center[1]);
 
-	verts.push_back(v0);
+	verts.push_back(startPoint);
 
-	for (Real theta = start_angle; theta < end_angle; theta += arc_res)
+	for (Real theta = startAngle; theta < endAngle; theta += angleResolution)
 	{
-		Vec2R v1(radius * cos(theta + arc_res) + center[0],
-			radius * sin(theta + arc_res) + center[1]);
+		Vec2R nextPoint(radius * cos(theta + angleResolution) + center[0],
+			radius * sin(theta + angleResolution) + center[1]);
 
-		verts.push_back(v1);
+		verts.push_back(nextPoint);
 
-		unsigned idx = verts.size();
+		unsigned vertIndex = verts.size();
 
-		edges.push_back(Vec2ui(idx - 1, idx - 2));
+		edges.push_back(Vec2ui(vertIndex - 1, vertIndex - 2));
 
-		v0 = v1;
+		startPoint = nextPoint;
 	}
 
 	//Close mesh
 	edges.push_back(Vec2ui(verts.size() - 1, 0));
 
-	Mesh2D mesh = Mesh2D(edges, verts);
-
-	return mesh;
+	return Mesh2D(edges, verts);
 }

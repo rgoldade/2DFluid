@@ -1,92 +1,87 @@
+#include <memory>
+
 #include "Common.h"
 
-#include "ScalarGrid.h"
-#include "VectorGrid.h"
 #include "LevelSet2D.h"
-
 #include "Renderer.h"
+#include "ScalarGrid.h"
 #include "Transform.h"
+#include "Util.h"
+#include "Vec.h"
+#include "VectorGrid.h"
 
-Renderer* g_renderer;
+static std::unique_ptr<Renderer> renderer;
 
-bool g_do_scalar_test = false;
-bool g_do_vector_test = false;
-bool g_do_level_set_test = true;
+static bool doScalarTest = false;
+static bool doVectorTest = false;
+static bool doLevelSetTest = true;
 
 int main(int argc, char** argv)
 {
-	g_renderer = new Renderer("Grid Test", Vec2ui(1000), Vec2R(-1), 12, &argc, argv);
+	Real dx = 2;
+	Vec2R topRightCorner(20);
+	Vec2R bottomLeftCorner(-20);
+	Vec2ui size((topRightCorner - bottomLeftCorner) / dx);
+	Transform xform(dx, bottomLeftCorner);
+	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
+
+	renderer = std::make_unique<Renderer>("Scalar Grid Test", Vec2ui(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
 	// Test scalar grid
-	if (g_do_scalar_test)
+	if (doScalarTest)
 	{
-		Real dx = 2.5;
-		Vec2R topright(20);
-		Vec2ui size(topright / dx);
-		Transform xform(dx, Vec2R(0));
-		ScalarGrid<Real> testgrid(xform, size, ScalarGridSettings::SampleType::NODE, ScalarGridSettings::BorderType::CLAMP);
+		ScalarGrid<Real> testGrid(xform, size, ScalarGridSettings::SampleType::NODE, ScalarGridSettings::BorderType::CLAMP);
 
-		for_each_voxel_range(Vec2ui(0), testgrid.size(), [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2ui(0), testGrid.size(), [&](const Vec2ui& cell)
 		{
-			Vec2R world_pos = testgrid.idx_to_ws(Vec2R(cell));
-			testgrid(cell) = mag(world_pos);
+			Vec2R worldPosition = testGrid.indexToWorld(Vec2R(cell));
+			testGrid(cell) = mag(worldPosition - center);
 		});
 
-		testgrid.draw_grid(*g_renderer);
-		testgrid.draw_sample_points(*g_renderer);
-		testgrid.draw_supersampled_values(*g_renderer, .5, 5, 10);
-		//testgrid.draw_sample_gradients(*g_renderer);
+		testGrid.drawGrid(*renderer);
+		testGrid.drawSamplePoints(*renderer);
+		testGrid.drawSupersampledValues(*renderer, .5, 3, 5);
 	}
-	// Test vector grid
-	if(g_do_vector_test)
+	// Test vector grid. TODO: move to vector grid test.. this is a scalar grid test after all.
+	else if (doVectorTest)
 	{
-		Real dx = 2.5;
-		Vec2R topright(20);
-		Vec2ui size(topright / dx);
-		Transform xform(dx, Vec2R(0));
-		VectorGrid<Real> testvectorgrid(xform, size, VectorGridSettings::SampleType::STAGGERED, ScalarGridSettings::BorderType::CLAMP);
+		VectorGrid<Real> testVectorGrid(xform, size, VectorGridSettings::SampleType::STAGGERED, ScalarGridSettings::BorderType::CLAMP);
 
-		for (unsigned axis = 0; axis < 2; ++axis)
+		for (auto axis : { 0, 1 })
 		{
-			for_each_voxel_range(Vec2ui(0), testvectorgrid.size(axis), [&](const Vec2ui& cell)
+			forEachVoxelRange(Vec2ui(0), testVectorGrid.size(axis), [&](const Vec2ui& cell)
 			{
-				Vec2R world_pos = testvectorgrid.idx_to_ws(Vec2R(cell), axis);
-				testvectorgrid(cell, axis) = mag(world_pos) + .1 * (Real)(rand() % 10 - 5);
+				Vec2R offset(0); offset[axis] += .5;
+				Vec2R worldPosition0 = testVectorGrid.indexToWorld(Vec2R(cell) - offset, axis);
+				Vec2R worldPosition1 = testVectorGrid.indexToWorld(Vec2R(cell) + offset, axis);
+
+				Real gradient  = (mag(worldPosition1 - center) - mag(worldPosition0 - center)) / dx;
+				testVectorGrid(cell, axis) = gradient;
 			});
 		}
 
-		testvectorgrid.draw_grid(*g_renderer);
-		testvectorgrid.draw_sample_points(*g_renderer);
-		testvectorgrid.draw_supersampled_values(*g_renderer, .25, 20);
-		testvectorgrid.draw_sample_point_vectors(*g_renderer);
-		g_renderer->add_point(Vec2R(0, 0), Vec3f(0, 1, 1));
+		testVectorGrid.drawGrid(*renderer);
+		testVectorGrid.drawSamplePoints(*renderer, Vec3f(1,0,0), Vec3f(0,1,0), Vec2R(5));
+		testVectorGrid.drawSamplePointVectors(*renderer, Vec3f(0), .5);
 	}
-	
-	if (g_do_level_set_test)
+	else if (doLevelSetTest)
 	{
-		Real dx = .25;
-		Vec2R topright(10);
-		Vec2ui size(topright / dx);
-		Transform xform(dx, Vec2R(0));
-		LevelSet2D testlevelset(xform, size, 5);
+		LevelSet2D testLevelSet(xform, size, 5);
 
-		for_each_voxel_range(Vec2ui(0), testlevelset.size(), [&](const Vec2ui& cell)
+		Real radius = .3 * mag(topRightCorner - center);
+		forEachVoxelRange(Vec2ui(0), testLevelSet.size(), [&](const Vec2ui& cell)
 		{
-			Vec2R wpos = testlevelset.idx_to_ws(Vec2R(cell));
-			wpos -= Vec2R(topright/2);
-			//TODO: turn this back to operator overload
-			testlevelset(cell) = mag(wpos) - 3.;
+			Vec2R worldPosition = testLevelSet.indexToWorld(Vec2R(cell));
+			testLevelSet(cell) = mag(worldPosition - center) - radius;
 		});
 		
-		testlevelset.reinit();
-		testlevelset.draw_grid(*g_renderer);
-		testlevelset.draw_supersampled_values(*g_renderer, .25, 5, 5);
-		testlevelset.draw_normals(*g_renderer);
+		testLevelSet.reinit();
+		testLevelSet.drawGrid(*renderer);
+		testLevelSet.drawSupersampledValues(*renderer, .25, 3, 5);
+		testLevelSet.drawNormals(*renderer, Vec3f(0,0,0), .5);
 
-
-		testlevelset.draw_surface(*g_renderer, Vec3f(1,0,0));
+		testLevelSet.drawSurface(*renderer, Vec3f(1,0,0));
 	}
 
-
-	g_renderer->run();
+	renderer->run();
 }

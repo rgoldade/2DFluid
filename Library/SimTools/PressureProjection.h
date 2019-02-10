@@ -1,12 +1,11 @@
-#pragma once
+#ifndef LIBRARY_PRESSUREPROJECTION_H
+#define LIBRARY_PRESSUREPROJECTION_H
 
 #include "Common.h"
-
-#include "VectorGrid.h"
-#include "ScalarGrid.h"
 #include "LevelSet2D.h"
-
 #include "Renderer.h"
+#include "ScalarGrid.h"
+#include "VectorGrid.h"
 
 ///////////////////////////////////
 //
@@ -27,14 +26,14 @@ class PressureProjection
 public:
 	// For variational solve, surface should be extrapolated into the collision volume
 	PressureProjection(Real dt, const LevelSet2D& surface, const VectorGrid<Real>& vel,
-							const LevelSet2D& collision, const VectorGrid<Real>& collision_vel)
-		: m_dt(dt)
-		, m_surface(surface)
-		, m_vel(vel)
-		, m_collision(collision)
-		, m_collision_vel(collision_vel)
+							const LevelSet2D& collision, const VectorGrid<Real>& collisionVelocity)
+		: myDt(dt)
+		, mySurface(surface)
+		, myVelocity(vel)
+		, myCollision(collision)
+		, myCollisionVelocity(collisionVelocity)
 		{
-			assert(surface.is_matched(collision));
+			assert(surface.isMatched(collision));
 
 			// For efficiency sake, this should only take in velocity on a staggered grid
 			// that matches the center sampled surface and collision
@@ -43,13 +42,14 @@ public:
 				vel.size(1)[0] == surface.size()[0] &&
 				vel.size(1)[1] - 1 == surface.size()[1]);
 
-			assert(collision_vel.size(0)[0] - 1 == surface.size()[0] &&
-				collision_vel.size(0)[1] == surface.size()[1] &&
-				collision_vel.size(1)[0] == surface.size()[0] &&
-				collision_vel.size(1)[1] - 1 == surface.size()[1]);
+			assert(collisionVelocity.size(0)[0] - 1 == surface.size()[0] &&
+				collisionVelocity.size(0)[1] == surface.size()[1] &&
+				collisionVelocity.size(1)[0] == surface.size()[0] &&
+				collisionVelocity.size(1)[1] - 1 == surface.size()[1]);
 
-			m_pressure = ScalarGrid<Real>(surface.xform(), surface.size(), 0);
-			m_valid = VectorGrid<Real>(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+			myPressure = ScalarGrid<Real>(surface.xform(), surface.size(), 0);
+			myValid = VectorGrid<Real>(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+			myLiquidCells = UniformGrid<int>(surface.size(), UNSOLVED);
 		}
 	
 	// The liquid weights refer to the volume of liquid in each cell. This is useful for ghost fluid.
@@ -60,20 +60,22 @@ public:
 	void project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights);
 
 	// Apply solution to a velocity field at solvable faces
-	void apply_solution(VectorGrid<Real>& vel, const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights);
-	void apply_valid(VectorGrid<Real> &valid);
+	void applySolution(VectorGrid<Real>& vel, const VectorGrid<Real>& liquid_weights);
+	void applyValid(VectorGrid<Real> &valid);
 
-	void draw_pressure(Renderer& renderer) const;
+	void drawPressure(Renderer& renderer) const;
 
 private:
 
-	const VectorGrid<Real>& m_vel, &m_collision_vel;
+	const VectorGrid<Real>& myVelocity, &myCollisionVelocity;
 
-	VectorGrid<Real> m_valid; // Store solved faces
+	VectorGrid<Real> myValid; // Store solved faces
 
-	const LevelSet2D& m_surface, &m_collision;
+	const LevelSet2D &mySurface, &myCollision;
 	
-	ScalarGrid<Real> m_pressure;
-	
-	Real m_dt;
+	ScalarGrid<Real> myPressure;
+	UniformGrid<int> myLiquidCells;
+	Real myDt;
 };
+
+#endif

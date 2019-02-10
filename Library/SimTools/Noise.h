@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LIBRARY_NOISE_H
+#define LIBRARY_NOISE_H
 
 #include "Common.h"
 
@@ -14,24 +15,26 @@ struct Noise3
 protected:
 
 	static constexpr unsigned n = 128;
-	Vec3R basis[n];
-	int perm[n];
+	Vec3R myBasis[n];
+	int myPerm[n];
 
-	unsigned hash_index(int i, int j, int k) const
+	unsigned hashIndex(int i, int j, int k) const
 	{
-		return perm[(perm[(perm[i%n] + j) % n] + k) % n];
+		return myPerm[(myPerm[(myPerm[i%n] + j) % n] + k) % n];
 	}
 };
 
 // FlowNoise classes - time varying versions of some of the above
 struct FlowNoise3 : public Noise3
 {
-	FlowNoise3(unsigned seed = 171717, Real spin_variation = 0.2);
-	void set_time(Real time); // period of repetition is approximately 1
+	FlowNoise3(unsigned seed = 171717, Real spinVariation = 0.2);
+	void setTime(Real time); // period of repetition is approximately 1
 
 protected:
 	
-	Vec3R original_basis[n];
-	Real spin_rate[n];
-	Vec3R spin_axis[n];
+	Vec3R myOriginalBasis[n];
+	Real mySpinRate[n];
+	Vec3R mySpinAxis[n];
 };
+
+#endif

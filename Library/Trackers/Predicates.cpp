@@ -126,7 +126,7 @@
 
 #include "Predicates.h"
 
-Intersection exact_edge_intersect(const Vec2R &a, const Vec2R &b, const Vec2R &c, Axis axis)
+Intersection exactEdgeIntersect(const Vec2R &a, const Vec2R &b, const Vec2R &c, Axis axis)
 {
 	Vec2R q, r, s;
 	if (axis == Axis::YAXIS)

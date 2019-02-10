@@ -1,13 +1,16 @@
-#pragma once
+#ifndef LIBRARY_SCALARGRID_H
+#define LIBRARY_SCALARGRID_H
 
 #include <algorithm>
+#include <fstream>
+#include <iostream>
 
 #include "Common.h"
-
-#include "UniformGrid.h"
-#include "Transform.h"
-
 #include "Renderer.h"
+#include "Transform.h"
+#include "UniformGrid.h"
+#include "Util.h"
+#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -49,376 +52,366 @@ class ScalarGrid : public UniformGrid<T>
 
 public:
 
-	ScalarGrid() : m_xform(1.,Vec2R(0.)), m_full_size(Vec2ui(0)), UniformGrid<T>() {}
+	ScalarGrid() : myXform(1.,Vec2R(0.)), myGridSize(Vec2ui(0)), UniformGrid<T>() {}
 
 	ScalarGrid(const Transform& xform, const Vec2ui& size,
-				SampleType stype = SampleType::CENTER, BorderType btype = BorderType::CLAMP)
-		: ScalarGrid(xform, size, T(0), stype, btype)
+				SampleType sampleType = SampleType::CENTER, BorderType borderType = BorderType::CLAMP)
+		: ScalarGrid(xform, size, T(0), sampleType, borderType)
 	{}
 		
-	// The grid size is the number of actual grid cells to be created. This means that a 2x2 grid
-	// will have 3x3 nodes, 3x2 x-aligned faces, 2x3 y-aligned faces and 2x2 cell centers. The size of 
+	// The grid size is the number of actual grid cells to be created. This means that a 2sqrVal grid
+	// will have 3cubeVal nodes, 3sqrVal x-aligned faces, 2cubeVal y-aligned faces and 2sqrVal cell centers. The size of 
 	// the underlying storage container is reflected accordingly based the sample type to give the outside
 	// caller the structure of a real grid.
 	ScalarGrid(const Transform& xform, const Vec2ui& size, const T& val,
-				SampleType stype = SampleType::CENTER, BorderType btype = BorderType::CLAMP)
-		: m_xform(xform)
-		, m_stype(stype)
-		, m_btype(btype)
-		, m_full_size(size)
+				SampleType sampleType = SampleType::CENTER, BorderType borderType = BorderType::CLAMP)
+		: myXform(xform)
+		, mySampleType(sampleType)
+		, myBorderType(borderType)
+		, myGridSize(size)
 	{
-		switch (stype)
+		switch (sampleType)
 		{
 		case SampleType::CENTER:
-			m_cell_offset = Vec2R(.5);
+			myCellOffset = Vec2R(.5);
 			this->resize(size, val);
 			break;
 		case SampleType::XFACE:
-			m_cell_offset = Vec2R(.0, .5);
+			myCellOffset = Vec2R(.0, .5);
 			this->resize(size + Vec2ui(1, 0), val);
 			break;
 		case SampleType::YFACE:
-			m_cell_offset = Vec2R(.5, .0);
+			myCellOffset = Vec2R(.5, .0);
 			this->resize(size + Vec2ui(0, 1), val);
 			break;
 		case SampleType::NODE:
-			m_cell_offset = Vec2R(.0);
+			myCellOffset = Vec2R(.0);
 			this->resize(size + Vec2ui(1), val);
 		}
 	}
 
-	SampleType sample_type() { return m_stype; }
+	SampleType sampleType() const { return mySampleType; }
 
 	// Check that the two grids are of the same size, 
 	// positioned at the same spot, have the same grid
 	// spacing and the same sampling sceme
 	template<typename S>
-	bool is_matched(const ScalarGrid<S>& grid) const
+	bool isMatched(const ScalarGrid<S>& grid) const
 	{
-		if (this->m_size != grid.size()) return false;
-		if (m_xform != grid.xform()) return false;
-		if (m_stype != grid.sample_type()) return false;
+		if (this->mySize != grid.size()) return false;
+		if (myXform != grid.xform()) return false;
+		if (mySampleType != grid.sampleType()) return false;
 		return true;
 	}
 
 	// Global multiply operator
 	void operator*(const T& s)
 	{
-		for (auto& i : this->m_grid) i *= s;
+		for (auto& i : this->myGrid) i *= s;
 	}
 
 	// Global add operator
 	void operator+(T s)
 	{
-		for (auto& i : this->m_grid) i += s;
+		for (auto& i : this->myGrid) i += s;
 	}
 
-	T max_val() const { auto result = std::max_element(this->m_grid.begin(), this->m_grid.end()); return *result; }
-	T min_val() const { auto result = std::min_element(this->m_grid.begin(), this->m_grid.end()); return *result; }
-
-	void minmax(T& min, T& max) const
+	T maxValue() const
 	{
-		auto result = std::minmax_element(this->m_grid.begin(), this->m_grid.end());
+		auto result = std::max_element(this->myGrid.begin(), this->myGrid.end());
+		return *result;
+	}
+
+	T minValue() const
+	{
+		auto result = std::min_element(this->myGrid.begin(), this->myGrid.end());
+		return *result;
+	}
+
+	void minAndMaxValue(T& min, T& max) const
+	{
+		auto result = std::minmax_element(this->myGrid.begin(), this->myGrid.end());
 		min = *(result.first); max = *(result.second);
 	}
 
-	T interp(Real x, Real y, bool idx_space = false) const { return interp(Vec2R(x, y), idx_space); }
-	T interp(const Vec2R& pos, bool idx_space = false) const;
+	T interp(Real x, Real y, bool isIndexSpace = false) const { return interp(Vec2R(x, y), isIndexSpace); }
+	T interp(const Vec2R& pos, bool isIndexSpace = false) const;
 	
-	T cubic_interp(Real x, Real y, bool idx_space = false, bool clamp = false) const { return cubic_interp(Vec2R(x, y), idx_space, clamp); }
-	T cubic_interp(const Vec2R& pos, bool idx_space = false, bool clamp = false) const;
+	T cubicInterp(Real x, Real y, bool isIndexSpace = false, bool applyClamp = false) const { return cubic_interp(Vec2R(x, y), isIndexSpace, applyClamp); }
+	T cubicInterp(const Vec2R& pos, bool isIndexSpace = false, bool applyClamp = false) const;
 
 	// Converters between world space and local index space
-	Vec2R idx_to_ws(Vec2R index_pos) const
+	Vec2R indexToWorld(Vec2R indexPoint) const
 	{
-		return m_xform.idx_to_ws(index_pos + m_cell_offset);
+		return myXform.indexToWorld(indexPoint + myCellOffset);
 	}
 	
-	Vec2R ws_to_idx(Vec2R world_pos) const
+	Vec2R worldToIndex(Vec2R worldPos) const
 	{
-		return m_xform.ws_to_idx(world_pos) - m_cell_offset;
+		return myXform.worldToIndex(worldPos) - myCellOffset;
 	}
 
 	// Gradient operators
-	Vec<T, 2> gradient(const Vec2R& world_pos, bool idx_space = false) const
+	Vec<T, 2> gradient(const Vec2R& worldPos, bool isIndexSpace = false) const
 	{
-		Real offset = idx_space ? 1E-1 : 1E-1 * dx();
-		T dTdx = interp(world_pos + Vec2R(offset, 0.), idx_space) - interp(world_pos - Vec2R(offset, 0.), idx_space);
-		T dTdy = interp(world_pos + Vec2R(0., offset), idx_space) - interp(world_pos - Vec2R(0., offset), idx_space);
+		Real offset = isIndexSpace ? 1E-1 : 1E-1 * dx();
+		T dTdx = interp(worldPos + Vec2R(offset, 0.), isIndexSpace) - interp(worldPos - Vec2R(offset, 0.), isIndexSpace);
+		T dTdy = interp(worldPos + Vec2R(0., offset), isIndexSpace) - interp(worldPos - Vec2R(0., offset), isIndexSpace);
 		Vec<T, 2> grad(dTdx, dTdy);
 		return grad / (2 * offset);
 	}
 	
-	Real dx() const { return m_xform.dx(); }
-	Vec2R offset() const { return m_xform.offset(); }
-	Transform xform() const { return m_xform; }
-
-	SampleType sample_type() const { return m_stype; }
+	Real dx() const { return myXform.dx(); }
+	Vec2R offset() const { return myXform.offset(); }
+	Transform xform() const { return myXform; }
 	
 	// Render methods
-	void draw_grid(Renderer& renderer) const;
-	void draw_grid_cell(Renderer& renderer, const Vec2ui& coord, const Vec3f& colour = Vec3f(0)) const;
+	void drawGrid(Renderer& renderer) const;
+	void drawGridCell(Renderer& renderer, const Vec2ui& coord, const Vec3f& colour = Vec3f(0)) const;
 
-	void draw_sample_points(Renderer& renderer, const Vec3f& colour = Vec3f(1,0,0), Real size = 1.) const;
-	void draw_supersampled_values(Renderer& renderer, Real radius = .5, unsigned samples = 5, unsigned size = 1) const;
-	void draw_sample_gradients(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
-	void draw_volumetric(Renderer& renderer, const Vec3f& mincolour, const Vec3f& maxcolour, T minval, T maxval) const;
+	void drawSamplePoints(Renderer& renderer, const Vec3f& colour = Vec3f(1,0,0), Real size = 1.) const;
+	void drawSupersampledValues(Renderer& renderer, Real radius = .5, unsigned samples = 5, unsigned size = 1) const;
+	void drawSampleGradients(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
+	void drawVolumetric(Renderer& renderer, const Vec3f& minColour, const Vec3f& maxColour, T minVal, T maxVal) const;
 
 private:
 
 	// The main interpolation call after the template specialized clamping passes
-	T interp_local(const Vec2R& pos) const;
+	T interpLocal(const Vec2R& pos) const;
 
-	// Store the actual grid size. The m_nx member variable represents the 
-	// underlying sample grid. The actual grid doesn't change based on sample
+	// Store the actual grid size. The mySize member of UniformGrid
+	// represents the grid sampling. The actual grid doesn't change based on sample
 	// type but the underlying array of sample points do.
-	Vec2ui m_full_size;
+	Vec2ui myGridSize;
 
 	// The transform accounts for the grid spacings and the grid offset.
 	// It includes transforms to and from index space.
 	// The offset specifies the location of the lowest, left-most corner
 	// of the grid. The actual sample point is offset (in index space)
 	// from this point based on the SampleType
-	Transform m_xform;
+	Transform myXform;
 	
-	SampleType m_stype;
-	BorderType m_btype;
+	SampleType mySampleType;
+	BorderType myBorderType;
 
 	// The local offset (in index space) associated with the sample type
-	Vec2R m_cell_offset;
-};
-
-// Catmull-Rom cubic interpolation. Shamelessly lifted from MantaFlow (mantaflow.com)
-template<typename T>
-static inline T CINT(T p_1, T p0, T p1, T p2, T x)
-{
-	T x2 = x * x, x3 = x2 * x;
-	return 0.5 *((-x3 + 2.0 * x2 - x) * p_1 + (3.0 * x3 - 5.0 * x2 + 2.0) * p0 + (-3.0 * x3 + 4.0 * x2 + x) * p1 + (x3 - x2) * p2);
+	Vec2R myCellOffset;
 };
 
 template<typename T>
-T ScalarGrid<T>::cubic_interp(const Vec2R& pos, bool idx_space, bool clamp) const
+T ScalarGrid<T>::cubicInterp(const Vec2R& samplePoint, bool isIndexSpace, bool applyClamp) const
 {
-	Vec2R index_pos = idx_space ? pos : ws_to_idx(pos);
+	Vec2R indexPoint = isIndexSpace ? samplePoint : worldToIndex(samplePoint);
 
-	Vec2R p11 = floor(index_pos);
+	Vec2R floorPoint = floor(indexPoint);
 
 	// Revert to linear interpolation near the boundaries
-	if (p11[0] < 1 || p11[0] >= this->size()[0] - 2 ||
-		p11[1] < 1 || p11[1] >= this->size()[1] - 2)
-			return interp(pos, true);
+	if (floorPoint[0] < 1 || floorPoint[0] >= mySize[0] - 2 ||
+		floorPoint[1] < 1 || floorPoint[1] >= mySize[1] - 2)
+			return interp(indexPoint, true);
 
-	Vec2R u = index_pos - Vec2R(p11);
-	
-	T interp_x[4];
-	for (int off_y = -1; off_y <= 2; ++off_y)
+	Vec2R dx = indexPoint - Vec2R(floorPoint);
+	dx = clamp(dx, Vec2R(0), Vec2R(1));
+
+	T cubicInterps[4];
+	for (int yOffset = -1; yOffset <= 2; ++yOffset)
 	{
-		Real yi = p11[1] + off_y;
-		T p_1 = (*this)(p11[0] - 1,	yi);
-		T p0 =	(*this)(p11[0],		yi);
-		T p1 =	(*this)(p11[0] + 1,	yi);
-		T p2 =	(*this)(p11[0] + 2,	yi);
-		interp_x[off_y + 1] = CINT(p_1, p0, p1, p2, u[0]);
+		Real y = floorPoint[1] + Real(yOffset);
+
+		T p_1 = (*this)(Vec2ui(floorPoint[0] - 1, y));
+		T p0 =	(*this)(Vec2ui(floorPoint[0],	  y));
+		T p1 =	(*this)(Vec2ui(floorPoint[0] + 1, y));
+		T p2 =	(*this)(Vec2ui(floorPoint[0] + 2, y));
+
+		cubicInterps[yOffset + 1] = Util::cubicInterp(p_1, p0, p1, p2, dx[0]);
 	}
 
-	T p_1 = interp_x[0];
-	T p0 = interp_x[1];
-	T p1 = interp_x[2];
-	T p2 = interp_x[3];
+	T cubicValue = Util::cubicInterp(cubicInterps[0],
+								cubicInterps[1],
+								cubicInterps[2],
+								cubicInterps[3], dx[1]);
 
-	T val = CINT(p_1, p0, p1, p2, u[1]);
-
-	if (clamp)
+	if (applyClamp)
 	{
-		Real xf = floor(index_pos[0]);
-		Real yf = floor(index_pos[1]);
+		T v00 = (*this)(Vec2ui(floorPoint[0], floorPoint[1]));
+		T v10 = (*this)(Vec2ui(floorPoint[0] + 1, floorPoint[1]));
 
-		// TODO: should this actually be floor(index_pos[0]+1) ?
-		Real xc = ceil(index_pos[0]);
-		Real yc = ceil(index_pos[1]);
+		T v01 = (*this)(Vec2ui(floorPoint[0], floorPoint[1] + 1));
+		T v11 = (*this)(Vec2ui(floorPoint[0] + 1, floorPoint[1] + 1));
 
-		T v00 = (*this)(Vec2ui(xf, yf));
-		T v10 = (*this)(Vec2ui(xc, yf));
-
-		T v01 = (*this)(Vec2ui(xf, yc));
-		T v11 = (*this)(Vec2ui(xc, yc));
-
-		val = max(min(min(min(v00, v10), v01), v11), val);
-		val = min(max(max(max(v00, v10), v01), v11), val);
+		T clampMin = std::min(std::min(v00, v10), std::min(v01, v11));
+		T clampMax = std::max(std::max(v00, v10), std::max(v01, v11));
+		
+		cubicValue = Util::clamp(cubicValue, clampMin, clampMax);
 	}
 
-	return val;
+	return cubicValue;
 }
 
 template<typename T>
-T ScalarGrid<T>::interp(const Vec2R& pos, bool idx_space) const
+T ScalarGrid<T>::interp(const Vec2R& samplePoint, bool isIndexSpace) const
 {
-	Vec2R index_pos = idx_space ? pos : ws_to_idx(pos);
+	Vec2R indexPoint = isIndexSpace ? samplePoint : worldToIndex(samplePoint);
 
-	switch (m_btype)
+	switch (myBorderType)
 	{
 	case BorderType::ZERO:
-		if ((index_pos[0] < 0.) || (index_pos[1] < 0.) ||
-			(index_pos[0] > Real(this->m_size[0] - 1)) ||
-			(index_pos[1] > Real(this->m_size[1] - 1))) return T(0.);
+		if ((indexPoint[0] < 0.) || (indexPoint[1] < 0.) ||
+			(indexPoint[0] > Real(this->mySize[0] - 1)) ||
+			(indexPoint[1] > Real(this->mySize[1] - 1))) return T(0.);
 	case BorderType::CLAMP:
-		index_pos[0] = (index_pos[0] < 0.) ? 0. : ((index_pos[0] > Real(this->m_size[0] - 1)) ? Real(this->m_size[0] - 1) : index_pos[0]);
-		index_pos[1] = (index_pos[1] < 0.) ? 0. : ((index_pos[1] > Real(this->m_size[1] - 1)) ? Real(this->m_size[1] - 1) : index_pos[1]);
+		indexPoint[0] = (indexPoint[0] < 0.) ? 0. : ((indexPoint[0] > Real(this->mySize[0] - 1)) ? Real(this->mySize[0] - 1) : indexPoint[0]);
+		indexPoint[1] = (indexPoint[1] < 0.) ? 0. : ((indexPoint[1] > Real(this->mySize[1] - 1)) ? Real(this->mySize[1] - 1) : indexPoint[1]);
 		break;
 	// Useful debug check. Equivalent to "NONE" for release mode
 	case BorderType::ASSERT:
-		assert((index_pos[0] >= 0.) && (index_pos[1] >= 0.) &&
-					(index_pos[0] <= Real(this->m_size[0] - 1)) &&
-					(index_pos[1] <= Real(this->m_size[1] - 1)));
+		assert((indexPoint[0] >= 0.) && (indexPoint[1] >= 0.) &&
+					(indexPoint[0] <= Real(this->mySize[0] - 1)) &&
+					(indexPoint[1] <= Real(this->mySize[1] - 1)));
 		break;
 	}
 
-	return interp_local(index_pos);
+	return interpLocal(indexPoint);
 }
 
 // The local interp applies bi-linear interpolation on the UniformGrid. The 
 // templated type must have operators for basic add/mult arithmetic.
 template<typename T>
-T ScalarGrid<T>::interp_local(const Vec2R& index_pos) const
+T ScalarGrid<T>::interpLocal(const Vec2R& indexPoint) const
 {
-	Real xf = floor(index_pos[0]);
-	Real yf = floor(index_pos[1]);
-
-	// TODO: should this actually be floor(index_pos[0]+1) ?
-	Real xc = ceil(index_pos[0]);
-	Real yc = ceil(index_pos[1]);
+	Vec2R floorPoint = floor(indexPoint);
 
 	// This should always pass since the clamp test in the public interp
 	// will not allow anything outside of the border to get this far.
-	assert(xf >= 0 && yf >= 0);
-	assert(xc <= Real(this->m_size[0] - 1) &&
-			yc <= Real(this->m_size[1] - 1));
+	assert(floorPoint[0] >= 0 && floorPoint[1] >= 0);
+	assert(floorPoint[0] <= Real(this->mySize[0] - 1) &&
+			floorPoint[1] <= Real(this->mySize[1] - 1));
+
+	if (floorPoint[0] == Real(this->mySize[0] - 1)) --floorPoint[0];
+	if (floorPoint[1] == Real(this->mySize[1] - 1)) --floorPoint[1];
+
+	Vec2R dx = indexPoint - Vec2R(floorPoint);
+	dx = clamp(dx, Vec2R(0), Vec2R(1));
 
 	// Use base grid class operator
-	T v00 = (*this)(Vec2ui(xf, yf));
-	T v10 = (*this)(Vec2ui(xc, yf));
+	T v00 = (*this)(Vec2ui(floorPoint[0], floorPoint[1]));
+	T v10 = (*this)(Vec2ui(floorPoint[0] + 1, floorPoint[1]));
 
-	T v01 = (*this)(Vec2ui(xf, yc));
-	T v11 = (*this)(Vec2ui(xc, yc));
+	T v01 = (*this)(Vec2ui(floorPoint[0], floorPoint[1] + 1));
+	T v11 = (*this)(Vec2ui(floorPoint[0] + 1, floorPoint[1] + 1));
 
-	Real sx = index_pos[0] - xf;
-	Real sy = index_pos[1] - yf;
-
-	auto lerp = [](const T& val0, const T& val1, Real f){ return val0 + f * (val1 - val0); };
-
-	T interp_val = lerp(lerp(v00, v10, sx), lerp(v01, v11, sx), sy);
-	return interp_val;
+	return Util::bilerp(v00, v10, v01, v11, dx[0], dx[1]);
 }
 
-static Vec2R edge_to_node[4][2] = { {Vec2R(0), Vec2R(1,0) },
-									{ Vec2R(1,0), Vec2R(1,1) },
-									{ Vec2R(1,1), Vec2R(0,1) },
-									{ Vec2R(0,1), Vec2R(0,0) } };
-
 template<typename T>
-void ScalarGrid<T>::draw_grid_cell(Renderer& renderer, const Vec2ui& coord, const Vec3f& colour) const
+void ScalarGrid<T>::drawGridCell(Renderer& renderer, const Vec2ui& cell, const Vec3f& colour) const
 {
-	std::vector<Vec2R> startpoints;
-	std::vector<Vec2R> endpoints;
+	std::vector<Vec2R> startPoints;
+	std::vector<Vec2R> endPoints;
 
-	for (int e = 0; e < 4; ++e)
+	const Vec2R edgeToNodeOffset[4][2] = { {Vec2R(0), Vec2R(1, 0) },
+											{ Vec2R(0, 1), Vec2R(1, 1) },
+											{ Vec2R(0), Vec2R(0,1) },
+											{ Vec2R(1, 0), Vec2R(1,1)} };
+
+	for (int edge = 0; edge < 4; ++edge)
 	{
-		Vec2R pos1 = idx_to_ws(Vec2R(coord) - m_cell_offset + edge_to_node[e][0]);
-		Vec2R pos2 = idx_to_ws(Vec2R(coord) - m_cell_offset + edge_to_node[e][1]);
+		Vec2R nodePoint0 = indexToWorld(Vec2R(coord) - myCellOffset + edgeToNodeOffset[e][0]);
+		Vec2R nodePoint1 = indexToWorld(Vec2R(coord) - myCellOffset + edgeToNodeOffset[e][1]);
 		
-		startpoints.push_back(pos1);
-		endpoints.push_back(pos2);
+		startPoints.push_back(nodePoint0);
+		endPoints.push_back(nodePoint1);
 	}
 
-	renderer.add_lines(startpoints, endpoints, colour);
+	renderer.addLines(startPoints, endPoints, colour);
 }
 
 template<typename T>
-void ScalarGrid<T>::draw_grid(Renderer& renderer) const
+void ScalarGrid<T>::drawGrid(Renderer& renderer) const
 {
-	std::vector<Vec2R> start_points;
-	std::vector<Vec2R> end_points;
+	std::vector<Vec2R> startPoints;
+	std::vector<Vec2R> endPoints;
 
 	for (unsigned axis = 0; axis < 2; ++axis)
 	{
-		for (unsigned i = 0; i <= m_full_size[axis]; ++i)
+		for (unsigned line = 0; line <= myGridSize[axis]; ++line)
 		{
 			// Offset backwards because we want the start of the grid cell
-			Vec2R grid_start(0);
-			grid_start[axis] = i;
+			Vec2R gridStart(0);
+			gridStart[axis] = line;
 
-			Vec2R pos = idx_to_ws(grid_start - m_cell_offset);
-			start_points.push_back(pos);
+			Vec2R startPoint = indexToWorld(gridStart - myCellOffset);
+			startPoints.push_back(startPoint);
 
-			Vec2R grid_end(m_full_size);
-			grid_end[axis] = i;
+			Vec2R gridEnd(myGridSize);
+			gridEnd[axis] = line;
 
-			pos = idx_to_ws(grid_end - m_cell_offset);
-			end_points.push_back(pos);
+			Vec2R endPoint = indexToWorld(gridEnd - myCellOffset);
+			endPoints.push_back(endPoint);
 		}
 	}
 
-	renderer.add_lines(start_points, end_points, Vec3f(0));
+	renderer.addLines(startPoints, endPoints, Vec3f(0));
 }
 
 template<typename T>
-void ScalarGrid<T>::draw_sample_points(Renderer& renderer, const Vec3f& colour, Real size) const
+void ScalarGrid<T>::drawSamplePoints(Renderer& renderer, const Vec3f& colour, Real size) const
 {
-	std::vector<Vec2R> sample_points;
+	std::vector<Vec2R> samplePoints;
 
-	Vec2ui grid_size = this->m_size;
+	Vec2ui gridSize = this->mySize;
 
-	for_each_voxel_range(Vec2ui(0), grid_size, [&](const Vec2ui& coord)
+	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
 	{
-		Vec2R index_pos = Vec2R(coord);
-		Vec2R wpos = idx_to_ws(index_pos);
+		Vec2R indexPoint(cell);
+		Vec2R worldPoint = indexToWorld(indexPoint);
 
-		sample_points.push_back(wpos);
+		samplePoints.push_back(worldPoint);
 	});
 
-	renderer.add_points(sample_points, colour, size);
+	renderer.addPoints(samplePoints, colour, size);
 }
 
 // Warning: there is no protection here for ASSERT border types
 template<typename T>
-void ScalarGrid<T>::draw_supersampled_values(Renderer& renderer, Real radius, unsigned samples, unsigned size) const
+void ScalarGrid<T>::drawSupersampledValues(Renderer& renderer, Real radius, unsigned samples, unsigned size) const
 {
-	std::vector<Vec2R> sample_points;
+	std::vector<Vec2R> samplePoints;
 
-	T max_sample = max_val();
-	T min_sample = min_val();
+	T maxSample = maxValue();
+	T minSample = minValue();
 
-	Vec2ui grid_size = this->m_size;
+	Vec2ui gridSize = this->mySize;
 
-	for_each_voxel_range(Vec2ui(0), grid_size, [&](const Vec2ui& coord)
+	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
 	{
-		Vec2R index_pos = Vec2R(coord);
+		Vec2R indexPoint(cell);
 
 		// Supersample
-		Real dx = 2 * radius / Real(samples);
+		Real dx = 2. * radius / Real(samples);
 		for (Real x = -radius; x <= radius; x += dx)
 			for (Real y = -radius; y <= radius; y += dx)
 			{
-				Vec2R sample_pos = index_pos + Vec2R(x, y);
-				Vec2R world_pos = idx_to_ws(sample_pos);
+				Vec2R samplePoint = indexPoint + Vec2R(x, y);
+				Vec2R worldPoint = indexToWorld(samplePoint);
 
-				T sampleval = (interp(world_pos) - min_sample) / max_sample;
-				renderer.add_point(world_pos, Vec3f(float(sampleval), float(sampleval), 0), size);
+				T val = (interp(worldPoint) - minSample) / maxSample;
+				renderer.addPoint(worldPoint, Vec3f(float(val), float(val), 0), size);
 			}
 	});
 }
 
 template<typename T>
-void ScalarGrid<T>::draw_sample_gradients(Renderer& renderer, const Vec3f& colour, Real length) const
+void ScalarGrid<T>::drawSampleGradients(Renderer& renderer, const Vec3f& colour, Real length) const
 {
 	std::vector<Vec2R> sample_points;
 	std::vector<Vec2R> gradient_points;
 
-	Vec2ui size = this->m_size;
-	for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& coord)
+	Vec2ui size = this->mySize;
+	forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& cell)
 	{
-		Vec2R index_pos = Vec2R(coord);
-		Vec2R start_pos = idx_to_ws(index_pos);
+		Vec2R indexPoint = Vec2R(cell);
+		Vec2R start_pos = indexToWorld(indexPoint);
 		sample_points.push_back(start_pos);
 
 		Vec<T, 2> grad = gradient(start_pos);
@@ -426,64 +419,62 @@ void ScalarGrid<T>::draw_sample_gradients(Renderer& renderer, const Vec3f& colou
 		gradient_points.push_back(end_pos);
 	});
 
-	renderer.add_lines(sample_points, gradient_points, colour);
+	renderer.addLines(sample_points, gradient_points, colour);
 }
 
 template<typename T>
-void ScalarGrid<T>::draw_volumetric(Renderer& renderer, const Vec3f& mincolour, const Vec3f& maxcolour, T minval, T maxval) const
+void ScalarGrid<T>::drawVolumetric(Renderer& renderer, const Vec3f& minColour, const Vec3f& maxColour, T minVal, T maxVal) const
 {
-	ScalarGrid<Real> nodes(xform(), this->size(), SampleType::NODE);
+	ScalarGrid<Real> nodes(xform(), this->mySize, SampleType::NODE);
 
-	std::vector<Vec2R> verts(nodes.size()[0] * nodes.size()[1]);
-	std::vector<Vec4ui> pixels(this->m_size[0] * this->m_size[1]);
-	std::vector<Vec3f> colours(this->m_size[0] * this->m_size[1]);
+	std::vector<Vec2R> quadVertices(nodes.size()[0] * nodes.size()[1]);
+	std::vector<Vec4ui> pixelQuads(this->mySize[0] * this->mySize[1]);
+	std::vector<Vec3f> colours(this->mySize[0] * this->mySize[1]);
 
 	// Set node points
 	{
 		Vec2ui size = nodes.size();
 
-		for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& coord)
+		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& node)
 		{
-			unsigned vert = nodes.flatten(Vec2ui(coord));
-			verts[vert] = nodes.idx_to_ws(Vec2R(coord));
+			unsigned index = nodes.flatten(Vec2ui(node));
+			quadVertices[index] = nodes.indexToWorld(Vec2R(node));
 		});
 	}
-
-	Vec2ui cell_to_node_cw[] = { Vec2ui(0,0), Vec2ui(1,0), Vec2ui(1,1), Vec2ui(0,1) };
 
 	{
-		Vec2ui size = this->m_size;
+		Vec2ui size = this->mySize;
 
-		unsigned pixelcount = 0;
+		unsigned quadCount = 0;
 
-		for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& coord)
+		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& cell)
 		{
-			Vec2ui idx(coord);
 			Vec4ui quad;
 
-			for (int c = 0; c < 4; ++c)
+			for (int nodeIndex = 0; nodeIndex < 4; ++nodeIndex)
 			{
-				Vec2ui point = idx + cell_to_node_cw[c];
-				quad[c] = nodes.flatten(Vec2ui(point));
+				Vec2ui node = cellToNode(cell, nodeIndex);
+				quad[nodeIndex] = nodes.flatten(node);				
 			}
 
-			T val = (*this)(coord);
+			T pixelValue = (*this)(cell);
 
-			pixels[pixelcount] = quad;
+			pixelQuads[quadCount] = quad;
 
 			Vec3f colour;
-			if (val > maxval) colour = maxcolour;
-			else if (val < minval) colour = mincolour;
+			if (pixelValue > maxVal) colour = maxColour;
+			else if (pixelValue < minVal) colour = minColour;
 			else
 			{
-				float s = val / (maxval - minval);
-
-				colour = mincolour * (1. - s) + maxcolour * s;
+				float s = pixelValue / (maxVal - minVal);
+				colour = minColour * (1. - s) + maxColour * s;
 			}
 
-			colours[pixelcount++] = colour;
+			colours[quadCount++] = colour;
 		});
 	}
 
-	renderer.add_quads(verts, pixels, colours);
+	renderer.addQuads(quadVertices, pixelQuads, colours);
 }
+
+#endif

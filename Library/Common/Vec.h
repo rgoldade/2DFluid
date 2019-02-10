@@ -1,9 +1,9 @@
-#pragma once
+#ifndef LIBRARY_VEC_H
+#define LIBRARY_VEC_H
 
-#include <cassert>
 #include <array>
+#include <cassert>
 #include <cmath>
-
 #include <iostream>
 
 #include "Util.h"
@@ -15,19 +15,6 @@
 //
 ////////////////////////////////////
 
-// Defines a thin wrapper around fixed size C-style arrays, using template parameters,
-// which is useful for dealing with vectors of different dimensions.
-// For example, float[3] is equivalent to Vec<3,float>.
-// Entries in the vector are accessed with the overloaded [] operator, so
-// for example if x is a Vec<3,float>, then the middle entry is x[1].
-// For convenience, there are a number of typedefs for abbreviation:
-//   Vec<3,float> -> Vec3f
-//   Vec<2,int>   -> Vec2i
-// and so on.
-// Arithmetic operators are appropriately overloaded, and functions are defined
-// for additional operations (such as dot-products, norms, cross-products, etc.)
-
-
 template<typename T, unsigned N>
 struct Vec
 {
@@ -35,23 +22,23 @@ struct Vec
 
 	explicit Vec<T, N>(T val)
 	{
-		m_vec.fill(val);
+		myVec.fill(val);
 	}
 
 	// TODO: Figure out a variadic method that actually works!
-	Vec<T, N>(T v0, T v1) : m_vec({v0, v1})
+	Vec<T, N>(T v0, T v1) : myVec({v0, v1})
 	{
 		assert(N == 2);
 	}
-	Vec<T, N>(T v0, T v1, T v2) : m_vec({ v0, v1, v2 })
+	Vec<T, N>(T v0, T v1, T v2) : myVec({ v0, v1, v2 })
 	{
 		assert(N == 3);
 	}
-	Vec<T, N>(T v0, T v1, T v2, T v3) : m_vec({ v0, v1, v2, v3 })
+	Vec<T, N>(T v0, T v1, T v2, T v3) : myVec({ v0, v1, v2, v3 })
 	{
 		assert(N == 4);
 	}
-	Vec<T, N>(T v0, T v1, T v2, T v3, T v4) : m_vec({ v0, v1, v2, v3, v4 })
+	Vec<T, N>(T v0, T v1, T v2, T v3, T v4) : myVec({ v0, v1, v2, v3, v4 })
 	{
 		assert(N == 5);
 	}
@@ -67,44 +54,48 @@ struct Vec
 	explicit Vec<T, N>(const Vec<S, N>& source)
 	{
 		for (unsigned i = 0; i < N; ++i)
-			m_vec[i] = static_cast<T>(source[i]);
+			myVec[i] = static_cast<T>(source[i]);
 	}
 
 	T &operator[](unsigned index)
 	{
 		assert(index < N);
-		return m_vec[index];
+		return myVec[index];
 	}
 
 	const T &operator[](unsigned index) const
 	{
 		assert(index < N);
-		return m_vec[index];
+		return myVec[index];
 	}
 
-	decltype(auto) data() { return m_vec.data(); }
+	decltype(auto) data() { return myVec.data(); }
 
 	Vec<T, N> operator+=(const Vec<T, N>& rhs)
 	{
-		for (unsigned i = 0; i < N; ++i) m_vec[i] += rhs[i];
+		for (unsigned i = 0; i < N; ++i)
+			myVec[i] += rhs[i];
 		return *this;
 	}
 
 	Vec<T, N> operator-=(const Vec<T, N>& rhs)
 	{
-		for (unsigned i = 0; i < N; ++i) m_vec[i] -= rhs[i];
+		for (unsigned i = 0; i < N; ++i)
+			myVec[i] -= rhs[i];
 		return *this;
 	}
 
 	Vec<T, N> operator*=(const Vec<T, N>& rhs)
 	{
-		for (unsigned i = 0; i < N; ++i) m_vec[i] *= rhs[i];
+		for (unsigned i = 0; i < N; ++i)
+			myVec[i] *= rhs[i];
 		return *this;
 	}
 
 	Vec<T, N> operator/=(const Vec<T, N>& rhs)
 	{
-		for (unsigned i = 0; i < N; ++i) m_vec[i] /= rhs[i];
+		for (unsigned i = 0; i < N; ++i)
+			myVec[i] /= rhs[i];
 		return *this;
 	}
 
@@ -139,7 +130,7 @@ struct Vec
 		Vec<T, N> vec;
 
 		for (unsigned i = 0; i < N; ++i)
-			vec[i] = -m_vec[i];
+			vec[i] = -myVec[i];
 
 		return vec;
 	}
@@ -147,7 +138,7 @@ struct Vec
 	Vec<T, N> operator+=(T rhs)
 	{
 		for (unsigned i = 0; i < N; ++i)
-			m_vec[i] += rhs;
+			myVec[i] += rhs;
 
 		return *this;
 	}
@@ -155,7 +146,7 @@ struct Vec
 	Vec<T, N> operator-=(T rhs)
 	{
 		for (unsigned i = 0; i < N; ++i)
-			m_vec[i] -= rhs;
+			myVec[i] -= rhs;
 
 		return *this;
 	}
@@ -163,7 +154,7 @@ struct Vec
 	Vec<T, N> operator*=(T rhs)
 	{
 		for (unsigned i = 0; i < N; ++i)
-			m_vec[i] *= rhs;
+			myVec[i] *= rhs;
 
 		return *this;
 	}
@@ -171,7 +162,7 @@ struct Vec
 	Vec<T, N> operator/=(T rhs)
 	{
 		for (unsigned i = 0; i < N; ++i)
-			m_vec[i] /= rhs;
+			myVec[i] /= rhs;
 
 		return *this;
 	}
@@ -198,7 +189,7 @@ struct Vec
 	}
 
 private:
-	std::array<T, N> m_vec;
+	std::array<T, N> myVec;
 };
 
 using Vec2d = Vec<double, 2>;
@@ -237,7 +228,7 @@ T mag2(const Vec<T, N>& vec)
 	T val = 0;
 
 	for (unsigned i = 0; i < N; ++i)
-		val += sqr(vec[i]);
+		val += Util::sqr(vec[i]);
 
 	return val;
 }
@@ -254,7 +245,7 @@ T dist2(const Vec<T, N>& vec0, const Vec<T, N>& vec1)
 	T val = 0;
 	
 	for (unsigned i = 0; i < N; ++i)
-		val += sqr(vec0[i] - vec1[i]);
+		val += Util::sqr(vec0[i] - vec1[i]);
 	
 	return val;
 }
@@ -266,20 +257,20 @@ T dist(const Vec<T, N>& vec0, const Vec<T, N>& vec1)
 }
 
 template<typename T, unsigned N>
-void normalize(Vec<T, N> &vec)
+void normalizeInPlace(Vec<T, N> &vec)
 {
 	vec /= mag(vec);
 }
 
 template<typename T, unsigned N>
-inline Vec<T, N> normalized(Vec<T, N> vec)
+inline Vec<T, N> normalize(Vec<T, N> vec)
 {
-	vec /= mag(vec);
+	normalizeInPlace(vec);
 	return vec;
 }
 
 template<typename T, unsigned N>
-T infnorm(const Vec<T, N>& vec)
+T infNorm(const Vec<T, N>& vec)
 {
 	T val = 0;
 
@@ -342,8 +333,11 @@ T min(const Vec<T, N>& vec)
 	return val;
 }
 
+// The second vector is passed by value because we would have
+// to allocate memory anyway.
+
 template<typename T, unsigned N>
-Vec<T, N> min_union(const Vec<T, N>& vec0, Vec<T, N> vec1)
+Vec<T, N> minUnion(const Vec<T, N>& vec0, Vec<T, N> vec1)
 {
 	for (unsigned i = 0; i < N; ++i)
 		vec1[i] = (vec0[i] < vec1[i]) ? vec0[i] : vec1[i];
@@ -352,7 +346,7 @@ Vec<T, N> min_union(const Vec<T, N>& vec0, Vec<T, N> vec1)
 }
 
 template<typename T, unsigned N>
-inline Vec<T, N> max_union(const Vec<T, N>& vec0, Vec<T, N> vec1)
+inline Vec<T, N> maxUnion(const Vec<T, N>& vec0, Vec<T, N> vec1)
 {
 	for (unsigned i = 0; i < N; ++i)
 		vec1[i] = (vec0[i] > vec1[i]) ? vec0[i] : vec1[i];
@@ -436,7 +430,7 @@ template<typename T, unsigned N>
 Vec<T, N> clamp(Vec<T, N> vec, const Vec<T, N>& low, const Vec<T, N>& high)
 {
 	for (unsigned i = 0; i < N; ++i)
-		vec[i] = clamp(vec[i], low[i], high[i]);
+		vec[i] = Util::clamp(vec[i], low[i], high[i]);
 
 	return vec;
 }
@@ -460,26 +454,28 @@ Vec<T, N> max(const Vec<T, N> &max0, Vec<T, N> max1)
 }
 
 template<typename T, unsigned N>
-void minmax(Vec<T, N>& vecMin, Vec<T, N>& vecMax, const Vec<T, N>& vec0, const Vec<T, N>& vec1)
+void minAndMax(Vec<T, N>& vecMin, Vec<T, N>& vecMax, const Vec<T, N>& vec0, const Vec<T, N>& vec1)
 {
 	for (unsigned i = 0; i < N; ++i)
-		minmax(vecMin[i], vecMax[i], vec0[i], vec1[i]);
+		Util::minAndMax(vecMin[i], vecMax[i], vec0[i], vec1[i]);
 }
 
 template<typename T, unsigned N, typename ...Args>
-void minmax(Vec<T, N>& vecMin, Vec<T, N>& vecMax, const Args&... args)
+void minAndMax(Vec<T, N>& vecMin, Vec<T, N>& vecMax, const Args&... vecs)
 {
-	minmax(vecMin, vecMax, args...);
+	minAndMax(vecMin, vecMax, vecs...);
 }
 
 template<typename T, unsigned N>
-void update_minmax(Vec<T, N> &vecMin, Vec<T, N> &vecMax, const Vec<T, N> &vec)
+void updateMinOrMax(Vec<T, N> &vecMin, Vec<T, N> &vecMax, const Vec<T, N> &vec)
 {
-	for (unsigned i = 0; i < N; ++i) update_minmax(vec[i], vecMin[i], vecMax[i]);
+	for (unsigned i = 0; i < N; ++i) updateMinOrMax(vec[i], vecMin[i], vecMax[i]);
 }
 
 template<typename T, unsigned N>
-void update_both_minmax(Vec<T, N> &vecMin, Vec<T, N> &vecMax, const Vec<T, N> &vec)
+void updateMinAndMax(Vec<T, N> &vecMin, Vec<T, N> &vecMax, const Vec<T, N> &vec)
 {
-	for (unsigned i = 0; i < N; ++i) update_both_minmax(vecMin[i], vecMax[i], vec[i]);
+	for (unsigned i = 0; i < N; ++i) Util::updateMinAndMax(vecMin[i], vecMax[i], vec[i]);
 }
+
+#endif

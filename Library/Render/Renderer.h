@@ -1,11 +1,13 @@
-#pragma once
+#ifndef LIBRARY_RENDERER_H
+#define LIBRARY_RENDERER_H
 
-#include <vector>
 #include <functional>
+#include <vector>
 
 #include <GL/glut.h>
 
 #include "Common.h"
+#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -22,8 +24,8 @@
 class Renderer
 {
 public:
-	Renderer(const char *title, Vec2ui window_size, Vec2R screen_min,
-				Real height, int *argc, char **argv);
+	Renderer(const char *title, Vec2ui windowSize, Vec2R screenOrigin,
+				Real screenHeight, int *argc, char **argv);
 
 	void display();
 	void mouse(int button, int state, int x, int y);
@@ -31,60 +33,62 @@ public:
 	void keyboard(unsigned char key, int x, int y);
 	void reshape(int w, int h);
 
-	void set_user_mouse_click(std::function<void(int, int, int, int)> clickfunc);
-	void set_user_keyboard(std::function<void(unsigned char, int, int)> keyfunc);
-	void set_user_mouse_drag(std::function<void(int, int)> dragfunc);
-	void set_user_display(std::function<void()> displayfunc);
+	void setUserMouseClick(std::function<void(int, int, int, int)> clickFunction);
+	void setUserKeyboard(std::function<void(unsigned char, int, int)> keyFunction);
+	void setUserMouseDrag(std::function<void(int, int)> dragFunction);
+	void setUserDisplay(std::function<void()> displayFunction);
 
-	void add_point(const Vec2R& point, const Vec3f& colour = Vec3f(0,0,0), Real size = 1.);
-	void add_points(const std::vector<Vec2R>& points, const Vec3f& colour = Vec3f(0, 0, 0), Real size = 1.);
+	void addPoint(const Vec2R& point, const Vec3f& colour = Vec3f(0,0,0), Real size = 1.);
+	void addPoints(const std::vector<Vec2R>& points, const Vec3f& colour = Vec3f(0, 0, 0), Real size = 1.);
 
-	void add_line(const Vec2R& start, const Vec2R& end, const Vec3f& colour = Vec3f(0, 0, 0));
-	void add_lines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour);
-	void add_tris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour);
-	void add_quads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours);
+	void addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour = Vec3f(0, 0, 0));
+	void addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour);
+	void addTris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour);
+	void addQuads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours);
 	
-	void draw_primitives() const;
+	void drawPrimitives() const;
 
 	void clear();
 	void run();
 
 private:
 
-	std::vector<std::vector<Vec2R>> m_points;
-	std::vector<Vec3f> m_point_colours;
-	std::vector<Real> m_point_size;
+	std::vector<std::vector<Vec2R>> myPoints;
+	std::vector<Vec3f> myPointColours;
+	std::vector<Real> myPointSize;
 
-	std::vector<std::vector<Vec2R>> m_start_lines;
-	std::vector<std::vector<Vec2R>> m_end_lines;
-	std::vector<Vec3f> m_line_colours;
+	std::vector<std::vector<Vec2R>> myStartLines;
+	std::vector<std::vector<Vec2R>> myEndLines;
+	std::vector<Vec3f> myLineColours;
 
-	std::vector<std::vector<Vec2R>> m_tri_verts;
-	std::vector<std::vector<Vec3ui>> m_tri_faces;
-	std::vector<std::vector<Vec3f>> m_tri_colours;
+	std::vector<std::vector<Vec2R>> myTriVerts;
+	std::vector<std::vector<Vec3ui>> myTriFaces;
+	std::vector<std::vector<Vec3f>> myTriColours;
 
-	std::vector<std::vector<Vec2R>> m_quad_verts;
-	std::vector<std::vector<Vec4ui>> m_quad_faces;
-	std::vector<std::vector<Vec3f>> m_quad_colours;
+	std::vector<std::vector<Vec2R>> myQuadVerts;
+	std::vector<std::vector<Vec4ui>> myQuadFaces;
+	std::vector<std::vector<Vec3f>> myQuadColours;
 
 	// width, height
-	Vec2ui m_wsize;
+	Vec2ui myWindowSize;
 
-	Vec2R m_smin;
-	Real m_sheight;
+	Vec2R myCurrentScreenOrigin;
+	Real myCurrentScreenHeight;
 
-	Vec2R m_dmin;
-	Real m_dheight;
+	Vec2R myDefaultScreenOrigin;
+	Real myDefaultScreenHeight;
 
 	// Mouse specific state
-	Vec2i m_mouse_pos;
-	bool m_mmoved;
+	Vec2i myMousePosition;
+	bool myMouseMoved;
 	enum class MouseAction {INACTIVE, PAN, ZOOM_IN, ZOOM_OUT};
-	MouseAction m_maction;
+	MouseAction myMouseAction;
 
 	// User specific extensions for each glut callback
-	std::function<void(unsigned char, int, int)> m_user_keyboard;
-	std::function<void(int, int, int, int)> m_user_mouse_click;
-	std::function<void(int, int)> m_user_mouse_drag;
-	std::function<void()> m_user_display;
+	std::function<void(unsigned char, int, int)> myUserKeyboardFunction;
+	std::function<void(int, int, int, int)> myUserMouseClickFunction;
+	std::function<void(int, int)> myUserMouseDragFunction;
+	std::function<void()> myUserDisplayFunction;
 };
+
+#endif

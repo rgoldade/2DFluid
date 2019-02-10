@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LIBRARY_FLUIDPARTICLES_H
+#define LIBRARY_FLUIDPARTICLES_H
 
 #include "Common.h"
 
@@ -19,18 +20,18 @@
 class FluidParticles
 {
 public:
-	FluidParticles() : m_prad(0) {}
+	FluidParticles() : myParticleRadius(0) {}
 
 	// The particle radius is used to construct a surface around the particles.
 	// This is also used during reseeding so we don't put particles too close to the surface.
 	// The count is the target number of particles to see into a particle grid cell. The\
 	// oversample is how many more particles should be created at cells near the supplied
 	// surface.
-	FluidParticles(Real particle_radius, unsigned count, Real oversample = 1., bool track_vel = false)
-		: m_prad(particle_radius)
-		, m_count(count)
-		, m_oversample(oversample)
-		, m_track_vel(track_vel)
+	FluidParticles(Real particleRadius, unsigned countPerCell, Real oversample = 1., bool trackVelocity = false)
+		: myParticleRadius(particleRadius)
+		, myParticleDensity(countPerCell)
+		, myOversampleRate(oversample)
+		, myTrackVelocity(trackVelocity)
 	{}
 
 	// The initialize step seeds particles inside of the given surface.
@@ -40,40 +41,42 @@ public:
 	// will be generated.
 	void init(const LevelSet2D& surface);
 	
-	void set_velocity(const VectorGrid<Real>& vel);
-	void apply_velocity(VectorGrid<Real>& vel);
-	void increment_velocity(VectorGrid<Real>& vel);
-	void blend_velocity(const VectorGrid<Real>& vel_old,
+	void setVelocity(const VectorGrid<Real>& vel);
+	void applyVelocity(VectorGrid<Real>& vel);
+	void incrementVelocity(VectorGrid<Real>& vel);
+	void blendVelocity(const VectorGrid<Real>& vel_old,
 						const VectorGrid<Real>& vel_new,
 						Real blend);
 
-	void construct_surface(LevelSet2D& surface) const;
-	void draw_points(Renderer& renderer, const Vec3f& colour = Vec3f(1,0,0), unsigned size = 1) const;
-	void draw_velocity(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
+	LevelSet2D surfaceParticles(const Transform& xform, const Vec2ui& size, const unsigned narrowBand) const;
+	void drawPoints(Renderer& renderer, const Vec3f& colour = Vec3f(1,0,0), unsigned size = 1) const;
+	void drawVelocity(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
 
 	// Seed particles into areas of the surface that are under represented
 	// and delete particles in areas that are over represented. If the particle
 	// count is below the min multiplier, then the cell will be seeded up to the count.
 	// If the particle count is above the max multiplier, then the cell will emptied down
 	// to the count.
-	void reseed(const LevelSet2D& surface, Real min = 1., Real max = 1., const VectorGrid<Real>* vel = NULL, Real seed = 0);
+	void reseed(const LevelSet2D& surface, Real minDensity = 1., Real maxDensity = 1., const VectorGrid<Real>* velocity = nullptr, Real seed = 0);
 
 	// Push particles inside collision objects back to the surface
-	void bump_particles(const LevelSet2D& collision);
+	void bumpParticles(const LevelSet2D& collision);
 
-	unsigned size() const { return m_parts.size(); }
-	Vec2R get_position(unsigned part) const { assert(part < size());  return m_parts[part]; }
+	unsigned particleCount() const { return myParticles.size(); }
+	Vec2R getPosition(unsigned part) const { assert(part < myParticles.size());  return myParticles[part]; }
 
-	const std::vector<Vec2R>& get_positions() const { return m_parts; }
+	const std::vector<Vec2R>& getPositions() const { return myParticles; }
 
-	void advect(Real dt, const VectorGrid<Real>& vel, const IntegrationOrder order);
+	void advect(Real dt, const VectorGrid<Real>& velocity, const IntegrationOrder order);
 
 protected:
-	std::vector<Vec2R> m_parts, m_add_parts;
-	std::vector<Vec2R> m_vel;
-	bool m_track_vel;
-	Real m_prad;
+	std::vector<Vec2R> myParticles, myNewParticles;
+	std::vector<Vec2R> myVelocity;
+	bool myTrackVelocity;
+	Real myParticleRadius;
 
-	unsigned m_count;
-	Real m_oversample;
+	unsigned myParticleDensity;
+	Real myOversampleRate;
 };
+
+#endif

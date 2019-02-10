@@ -1,9 +1,11 @@
-#pragma once
+#ifndef LIBRARY_VECTORGRID_H
+#define LIBRARY_VECTORGRID_H
 
 #include "Common.h"
 #include "ScalarGrid.h"
-
 #include "Transform.h"
+#include "Util.h"
+#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -31,35 +33,35 @@ class VectorGrid
 
 public:
 
-	VectorGrid() : m_xform(1., Vec2R(0.)), m_size(0) { m_grids.resize(2); }
+	VectorGrid() : myXform(1., Vec2R(0.)), mySize(0) { myGrids.resize(2); }
 	VectorGrid(const Transform& xform, const Vec2ui& size,
-				SampleType stype = SampleType::CENTER, BorderType btype = BorderType::CLAMP)
-		: VectorGrid(xform, size, T(0), stype, btype)
+				SampleType sampleType = SampleType::CENTER, BorderType borderType = BorderType::CLAMP)
+		: VectorGrid(xform, size, T(0), sampleType, borderType)
 	{}
 
 	VectorGrid(const Transform& xform, const Vec2ui& size, T val,
-				SampleType stype = SampleType::CENTER, BorderType btype = BorderType::CLAMP)
-		: m_xform(xform)
-		, m_size(size)
-		, m_stype(stype)
+				SampleType sampleType = SampleType::CENTER, BorderType borderType = BorderType::CLAMP)
+		: myXform(xform)
+		, mySize(size)
+		, mySampleType(sampleType)
 	{
-		m_grids.resize(2);
-		switch (stype)
+		myGrids.resize(2);
+		switch (sampleType)
 		{
 		case SampleType::CENTER:
-			m_grids[0] = ScalarGridT(xform, size, val, ScalarSampleType::CENTER, btype);
-			m_grids[1] = ScalarGridT(xform, size, val, ScalarSampleType::CENTER, btype);
+			myGrids[0] = ScalarGridT(xform, size, val, ScalarSampleType::CENTER, borderType);
+			myGrids[1] = ScalarGridT(xform, size, val, ScalarSampleType::CENTER, borderType);
 			break;
 		// If the grid is 2x2, it has 3x2 x-aligned faces and 2x3 y-aligned faces.
 		// This is handled inside of the ScalarGrid
 		case SampleType::STAGGERED:
-			m_grids[0] = ScalarGridT(xform, size, val, ScalarSampleType::XFACE, btype);
-			m_grids[1] = ScalarGridT(xform, size, val, ScalarSampleType::YFACE, btype);
+			myGrids[0] = ScalarGridT(xform, size, val, ScalarSampleType::XFACE, borderType);
+			myGrids[1] = ScalarGridT(xform, size, val, ScalarSampleType::YFACE, borderType);
 			break;
 		// If the grid is 2x2, it has 3x3 nodes. This is handled inside of the ScalarGrid
 		case SampleType::NODE:
-			m_grids[0] = ScalarGridT(xform, size, val, ScalarSampleType::NODE, btype);
-			m_grids[1] = ScalarGridT(xform, size, val, ScalarSampleType::NODE, btype);
+			myGrids[0] = ScalarGridT(xform, size, val, ScalarSampleType::NODE, borderType);
+			myGrids[1] = ScalarGridT(xform, size, val, ScalarSampleType::NODE, borderType);
 		}
 	} 
 
@@ -67,35 +69,33 @@ public:
 	// positioned at the same spot, have the same grid
 	// spacing and the same sampling sceme
 	template<typename S>
-	bool is_matched(const VectorGrid<S>& grid) const
+	bool isMatched(const VectorGrid<S>& grid) const
 	{
 		if (size(0) != grid.size(0)) return false;
 		if (size(1) != grid.size(1)) return false;
-		if (m_xform != grid.xform()) return false;
-		if (m_stype != grid.sample_type()) return false;
+		if (myXform != grid.xform()) return false;
+		if (mySampleType != grid.sampleType()) return false;
 		return true;
 	}
 
 	ScalarGridT& grid(unsigned axis)
 	{
 		assert(axis < 2);
-		return m_grids[axis];
+		return myGrids[axis];
 	}
-	
+
 	const ScalarGridT& grid(unsigned axis) const
 	{
 		assert(axis < 2);
-		return m_grids[axis];
+		return myGrids[axis];
 	}
-	// TODO: write accessors to put values into the grid
-	// write renderers to see the sample points, vector values (averaged and offset for staggered)
 	
 	T& operator()(unsigned i, unsigned j, unsigned axis) { return (*this)(Vec2ui(i, j), axis); }
 
 	T& operator()(const Vec2ui& coord, unsigned axis)
 	{
 		assert(axis < 2);
-		return m_grids[axis](coord);
+		return myGrids[axis](coord);
 	}
 
 	const T& operator()(unsigned i, unsigned j, unsigned axis) const { return (*this)(Vec2ui(i, j), axis); }
@@ -103,10 +103,10 @@ public:
 	const T& operator()(const Vec2ui& coord, unsigned axis) const
 	{
 		assert(axis < 2);
-		return m_grids[axis](coord);
+		return myGrids[axis](coord);
 	}
 
-	T max_magnitude() const;
+	T maxMagnitude() const;
 
 	Vec<T, 2> interp(Real x, Real y) const { return interp(Vec2R(x, y)); }
 	Vec<T, 2> interp(const Vec2R& pos) const
@@ -118,173 +118,184 @@ public:
 	T interp(const Vec2R& pos, unsigned axis) const
 	{ 
 		assert(axis < 2);
-		return m_grids[axis].interp(pos);
+		return myGrids[axis].interp(pos);
+	}
+
+	Vec<T, 2> cubicInterp(Real x, Real y) const { return cubicInterp(Vec2R(x, y)); }
+	Vec<T, 2> cubicInterp(const Vec2R &pos) const { return Vec<T, 2>(cubicInterp(pos, 0), cubicInterp(pos, 1)); }
+
+	T cubicInterp(Real x, Real y, unsigned axis) const { return cubicInterp(Vec2R(x, y), axis); }
+	T cubicInterp(const Vec2R &pos, unsigned axis) const
+	{
+		assert(axis < 2);
+		return myGrids[axis].cubicInterp(pos);
 	}
 
 	// World space vs. index space converters need to be done at the 
 	// underlying scalar grid level because the alignment of the two 
 	// grids are different depending on the SampleType.
-	Vec2R idx_to_ws(const Vec2R& index_pos, unsigned axis) const
+
+	Vec2R indexToWorld(const Vec2R& indexPos, unsigned axis) const
 	{
 		assert(axis >= 0 && axis < 2);
-		return m_grids[axis].idx_to_ws(index_pos);
+		return myGrids[axis].indexToWorld(indexPos);
 	}
 
-	Vec2R ws_to_idx(const Vec2R& world_pos, unsigned axis) const
+	Vec2R worldToIndex(const Vec2R& worldPos, unsigned axis) const
 	{
 		assert(axis < 2);
-		return m_grids[axis].ws_to_idx(world_pos);
+		return myGrids[axis].worldToIndex(worldPos);
 	}
 
-	Real dx() const { return m_xform.dx(); }
-	Real offset() const { return m_xform.offset(); }
-	Transform xform() const { return m_xform; }
-	Vec2ui size(unsigned axis) const { return m_grids[axis].size(); }
-	Vec2ui grid_size() const { return m_size; }
-	SampleType sample_type() const { return m_stype; }
+	Real dx() const { return myXform.dx(); }
+	Real offset() const { return myXform.offset(); }
+	Transform xform() const { return myXform; }
+
+	Vec2ui size(unsigned axis) const { return myGrids[axis].size(); }
+
+	Vec2ui gridSize() const { return mySize; }
+	SampleType sampleType() const { return mySampleType; }
 
 	// Rendering methods
-	void draw_grid(Renderer& renderer) const;
-	void draw_sample_points(Renderer& renderer, const Vec3f& colour0 = Vec3f(1,0,0),
+	void drawGrid(Renderer& renderer) const;
+	void drawSamplePoints(Renderer& renderer, const Vec3f& colour0 = Vec3f(1,0,0),
 								const Vec3f& colour1 = Vec3f(0, 0, 1), const Vec2R& sizes = Vec2R(1.)) const;
-	void draw_supersampled_values(Renderer& renderer, Real radius = .5, unsigned samples = 10) const;
-	void draw_sample_point_vectors(Renderer& renderer, const Vec3f& colour = Vec3f(0,0,1), Real length = .25) const;
+	void drawSupersampledValues(Renderer& renderer, Real radius = .5, unsigned samples = 5, unsigned size = 1) const;
+	void drawSamplePointVectors(Renderer& renderer, const Vec3f& colour = Vec3f(0,0,1), Real length = .25) const;
 
 private:
 
 	// This method is private to prevent future mistakes between this transform
 	// and the staggered scalar grids
-	Vec2R idx_to_ws(const Vec2R& idx) const
+	Vec2R indexToWorld(const Vec2R& indexPos) const
 	{
-		return m_xform.idx_to_ws(idx);
+		return myXform.indexToWorld(indexPos);
 	}
 
-	std::vector<ScalarGridT> m_grids;
+	std::vector<ScalarGridT> myGrids;
 
-	Transform m_xform;
+	Transform myXform;
 
-	Vec2ui m_size;
+	Vec2ui mySize;
 
-	SampleType m_stype;
+	SampleType mySampleType;
 };
 
 template<typename T>
-void VectorGrid<T>::draw_grid(Renderer& renderer) const
+void VectorGrid<T>::drawGrid(Renderer& renderer) const
 {
-	std::vector<Vec2R> start_points;
-	std::vector<Vec2R> end_points;
+	std::vector<Vec2R> startPoints;
+	std::vector<Vec2R> endPoints;
 
 	for (unsigned axis = 0; axis < 2; ++axis)
 	{
-		for (unsigned i = 0; i <= m_size[axis]; ++i)
+		for (unsigned line = 0; line <= mySize[axis]; ++line)
 		{
-			Vec2R grid_start(0);
-			grid_start[axis] = i;
+			Vec2R gridStart(0);
+			gridStart[axis] = line;
 
 			// Offset backwards because we want the start of the grid cell
-			Vec2R pos = idx_to_ws(grid_start);
-			start_points.push_back(pos);
+			Vec2R startPoint = indexToWorld(gridStart);
+			startPoints.push_back(startPoint);
 
-			Vec2R grid_end(m_size);
-			grid_end[axis] = i;
+			Vec2R gridEnd(mySize);
+			gridEnd[axis] = line;
 
-			pos = idx_to_ws(grid_end);
-			end_points.push_back(pos);
+			Vec2R endPos = indexToWorld(gridEnd);
+			endPoints.push_back(endPos);
 		}
 	}
 
-	renderer.add_lines(start_points, end_points, Vec3f(0));	
+	renderer.addLines(startPoints, endPoints, Vec3f(0));	
 }
 
 template<typename T>
-void VectorGrid<T>::draw_sample_points(Renderer& renderer, const Vec3f& colour0,
+void VectorGrid<T>::drawSamplePoints(Renderer& renderer, const Vec3f& colour0,
 										const Vec3f& colour1, const Vec2R& sizes) const
 {
-	m_grids[0].draw_sample_points(renderer,	colour0, sizes[0]);
-	m_grids[1].draw_sample_points(renderer, colour1, sizes[1]);
+	myGrids[0].drawSamplePoints(renderer,	colour0, sizes[0]);
+	myGrids[1].drawSamplePoints(renderer, colour1, sizes[1]);
 }
 
 template<typename T>
-void VectorGrid<T>::draw_supersampled_values(Renderer& renderer, Real radius, unsigned samples) const
+void VectorGrid<T>::drawSupersampledValues(Renderer& renderer, Real radius, unsigned samples, unsigned size) const
 {
-	m_grids[0].draw_supersampled_values(renderer, radius, samples);
-	m_grids[1].draw_supersampled_values(renderer, radius, samples);
+	myGrids[0].drawSupersampledValues(renderer, radius, samples, size);
+	myGrids[1].drawSupersampledValues(renderer, radius, samples, size);
 }
 
 template<typename T>
-void VectorGrid<T>::draw_sample_point_vectors(Renderer& renderer, const Vec3f& colour, Real length) const
+void VectorGrid<T>::drawSamplePointVectors(Renderer& renderer, const Vec3f& colour, Real length) const
 {
-	std::vector<Vec2R> start_points;
-	std::vector<Vec2R> end_points;
+	std::vector<Vec2R> startPoints;
+	std::vector<Vec2R> endPoints;
 
-	switch (m_stype)
+	switch (mySampleType)
 	{
 	case SampleType::CENTER:
 		
-		for_each_voxel_range(Vec2ui(0), m_size, [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2ui(0), mySize, [&](const Vec2ui& cell)
 		{
-			Vec2R world_pos = idx_to_ws(Vec2R(cell), 0);
-			start_points.push_back(world_pos);
+			Vec2R worldPos = indexToWorld(Vec2R(cell), 0);
+			startPoints.push_back(worldPos);
 
-			Vec2R vec(m_grids[0](cell), m_grids[1](cell));
-			end_points.push_back(world_pos + length * vec);
+			Vec2R vec(myGrids[0](cell), myGrids[1](cell));
+			endPoints.push_back(worldPos + length * vec);
 		});
 		break;
 
 	case SampleType::NODE:
 
-		for_each_voxel_range(Vec2ui(0), m_grids[0].size(), [&](const Vec2ui& node)
+		forEachVoxelRange(Vec2ui(0), myGrids[0].size(), [&](const Vec2ui& node)
 		{
-			Vec2R world_pos = m_grids[0].idx_to_ws(Vec2R(node));
-			start_points.push_back(world_pos);
+			Vec2R worldPos = myGrids[0].indexToWorld(Vec2R(node));
+			startPoints.push_back(worldPos);
 
-			Vec2R vec(m_grids[0](node), m_grids[1](node));
-			end_points.push_back(world_pos + length * vec);
+			Vec2R vec(myGrids[0](node), myGrids[1](node));
+			endPoints.push_back(worldPos + length * vec);
 		});
 
 		break;
 
 	case SampleType::STAGGERED:
 
-		for_each_voxel_range(Vec2ui(0), m_size, [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2ui(0), mySize, [&](const Vec2ui& cell)
 		{
-			Vec2R avg_world_pos(0);
-			Vec2R avg_vec(0);
+			Vec2R avgWorldPos(0);
+			Vec2R avgVec(0);
 
-			for (unsigned dir = 0; dir < 4; ++dir)
-			{
-				Vec2ui face = cell + cell_to_face[dir];
+			for (unsigned axis : {0, 1})
+				for (unsigned direction : {0, 1})
+				{
+					Vec2ui face = cellToFace(cell, axis, direction);
 
-				avg_world_pos += .25 * idx_to_ws(Vec2R(face));
+					avgWorldPos += .25 * indexToWorld(Vec2R(face), axis);
 
-				unsigned axis = dir / 2;
-				unsigned forward = dir % 2;
+					avgVec[axis] += .5 * myGrids[axis](face);
+				}
 
-				avg_vec[forward] += .5 * m_grids[axis](face);
-			}
-
-			start_points.push_back(avg_world_pos);
-			end_points.push_back(avg_world_pos + length * avg_vec);
+			startPoints.push_back(avgWorldPos);
+			endPoints.push_back(avgWorldPos + length * avgVec);
 		});
 		
 		break;
 	}
 
-	renderer.add_lines(start_points, end_points, colour);
+	renderer.addLines(startPoints, endPoints, colour);
 }
 
 // Magnitude is useful for CFL conditions
 template<typename T>
-T VectorGrid<T>::max_magnitude() const
+T VectorGrid<T>::maxMagnitude() const
 {
 	Real max = std::numeric_limits<Real>::min();
-	switch (m_stype)
+	switch (mySampleType)
 	{
 	case SampleType::CENTER:
 		
-		for_each_voxel_range(Vec2ui(0), m_size, [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2ui(0), mySize, [&](const Vec2ui& cell)
 		{
-			Real tempmag2 = mag2(Vec<T, 2>(m_grids[0](cell), m_grids[1](cell)));
+			Real tempmag2 = mag2(Vec<T, 2>(myGrids[0](cell), myGrids[1](cell)));
 				
 			if (max < tempmag2) max = tempmag2;
 		});
@@ -294,9 +305,9 @@ T VectorGrid<T>::max_magnitude() const
 
 	case SampleType::NODE:
 
-		for_each_voxel_range(Vec2ui(0), m_size, [&](const Vec2ui& node)
+		forEachVoxelRange(Vec2ui(0), mySize, [&](const Vec2ui& node)
 		{
-			Real tempmag2 = mag2(Vec<T, 2>(m_grids[0](node), m_grids[1](node)));
+			Real tempmag2 = mag2(Vec<T, 2>(myGrids[0](node), myGrids[1](node)));
 
 			if (max < tempmag2) max = tempmag2;
 		});
@@ -306,20 +317,18 @@ T VectorGrid<T>::max_magnitude() const
 
 	case SampleType::STAGGERED:
 
-		for_each_voxel_range(Vec2ui(0), m_size, [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2ui(0), mySize, [&](const Vec2ui& cell)
 		{
-			Vec2R avg_vec(0);
+			Vec2R avgVec(0);
 
-			for (unsigned dir = 0; dir < 4; ++dir)
-			{
-				Vec2ui face = cell + cell_to_face[dir];
+			for (unsigned axis : {0, 1})
+				for (unsigned direction : {0, 1})
+				{
+					Vec2ui face = cellToFace(cell, axis, direction);
+					avgVec[axis] += .5 * myGrids[axis](face);
+				}
 
-				unsigned axis = dir / 2;
-
-				avg_vec[axis] += .5 * m_grids[axis](face);
-			}
-
-			Real tempmag2 = mag2(avg_vec);
+			Real tempmag2 = mag2(avgVec);
 			if (max < tempmag2) max = tempmag2;
 		});
 		
@@ -330,3 +339,5 @@ T VectorGrid<T>::max_magnitude() const
 	}
 	return T(0);
 }
+
+#endif

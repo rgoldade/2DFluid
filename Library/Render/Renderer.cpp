@@ -12,7 +12,7 @@ public:
 	{
 		// Safety check to only ever take one instance
 		// of a Renderer
-		if (!m_render) m_render = render;
+		if (!myRender) myRender = render;
 
 		glutReshapeFunc(reshape);
 		glutDisplayFunc(display);
@@ -23,68 +23,72 @@ public:
 private:
 	static void reshape(int w, int h)
 	{
-		if (m_render) m_render->reshape(w, h);
+		if (myRender) myRender->reshape(w, h);
 	}
 
 	static void display()
 	{
-		if (m_render) m_render->display();
+		if (myRender) myRender->display();
 	}
 
 	static void mouse(int button, int state, int x, int y)
 	{
-		if (m_render) m_render->mouse(button, state, x, y);
+		if (myRender) myRender->mouse(button, state, x, y);
 	}
 
 	static void drag(int x, int y)
 	{
-		if (m_render) m_render->drag(x, y);
+		if (myRender) myRender->drag(x, y);
 	}
 
 	static void keyboard(unsigned char key, int x, int y)
 	{
-		if (m_render) m_render->keyboard(key, x, y);
+		if (myRender) myRender->keyboard(key, x, y);
 	}
 
-	static Renderer* m_render;
+	static Renderer* myRender;
 };
 
-Renderer* GlutHelper::m_render;
+Renderer* GlutHelper::myRender;
 
-Renderer::Renderer(const char *title, Vec2ui window_size, Vec2R screen_min,
-						Real height, int *argc, char **argv)
-	: m_wsize(window_size), m_smin(screen_min), m_sheight(height),
-	m_dmin(screen_min),	m_dheight(height), m_maction(MouseAction::INACTIVE)
+Renderer::Renderer(const char *title, Vec2ui windowSize, Vec2R screenOrigin,
+						Real screenHeight, int *argc, char **argv)
+	: myWindowSize(windowSize)
+	, myCurrentScreenOrigin(screenOrigin)
+	, myCurrentScreenHeight(screenHeight)
+	, myDefaultScreenOrigin(screenOrigin)
+	, myDefaultScreenHeight(screenHeight)
+	, myMouseAction(MouseAction::INACTIVE)
 {
 	glutInit(argc, argv);
 
 	//TODO: review if these flags are needed
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_ALPHA | GLUT_DEPTH | GLUT_STENCIL);
-	glutInitWindowSize(window_size[0], window_size[1]);
+	glutInitWindowSize(myWindowSize[0], myWindowSize[1]);
 	glutCreateWindow(title);
 	glClearColor(1.0, 1.0, 1.0, 0.0);
 
 	GlutHelper::init(this);
 }
 
-void Renderer::set_user_keyboard(std::function<void(unsigned char, int, int)> keyfunc)
+void Renderer::setUserKeyboard(std::function<void(unsigned char, int, int)> keyFunction)
 {
-	m_user_keyboard = keyfunc;
+	myUserKeyboardFunction = keyFunction;
 }
 
-void Renderer::set_user_mouse_click(std::function<void(int, int, int, int)> clickfunc)
+void Renderer::setUserMouseClick(std::function<void(int, int, int, int)> clickFunction)
 {
-	m_user_mouse_click = clickfunc;
+	myUserMouseClickFunction = clickFunction;
 } 
 
-void Renderer::set_user_mouse_drag(std::function<void(int, int)> dragfunc)
+void Renderer::setUserMouseDrag(std::function<void(int, int)> dragFunction)
 {
-	m_user_mouse_drag = dragfunc;
+	myUserMouseDragFunction = dragFunction;
 }
 
-void Renderer::set_user_display(std::function<void()> displayfunc)
+void Renderer::setUserDisplay(std::function<void()> displayFunction)
 {
-	m_user_display = displayfunc;
+	myUserDisplayFunction = displayFunction;
 }
 
 void Renderer::display()
@@ -92,17 +96,17 @@ void Renderer::display()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// TODO: taken directly from gluvi.. might be able to clean some of this up
-	glViewport(0, 0, (GLsizei)m_wsize[0], (GLsizei)m_wsize[1]);
+	glViewport(0, 0, GLsizei(myWindowSize[0]), GLsizei(myWindowSize[1]));
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	glOrtho(m_smin[0], m_smin[0] + (m_sheight * m_wsize[0]) / m_wsize[1], m_smin[1], m_smin[1] + m_sheight, 0, 1);
+	glOrtho(myCurrentScreenOrigin[0], myCurrentScreenOrigin[0] + (myCurrentScreenHeight * Real(myWindowSize[0])) / Real(myWindowSize[1]), myCurrentScreenOrigin[1], myCurrentScreenOrigin[1] + myCurrentScreenHeight, 0, 1);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
 	// Run user specific display funcion
-	if (m_user_display) m_user_display();
+	if (myUserDisplayFunction) myUserDisplayFunction();
 		
-	draw_primitives();
+	drawPrimitives();
 	glutSwapBuffers();
 	glutPostRedisplay();
 }
@@ -111,36 +115,36 @@ void Renderer::mouse(int button, int state, int x, int y)
 {
 	// If the user provided a custom mouse handler,
 	// then use that
-	if (m_user_mouse_click) m_user_mouse_click(button, state, x, y);
+	if (myUserMouseClickFunction) myUserMouseClickFunction(button, state, x, y);
 	else
 	{
 		if (state == GLUT_UP)
 		{
-			switch (m_maction)
+			Real scale;
+			switch (myMouseAction)
 			{
 				// PAN is only for drag
 				// TODO: add click specific movement
 			case MouseAction::ZOOM_IN:
-			{
-				// Zoom in by 2x
-				Real scale = .5;
 
-				m_smin[0] -= .5 * (scale - 1.) * m_wsize[0] * m_sheight / m_wsize[1];
-				m_smin[1] -= .5 * (scale - 1.) * m_sheight;
-				m_sheight *= scale;
+				// Zoom in by 2x
+				scale = .5;
+
+				myCurrentScreenOrigin[0] -= .5 * (scale - 1.) * Real(myWindowSize[0]) * myCurrentScreenHeight / Real(myWindowSize[1]);
+				myCurrentScreenOrigin[1] -= .5 * (scale - 1.) * myCurrentScreenHeight;
+				myCurrentScreenHeight *= scale;
 
 				glutPostRedisplay();
 				break;
-			}
+
 			case MouseAction::ZOOM_OUT:
-			{
-				Real scale = 2.;
-				m_smin[0] -= .5 * (scale - 1.) * m_wsize[0] * m_sheight / m_wsize[1];
-				m_smin[1] -= .5 * (scale - 1.) * m_sheight;
-				m_sheight *= scale;
+
+				scale = 2.;
+				myCurrentScreenOrigin[0] -= .5 * (scale - 1.) * Real(myWindowSize[0]) * myCurrentScreenHeight / Real(myWindowSize[1]);
+				myCurrentScreenOrigin[1] -= .5 * (scale - 1.) * myCurrentScreenHeight;
+				myCurrentScreenHeight *= scale;
 
 				glutPostRedisplay();
-			}
 			}
 		}
 		else
@@ -148,206 +152,212 @@ void Renderer::mouse(int button, int state, int x, int y)
 			switch (button)
 			{
 			case GLUT_LEFT_BUTTON:
-				m_maction = MouseAction::PAN;
+				myMouseAction = MouseAction::PAN;
 				break;
 			case GLUT_MIDDLE_BUTTON:
-				m_maction = MouseAction::ZOOM_IN;
+				myMouseAction = MouseAction::ZOOM_IN;
 				break;
 			case GLUT_RIGHT_BUTTON:
-				m_maction = MouseAction::ZOOM_OUT;
+				myMouseAction = MouseAction::ZOOM_OUT;
 			}
 		}
 
-		m_mmoved = false; // not really used at the moment
-		m_mouse_pos = Vec2i(x, y);
+		myMouseMoved = false; // not really used at the moment
+		myMousePosition = Vec2i(x, y);
 	}
 }
 
 void Renderer::drag(int x, int y)
 {
-	if (m_user_mouse_drag) m_user_mouse_drag(x, y);
+	if (myUserMouseDragFunction) myUserMouseDragFunction(x, y);
 	else
 	{
-		if (x != m_mouse_pos[0] || y != m_mouse_pos[1])
+		if (x != myMousePosition[0] || y != myMousePosition[1])
 		{
-			m_mmoved = true;
-			if (m_maction == MouseAction::PAN)
+			myMouseMoved = true;
+			if (myMouseAction == MouseAction::PAN)
 			{
-				Real r = m_sheight / (Real)m_wsize[1];
-				m_smin[0] -= r * ((Real)x - m_mouse_pos[0]);
-				m_smin[1] += r * ((Real)y - m_mouse_pos[1]);
+				Real pixelRatio = myCurrentScreenHeight / Real(myWindowSize[1]);
+				myCurrentScreenOrigin[0] -= pixelRatio * (Real(x) - myMousePosition[0]);
+				myCurrentScreenOrigin[1] += pixelRatio * (Real(y) - myMousePosition[1]);
 				glutPostRedisplay();
 			}
-			m_mouse_pos[0] = x;
-			m_mouse_pos[1] = y;
+
+			myMousePosition[0] = x;
+			myMousePosition[1] = y;
 		}
 	}
 }
 
 void Renderer::keyboard(unsigned char key, int x, int y)
 {
-	if (m_user_keyboard) m_user_keyboard(key, x, y);
+	if (myUserKeyboardFunction) myUserKeyboardFunction(key, x, y);
 
 	// r triggers return to defaults
 	if (key == 'r')
 	{
-		m_smin = m_dmin;
-		m_sheight = m_dheight;
+		myCurrentScreenOrigin = myDefaultScreenOrigin;
+		myCurrentScreenHeight = myDefaultScreenHeight;
 		glutPostRedisplay();
 	}
 }
 
 void Renderer::reshape(int w, int h)
 {
-	m_wsize[0] = w;
-	m_wsize[1] = h;
+	myWindowSize[0] = w;
+	myWindowSize[1] = h;
 	glutPostRedisplay();
 }
 
 // These helpers make it easy to render out basic primitives without having to write
 // a custom loop outside of this class
-void Renderer::add_point(const Vec2R& point, const Vec3f& colour, Real size)
+void Renderer::addPoint(const Vec2R& point, const Vec3f& colour, Real size)
 {
 	std::vector<Vec2R> temp(1, point);
-	m_points.push_back(temp);
-	m_point_colours.push_back(colour);
-	m_point_size.push_back(size);
+	myPoints.push_back(temp);
+	myPointColours.push_back(colour);
+	myPointSize.push_back(size);
 }
 
-void Renderer::add_points(const std::vector<Vec2R>& points, const Vec3f& colour, Real size)
+void Renderer::addPoints(const std::vector<Vec2R>& points, const Vec3f& colour, Real size)
 {
-	m_points.push_back(points);
-	m_point_colours.push_back(colour);
-	m_point_size.push_back(size);
+	myPoints.push_back(points);
+	myPointColours.push_back(colour);
+	myPointSize.push_back(size);
 }
 
-void Renderer::add_line(const Vec2R& start, const Vec2R& end, const Vec3f& colour)
+void Renderer::addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour)
 {
-	std::vector<Vec2R> start_vec; start_vec.push_back(start);
-	std::vector<Vec2R> end_vec; end_vec.push_back(end);
-	m_start_lines.push_back(start_vec);
-	m_end_lines.push_back(end_vec);
+	std::vector<Vec2R> lineStarts; lineStarts.push_back(start);
+	std::vector<Vec2R> lineEnds; lineEnds.push_back(end);
+	myStartLines.push_back(lineStarts);
+	myEndLines.push_back(lineEnds);
 
-	m_line_colours.push_back(colour);
+	myLineColours.push_back(colour);
 }
 
-void Renderer::add_lines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour)
+void Renderer::addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour)
 {
 	assert(start.size() == end.size());
-	m_start_lines.push_back(start);
-	m_end_lines.push_back(end);
-	m_line_colours.push_back(colour);
+	myStartLines.push_back(start);
+	myEndLines.push_back(end);
+	myLineColours.push_back(colour);
 }
 
-void Renderer::add_tris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour)
+void Renderer::addTris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour)
 {
-	m_tri_verts.push_back(verts);
-	m_tri_faces.push_back(faces);
-	m_tri_colours.push_back(colour);
+	myTriVerts.push_back(verts);
+	myTriFaces.push_back(faces);
+	myTriColours.push_back(colour);
 }
 
-void Renderer::add_quads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours)
+void Renderer::addQuads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours)
 {
-	m_quad_verts.push_back(verts);
-	m_quad_faces.push_back(faces);
-	m_quad_colours.push_back(colours);
+	myQuadVerts.push_back(verts);
+	myQuadFaces.push_back(faces);
+	myQuadColours.push_back(colours);
 }
 
 void Renderer::clear()
 {
-	m_points.clear();
-	m_point_colours.clear();
-	m_point_size.clear();
+	myPoints.clear();
+	myPointColours.clear();
+	myPointSize.clear();
 
-	m_start_lines.clear();
-	m_end_lines.clear();
-	m_line_colours.clear();
+	myStartLines.clear();
+	myEndLines.clear();
+	myLineColours.clear();
 
-	m_tri_verts.clear();
-	m_tri_faces.clear();
-	m_tri_colours.clear();
+	myTriVerts.clear();
+	myTriFaces.clear();
+	myTriColours.clear();
 
-	m_quad_verts.clear();
-	m_quad_faces.clear();
-	m_quad_colours.clear();
+	myQuadVerts.clear();
+	myQuadFaces.clear();
+	myQuadColours.clear();
 }
 
-void Renderer::draw_primitives() const
+void Renderer::drawPrimitives() const
 {
 	// Render quads
 	glBegin(GL_QUADS);
 
-	unsigned quad_list_size = m_quad_faces.size();
-	for (unsigned qs = 0; qs < quad_list_size; ++qs)
+	unsigned quadListSize = myQuadFaces.size();
+	for (unsigned quadListIndex = 0; quadListIndex < quadListSize; ++quadListIndex)
 	{
-		unsigned quad_sublist_size = m_quad_faces[qs].size();
-		for (unsigned f = 0; f < quad_sublist_size; ++f)
+		unsigned quadSublistSize = myQuadFaces[quadListIndex].size();
+		for (unsigned quadIndex = 0; quadIndex < quadSublistSize; ++quadIndex)
 		{
-			Vec3f colour = m_quad_colours[qs][f];
-			glColor3f(colour[0], colour[1], colour[2]);
+			Vec3f quadColour = myQuadColours[quadListIndex][quadIndex];
+			glColor3f(quadColour[0], quadColour[1], quadColour[2]);
 			
-			for (unsigned qp = 0; qp < 4; ++qp)
+			for (unsigned quadVertexIndex = 0; quadVertexIndex < 4; ++quadVertexIndex)
 			{
-				unsigned face = m_quad_faces[qs][f][qp];
-				Vec2R vert = m_quad_verts[qs][face];
-				glVertex2d(vert[0], vert[1]);
+				unsigned meshVertexIndex = myQuadFaces[quadListIndex][quadIndex][quadVertexIndex];
+				Vec2R vertex = myQuadVerts[quadListIndex][meshVertexIndex];
+				glVertex2d(vertex[0], vertex[1]);
 			}
 		}
 	}
+
 	glEnd();
 
 	// Render tris
 	glBegin(GL_TRIANGLES);
-	unsigned tri_list_size = m_tri_faces.size();
-	for (unsigned ts = 0; ts < tri_list_size; ++ts)
-	{
-		unsigned tri_sublist_size = m_tri_faces[ts].size();
-		for (unsigned f = 0; f < tri_sublist_size; ++f)
-		{
-			Vec3f colour = m_tri_colours[ts][f];
-			glColor3f(colour[0], colour[1], colour[2]);
 
-			for (unsigned tp = 0; tp < 3; ++tp)
+	unsigned triListSize = myTriFaces.size();
+	for (unsigned triListIndex = 0; triListIndex < triListSize; ++triListIndex)
+	{
+		unsigned triSublistSize = myTriFaces[triListIndex].size();
+		for (unsigned triIndex = 0; triIndex < triSublistSize; ++triIndex)
+		{
+			Vec3f triColour = myTriColours[triListIndex][triIndex];
+			glColor3f(triColour[0], triColour[1], triColour[2]);
+
+			for (unsigned triVertexIndex = 0; triVertexIndex < 3; ++triVertexIndex)
 			{
-				unsigned face = m_tri_faces[ts][f][tp];
-				Vec2R p = m_tri_verts[ts][face];
-				glVertex2d(p[0], p[1]);
+				unsigned meshVertexIndex = myTriFaces[triListIndex][triIndex][triVertexIndex];
+				Vec2R vertex = myTriVerts[triListIndex][meshVertexIndex];
+				glVertex2d(vertex[0], vertex[1]);
 			}
 		}
 	}
 	glEnd();
 
 	glBegin(GL_LINES);
-	unsigned line_list_size = m_start_lines.size();
-	for (unsigned ls = 0; ls < line_list_size; ++ls)
-	{
-		Vec3f c = m_line_colours[ls];
-		glColor3f(c[0], c[1], c[2]);
 
-		unsigned line_sublist_size = m_start_lines[ls].size();
-		for (unsigned l = 0; l < line_sublist_size; ++l)
+	unsigned lineListSize = myStartLines.size();
+	for (unsigned lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
+	{
+		Vec3f lineColour = myLineColours[lineListIndex];
+		glColor3f(lineColour[0], lineColour[1], lineColour[2]);
+
+		unsigned lineSublistSize = myStartLines[lineListIndex].size();
+		for (unsigned lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
 		{
-			Vec2R sp = m_start_lines[ls][l];
-			Vec2R ep = m_end_lines[ls][l];
-			glVertex2d(sp[0], sp[1]);
-			glVertex2d(ep[0], ep[1]);
+			Vec2R startriVertexIndexoint = myStartLines[lineListIndex][lineIndex];
+			Vec2R endPoint = myEndLines[lineListIndex][lineIndex];
+
+			glVertex2d(startriVertexIndexoint[0], startriVertexIndexoint[1]);
+			glVertex2d(endPoint[0], endPoint[1]);
 		}
 	}
 	glEnd();	
 	
-	unsigned point_list_size = m_points.size();
-	for (unsigned ps = 0; ps < point_list_size; ++ps)
+	unsigned pointListSize = myPoints.size();
+	for (unsigned pointListIndex = 0; pointListIndex < pointListSize; ++pointListIndex)
 	{
-		Vec3f c = m_point_colours[ps];
-		glColor3f(c[0], c[1], c[2]);
-		glPointSize(m_point_size[ps]);
+		Vec3f pointColour = myPointColours[pointListIndex];
+		glColor3f(pointColour[0], pointColour[1], pointColour[2]);
+		glPointSize(myPointSize[pointListIndex]);
+		
 		glBegin(GL_POINTS);
 
-		unsigned point_sublist_size = m_points[ps].size();
-		for (size_t p = 0; p < point_sublist_size; ++p)
+		unsigned pointSublistSize = myPoints[pointListIndex].size();
+		for (unsigned pointIndex = 0; pointIndex < pointSublistSize; ++pointIndex)
 		{
-			Vec2R pp = m_points[ps][p];
-			glVertex2d(pp[0], pp[1]);
+			Vec2R point = myPoints[pointListIndex][pointIndex];
+			glVertex2d(point[0], point[1]);
 		}
 
 		glEnd();

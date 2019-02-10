@@ -1,71 +1,79 @@
-#include <iostream>
 #include <memory>
 
 #include "Common.h"
-
-#include "Renderer.h"
-#include "Mesh2D.h"
-#include "LevelSet2D.h"
 #include "FluidParticles.h"
 #include "InitialConditions.h"
+#include "LevelSet2D.h"
+#include "Mesh2D.h"
+#include "Renderer.h"
+#include "TestVelocityFields.h"
 #include "Transform.h"
 
-#include "TestVelocityFields.h"
-
-std::unique_ptr<Renderer> g_renderer;
-FluidParticles g_testparts;
-LevelSet2D g_levelset;
-Transform g_xform;
+static std::unique_ptr<Renderer> renderer;
+static std::unique_ptr<FluidParticles> particles;
+static Transform xform;
+static Vec2ui gridSize;
 
 void keyboard(unsigned char key, int x, int y)
 {
 	if (key == 'n')
 	{	
-		std::cout << "Reseeding" << std::endl;
-		LevelSet2D rebuilt_surface;
-		g_testparts.construct_surface(rebuilt_surface);
-		g_testparts.reseed(rebuilt_surface);
+		renderer->clear();
 
-		g_testparts.draw_points(*g_renderer, Vec3f(1, 0, 0), 5);
-		LevelSet2D rebuiltlevelset(g_levelset.xform(), g_levelset.size(), 5);
-		g_testparts.construct_surface(rebuiltlevelset);
+		LevelSet2D rebuiltSurface = particles->surfaceParticles(xform, gridSize, 5);
 
-		g_renderer->clear();
-		g_testparts.draw_points(*g_renderer, Vec3f(1, 0, 0));
-		rebuiltlevelset.draw_surface(*g_renderer, Vec3f(1., 0., 0.));
+		particles->reseed(rebuiltSurface);
+
+		rebuiltSurface = particles->surfaceParticles(xform, gridSize, 5);
+		rebuiltSurface.drawGrid(*renderer);
+		rebuiltSurface.drawSupersampledValues(*renderer, .5, 5, 3);
+		rebuiltSurface.drawSurface(*renderer, Vec3f(1., 0., 0.));
+
+
+		particles->drawPoints(*renderer, Vec3f(1, 0, 0), 5);
 	}
 }
 
 int main(int argc, char** argv)
 {
-	g_renderer = std::make_unique<Renderer>("Mesh test", Vec2ui(1000), Vec2R(-1), 1, &argc, argv);
+	Mesh2D initialMesh = circleMesh();
+	
+	Mesh2D tempMesh = circleMesh(Vec2R(.5), 1., 10);
+	assert(tempMesh.unitTest());
+	initialMesh.insertMesh(tempMesh);
 
-	Mesh2D testmesh = circle_mesh();
-	Mesh2D testmesh2 = circle_mesh(Vec2R(.5), 1., 10);
-	Mesh2D testmesh3 = circle_mesh(Vec2R(.05), .5, 10);
-	assert(testmesh.unit_test());
-	assert(testmesh2.unit_test());
-	testmesh.insert_mesh(testmesh2);
-	testmesh.insert_mesh(testmesh3);
+	tempMesh = circleMesh(Vec2R(.05), .5, 10);
+	assert(tempMesh.unitTest());
+	initialMesh.insertMesh(tempMesh);
 
-	g_xform = Transform(.05, Vec2R(0));
-	g_levelset = LevelSet2D(g_xform, Vec2ui(10), 5);
-	g_levelset.init(testmesh);
-	g_levelset.reinit();
-	g_levelset.draw_grid(*g_renderer);
-	g_levelset.draw_surface(*g_renderer, Vec3f(0., 1.0, 1.));
+	assert(initialMesh.unitTest());
 
-	g_testparts = FluidParticles(g_levelset.dx() * .75, 4, 2);
-	g_testparts.init(g_levelset);
+	Real dx = .125;
+	Vec2R topRightCorner(2.25);
+	Vec2R bottomLeftCorner(-1.5);
+	gridSize = Vec2ui((topRightCorner - bottomLeftCorner) / dx);
+	xform = Transform(dx, bottomLeftCorner);
+	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
 
-	LevelSet2D rebuilt_surface(g_levelset.xform(), g_levelset.size(), 5);
-	g_testparts.construct_surface(rebuilt_surface);
+	renderer = std::make_unique<Renderer>("Particle Surfacing Test", Vec2ui(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	rebuilt_surface.draw_supersampled_values(*g_renderer, .5, 5, 3);
+	LevelSet2D initialSurface(xform, gridSize, 5);
+	initialSurface.init(initialMesh, false);
+	initialSurface.reinit();
+	initialSurface.drawGrid(*renderer);
+	initialSurface.drawSurface(*renderer, Vec3f(0., 1.0, 1.));
+	initialSurface.drawSupersampledValues(*renderer, .5, 5, 3);
+
+	particles = std::make_unique<FluidParticles>(dx * .75, 8, 2);
+	particles->init(initialSurface);
+
+	//LevelSet2D rebuiltSurface = particles->surfaceParticles(xform, gridSize, 5);
+	//rebuiltSurface.drawSupersampledValues(*renderer, .5, 5, 3);
+
+	particles->drawPoints(*renderer, Vec3f(1, 0, 0), 4);
 
 	std::function<void(unsigned char, int, int)> keyboard_func = keyboard;
-	g_renderer->set_user_keyboard(keyboard);
+	renderer->setUserKeyboard(keyboard);
 
-	g_renderer->run();
+	renderer->run();
 }
-

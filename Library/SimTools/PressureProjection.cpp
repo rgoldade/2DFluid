@@ -3,122 +3,109 @@
 #include "PressureProjection.h"
 #include "Solver.h"
 
-void PressureProjection::draw_pressure(Renderer& renderer) const
+void PressureProjection::drawPressure(Renderer& renderer) const
 {
-	m_pressure.draw_supersampled_values(renderer, .25, 3, 2);
+	myPressure.drawSupersampledValues(renderer, .25, 1, 2);
 }
 
-void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights)
+void PressureProjection::project(const VectorGrid<Real>& ghostFluidWeights, const VectorGrid<Real>& cutCellWeights)
 {
-	assert(liquid_weights.is_matched(fluid_weights) && liquid_weights.is_matched(m_vel));
-
-	UniformGrid<int> solvable_cells(m_surface.size(), UNSOLVED);
+	assert(ghostFluidWeights.isMatched(cutCellWeights) && ghostFluidWeights.isMatched(myVelocity));
 
 	// This loop is dumb in serial but it's here as a placeholder for parallel later
-	Real dx = m_surface.dx();
-	int solve_count = 0;
-	for_each_voxel_range(Vec2ui(0), solvable_cells.size(), [&](const Vec2ui& cell)
+	Real dx = mySurface.dx();
+	int liquidDOFCount = 0;
+	forEachVoxelRange(Vec2ui(0), myLiquidCells.size(), [&](const Vec2ui& cell)
 	{
-		Real sdf = m_surface(cell);
-		bool in_fluid = (sdf < 0.);
+		Real sdf = mySurface(cell);
+		bool inFluid = (sdf <= 0.);
 		
 		// Implicit extrapolation of the fluid into the collision. This is an important piece
 		// of Batty et al. 2007. A cell whose center falls inside the solid could still have fluid
 		// in the cell. By extrapolating, we are sure to get all partially filled cells.
-		if (!in_fluid)
-		{
-			if (sdf < .5 * dx && m_collision(cell) < 0.) in_fluid = true;
-		}
+		/*if (!inFluid)
+			if ((sdf + myCollision(cell)) < .5 * dx) inFluid = true;*/
 
-		if (in_fluid)
+		if (inFluid)
 		{
-			for (unsigned dir = 0; dir < 4; ++dir)
-			{
-				// A solvable pressure sample point should be inside in the surface
-				// and with at least one non-zero cut-cell length (i.e. not extrapolated
-				// too far into the collision volume)
-				Vec2ui face = cell + cell_to_face[dir];
-
-				unsigned axis = dir / 2;
-				if (fluid_weights(face, axis) > 0)
+			for (auto axis : { 0,1 })
+				for (unsigned direction : {0, 1})
 				{
-					solvable_cells(cell) = solve_count++;
-					break;
+					Vec2ui face = cellToFace(cell, axis, direction);
+
+					if (cutCellWeights(face, axis) > 0)
+					{
+						myLiquidCells(cell) = liquidDOFCount++;
+						return;
+					}
 				}
-			}
 		}
 	});
 
-	Solver<true> solver(solve_count, solve_count * 5);
+	Solver<true> solver(liquidDOFCount, liquidDOFCount * 5);
 
 	// Build linear system
-	double inv_dx = 1. / dx;
-	for_each_voxel_range(Vec2ui(0), solvable_cells.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2ui(0), myLiquidCells.size(), [&](const Vec2ui& cell)
 	{
-		int idx = solvable_cells(cell);
-		if (idx >= 0)
+		int row = myLiquidCells(cell);
+		if (row >= 0)
 		{
 			// Build RHS divergence
-			for (unsigned dir = 0; dir < 4; ++dir)
-			{
-				Vec2ui face = cell + cell_to_face[dir];
-				
-				unsigned axis = dir / 2;
-
-				Real weight = fluid_weights(face, axis);
-
-				if (weight > 0)
+			double divergence = 0;
+			for (unsigned axis : {0, 1})
+				for (unsigned direction : {0, 1})
 				{
-					double sign = (dir % 2 == 0) ? 1 : -1;
-					double div = sign * m_vel(face, axis) * weight * inv_dx;
+					Vec2ui face = cellToFace(cell, axis, direction);
 
-					div += sign * m_collision_vel(face, axis) * (1.0 - weight) * inv_dx;
+					Real weight = cutCellWeights(face, axis);
 
-					solver.add_rhs(idx, div);
+					double sign = (direction == 0) ? 1 : -1;
+
+					if (weight > 0)
+						divergence += sign * myVelocity(face, axis) * weight;
+					if (weight < 1.)
+						divergence += sign * myCollisionVelocity(face, axis) * (1. - weight);
 				}
-			}
+
+			solver.addRhs(row, divergence);
 
 			// Build row
-			double middle_coeff = 0.;
+			double diagonal = 0.;
 
-			for (unsigned dir = 0; dir < 4; ++dir)
-			{
-				Vec2i adjacent_cell = Vec2i(cell) + cell_to_cell[dir];
-
-				unsigned axis = dir / 2;
-				
-				// Bounds check. If out-of-bounds, treat like a stationary grid-aligned solid.
-				if (adjacent_cell[axis] < 0 || adjacent_cell[axis] >= m_surface.size()[axis]) continue;
-
-				Vec2ui face = cell + cell_to_face[dir];
-				
-				double weight = fluid_weights(face, axis);
-
-				if (weight > 0)
+			for (unsigned axis : {0, 1})
+				for (unsigned direction : {0, 1})
 				{
-					double coeff = weight * m_dt * sqr(inv_dx);
+					Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+			
+					// Bounds check. If out-of-bounds, treat like a stationary grid-aligned solid.
+					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= mySurface.size()[axis]) continue;
 
-					// If neighbouring cell is solvable, it should have an entry in the system
-					int cidx = solvable_cells(Vec2ui(adjacent_cell));
-					if (cidx >= 0)
+					Vec2ui face = cellToFace(cell, axis, direction);
+				
+					double weight = cutCellWeights(face, axis);
+
+					if (weight > 0)
 					{
-						solver.add_element(idx, cidx, -coeff);
-						middle_coeff += coeff;
-					}
-					else
-					{
-						Real theta = liquid_weights(face, axis);
+						// If neighbouring cell is solvable, it should have an entry in the system
+						int adjacentRow = myLiquidCells(Vec2ui(adjacentCell));
+						if (adjacentRow >= 0)
+						{
+							solver.addElement(row, adjacentRow, -weight);
+							diagonal += weight;
+						}
+						else
+						{
+							Real theta = ghostFluidWeights(face, axis);
 
-						theta = clamp(theta, MINTHETA, Real(1.));
-						middle_coeff += coeff / theta;
+							theta = Util::clamp(theta, MINTHETA, Real(1.));
+							diagonal += weight / theta;
 
-						// TODO: add surface tension
+							// TODO: add surface tension
+						}
 					}
 				}
-			}
-
-			if (middle_coeff > 0.)	solver.add_element(idx, idx, middle_coeff);
-			else solver.add_element(idx, idx, 1.);
+			assert(diagonal > 0);
+			solver.addElement(row, row, diagonal);
 		}
 	});
 
@@ -131,85 +118,74 @@ void PressureProjection::project(const VectorGrid<Real>& liquid_weights, const V
 	}
 
 	// Load solution into pressure grid
-	for_each_voxel_range(Vec2ui(0), solvable_cells.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2ui(0), myLiquidCells.size(), [&](const Vec2ui& cell)
 	{
-		int idx = solvable_cells(cell);
-		if (idx >= 0)
-		{
-			double p = solver.sol(idx);
-			m_pressure(cell) = p;
-		}
+		int row = myLiquidCells(cell);
+		if (row >= 0)
+			myPressure(cell) = solver.solution(row);
 	});
 
 	// Set valid faces
-	for (unsigned axis = 0; axis < 2; ++axis)
+	for (unsigned axis : {0, 1})
 	{
-		Vec2ui size = m_vel.size(axis);
+		Vec2ui size = myVelocity.size(axis);
 
-		for_each_voxel_range(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
 		{
-			Vec2i backward_cell = Vec2i(face) + face_to_cell[axis][0];
-			Vec2i forward_cell = Vec2i(face) + face_to_cell[axis][1];
+			Vec2i backwardCell = faceToCell(Vec2i(face), axis, 0);
+			Vec2i forwardCell = faceToCell(Vec2i(face), axis, 1);
 
-			bool out_of_bounds = (backward_cell[axis] < 0 || forward_cell[axis] >= m_surface.size()[axis]);
-			if (!out_of_bounds)
+			if (!(backwardCell[axis] < 0 || forwardCell[axis] >= mySurface.size()[axis]))
 			{
-				if (solvable_cells(Vec2ui(backward_cell)) >= 0 || solvable_cells(Vec2ui(forward_cell)) >= 0)
-					m_valid(face, axis) = 1;
+				if ((myLiquidCells(Vec2ui(backwardCell)) >= 0 || myLiquidCells(Vec2ui(forwardCell)) >= 0) &&
+					cutCellWeights(face, axis) > 0)
+					myValid(face, axis) = 1;
+				else myValid(face, axis) = 0;
 			}
+			else myValid(face, axis) = 0;
 		});
 	}
 }
 
-void PressureProjection::apply_solution(VectorGrid<Real>& vel, const VectorGrid<Real>& liquid_weights, const VectorGrid<Real>& fluid_weights)
+void PressureProjection::applySolution(VectorGrid<Real>& velocity, const VectorGrid<Real>& liquidWeights)
 {
-	assert(liquid_weights.is_matched(fluid_weights) && liquid_weights.is_matched(m_vel));
+	assert(liquidWeights.isMatched(myVelocity));
 	
-	Real inv_dx = 1 / m_surface.dx();
-	for (unsigned axis = 0; axis < 2; ++axis)
+	for (unsigned axis : {0, 1})
 	{
-		Vec2ui vel_size = vel.size(axis);
+		Vec2ui size = velocity.size(axis);
 
-		for_each_voxel_range(Vec2ui(0), vel_size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
 		{
-			Real temp_vel = 0;
-			if (m_valid(face, axis) > 0)
+			Real tempVel = 0;
+			if (myValid(face, axis) > 0)
 			{
-				Real theta = liquid_weights(face, axis);
+				Real theta = liquidWeights(face, axis);
+				theta = Util::clamp(theta, MINTHETA, Real(1.));
 
-				if (theta > 0.)
+				Vec2i backwardCell = faceToCell(Vec2i(face), axis, 0);
+				Vec2i forwardCell = faceToCell(Vec2i(face), axis, 1);
+
+				if (!(backwardCell[axis] < 0 || forwardCell[axis] >= mySurface.size()[axis]))
 				{
-					theta = clamp(theta, MINTHETA, Real(1.));
+					Real gradient = 0;
 
-					Vec2i backward_cell = Vec2i(face) + face_to_cell[axis][0];
-					Vec2i forward_cell = Vec2i(face) + face_to_cell[axis][1];
+					if (myLiquidCells(Vec2ui(backwardCell)) >= 0)
+						gradient -= myPressure(Vec2ui(backwardCell));
 
-					bool out_of_bounds = (backward_cell[axis] < 0 || forward_cell[axis] >= m_surface.size()[axis]);
-					if (!out_of_bounds)
-					{
-						Real backward_pressure = 0.;
+					if (myLiquidCells(Vec2ui(forwardCell)) >= 0)
+						gradient += myPressure(Vec2ui(forwardCell));
 
-						Vec2ui ubcell(backward_cell);
-						if (m_surface(ubcell) < 0.)
-							backward_pressure = m_pressure(ubcell);
-
-						Real forward_pressure = 0.;
-
-						Vec2ui ufcell(forward_cell);
-						if (m_surface(ufcell) < 0.)
-							forward_pressure = m_pressure(ufcell);
-
-						temp_vel = m_vel(face, axis) - m_dt * (forward_pressure - backward_pressure) * inv_dx / theta;
-					}
-				} 
+					tempVel = myVelocity(face, axis) - gradient / theta;
+				}
 			}
 
-			vel(face, axis) = temp_vel;
+			velocity(face, axis) = tempVel;
 		});
 	}
 }
 
-void PressureProjection::apply_valid(VectorGrid<Real> &valid)
+void PressureProjection::applyValid(VectorGrid<Real> &valid)
 {
-	valid = m_valid;
+	valid = myValid;
 }

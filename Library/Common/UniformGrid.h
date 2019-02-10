@@ -1,8 +1,11 @@
-#pragma once
+#ifndef LIBRARY_UNIFORMGRID_H
+#define LIBRARY_UNIFORMGRID_H
 
 #include <vector>
 
 #include "Common.h"
+#include "Util.h"
+#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -19,16 +22,16 @@ class UniformGrid
 {
 public:
 
-	UniformGrid() : m_size(Vec2ui(0)) {}
+	UniformGrid() : mySize(Vec2ui(0)) {}
 
-	UniformGrid(const Vec2ui& size) : m_size(size)
+	UniformGrid(const Vec2ui& size) : mySize(size)
 	{
-		m_grid.resize(m_size[0] * m_size[1]);
+		myGrid.resize(mySize[0] * mySize[1]);
 	}
 
-	UniformGrid(const Vec2ui& size, const T& val) : m_size(size)
+	UniformGrid(const Vec2ui& size, const T& val) : mySize(size)
 	{
-		m_grid.resize(m_size[0] * m_size[1], val);
+		myGrid.resize(mySize[0] * mySize[1], val);
 	}
 	
 	// Accessor is y-major because the inside loop for most processes is naturally y. Should give better cache coherence.
@@ -38,58 +41,60 @@ public:
 
 	T& operator()(const Vec2ui& coord)
 	{ 
-		assert(coord[0] < m_size[0] && coord[1] < m_size[1]);
-		return m_grid[flatten(coord)];
+		assert(coord[0] < mySize[0] && coord[1] < mySize[1]);
+		return myGrid[flatten(coord)];
 	}
 
 	const T& operator()(unsigned i, unsigned j) const { return (*this)(Vec2ui(i, j)); }
 
 	const T& operator()(const Vec2ui& coord) const
 	{
-		assert(coord[0] < m_size[0] && coord[1] < m_size[1]);
-		return m_grid[flatten(coord)];
+		assert(coord[0] < mySize[0] && coord[1] < mySize[1]);
+		return myGrid[flatten(coord)];
 	}
 
 	void clear()
 	{
-		m_size = Vec2ui(0);
-		m_grid.clear();
+		mySize = Vec2ui(0);
+		myGrid.clear();
 	}
 
-	bool empty() const { return m_grid.empty(); }
+	bool empty() const { return myGrid.empty(); }
 
 	void resize(const Vec2ui& size)
 	{
-		m_size = size;
-		m_grid.clear();
-		m_grid.resize(m_size[0] * m_size[1]);
+		mySize = size;
+		myGrid.clear();
+		myGrid.resize(mySize[0] * mySize[1]);
 	}
 
 	void resize(const Vec2ui& size, const T& val)
 	{
-		m_size = size;
-		m_grid.clear();
-		m_grid.resize(m_size[0] * m_size[1], val);
+		mySize = size;
+		myGrid.clear();
+		myGrid.resize(mySize[0] * mySize[1], val);
 	}
 
-	const Vec2ui& size() const { return m_size; }
+	const Vec2ui& size() const { return mySize; }
 		
 	unsigned flatten(const Vec2ui& coord) const
 	{
-		return coord[1] + m_size[1] * coord[0];
+		return coord[1] + mySize[1] * coord[0];
 	}
 
-	Vec2ui unflatten(unsigned elem) const
+	Vec2ui unflatten(unsigned index) const
 	{
 		Vec2ui coord;
-		coord[0] = elem / m_size[1];
-		coord[1] = elem % m_size[1];
+		coord[0] = index / mySize[1];
+		coord[1] = index % mySize[1];
 		return coord;
 	}
 
 protected:
 
 	//Grid center container
-	std::vector<T> m_grid;
-	Vec2ui m_size;
+	std::vector<T> myGrid;
+	Vec2ui mySize;
 };
+
+#endif

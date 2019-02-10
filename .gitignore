@@ -5,8 +5,8 @@ CMakeFiles
 CMakeCache.txt
 
 Projects/*
-!Projects/RegularGridSimulations
-!Projects/RegularGridSimulations/*
+!Projects/Simulations
+!Projects/dSimulations/*
 !Projects/Tests
 !Projects/Tests/*
 !Projects/CMakeLists.txt

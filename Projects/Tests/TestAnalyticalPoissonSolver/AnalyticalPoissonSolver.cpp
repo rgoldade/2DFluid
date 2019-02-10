@@ -1,12 +1,12 @@
 #include "AnalyticalPoissonSolver.h"
 #include "Renderer.h"
 
-void AnalyticalPoissonSolver::draw_grid(Renderer &renderer) const
+void AnalyticalPoissonSolver::drawGrid(Renderer &renderer) const
 {
-	m_poissongrid.draw_grid(renderer);
+	myPoissonGrid.drawGrid(renderer);
 }
 
-void AnalyticalPoissonSolver::draw_values(Renderer &renderer) const
+void AnalyticalPoissonSolver::drawValues(Renderer &renderer) const
 {
-	m_poissongrid.draw_supersampled_values(renderer);
+	myPoissonGrid.drawSupersampledValues(renderer);
 }

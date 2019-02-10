@@ -1,6 +1,9 @@
-#pragma once
+#ifndef LIBRARY_INTEGRATOR_H
+#define LIBRARY_INTEGRATOR_H
 
 #include "Common.h"
+#include "Util.h"
+#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -17,12 +20,12 @@ enum class IntegrationOrder { FORWARDEULER, RK3 };
 template<typename T, typename Function>
 inline T Integrator(Real h, const T& x, const Function& f, IntegrationOrder order)
 {
-	T val;
+	T value;
 
 	switch (order)
 	{
 	case IntegrationOrder::FORWARDEULER:
-		val = x + h * f(0, x);
+		value = x + h * f(0, x);
 		break;
 	case IntegrationOrder::RK3:
 	{
@@ -30,12 +33,14 @@ inline T Integrator(Real h, const T& x, const Function& f, IntegrationOrder orde
 		T k2 = h * f(h / 2., x + k1 / 2.);
 		T k3 = h * f(h, x - k1 + k2);
 
-		val = x + (1. / 6.) * (k1 + 4. * k2 + k3);
+		value = x + (1. / 6.) * (k1 + 4. * k2 + k3);
 		break;
 	}
 	default:
 		assert(false);
 	}
 
-	return val;
+	return value;
 }
+
+#endif

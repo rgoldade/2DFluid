@@ -1,8 +1,11 @@
-#pragma once
+#ifndef LIBRARY_ADVECTFIELD_H
+#define LIBRARY_ADVECTFIELD_H
 
-#include "VectorGrid.h"
-#include "ScalarGrid.h"
+#include "Common.h"
 #include "Integrator.h"
+#include "ScalarGrid.h"
+#include "Vec.h"
+#include "VectorGrid.h"
 
 ///////////////////////////////////
 //
@@ -25,34 +28,34 @@ class AdvectField
 public:
 
 	AdvectField(const Field& source)
-		: m_field(source)
+		: myField(source)
 		{}
 
 	template<typename VelocityField>
-	void advect_field(Real dt, Field& field, const VelocityField& vel, const IntegrationOrder order, const InterpolationOrder interp_order = InterpolationOrder::LINEAR);
+	void advectField(Real dt, Field& field, const VelocityField& vel, const IntegrationOrder order, const InterpolationOrder interpOrder = InterpolationOrder::LINEAR);
 
 private:
-	const Field &m_field;
+	const Field &myField;
 };
 
 template<typename Field>
 template<typename VelocityField>
-void AdvectField<Field>::advect_field(Real dt, Field& field, const VelocityField& vel, const IntegrationOrder order, const InterpolationOrder interp_order)
+void AdvectField<Field>::advectField(Real dt, Field& field, const VelocityField& vel, const IntegrationOrder order, const InterpolationOrder interpOrder)
 {
-	assert(&field != &m_field);
+	assert(&field != &myField);
 
-	for_each_voxel_range(Vec2ui(0), field.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2ui(0), field.size(), [&](const Vec2ui& cell)
 	{
-		Vec2R pos = field.idx_to_ws(Vec2R(cell));
+		Vec2R pos = field.indexToWorld(Vec2R(cell));
 		pos = Integrator(-dt, pos, vel, order);
 
-		switch (interp_order)
+		switch (interpOrder)
 		{
 		case InterpolationOrder::LINEAR:
-			field(cell) = m_field.interp(pos);
+			field(cell) = myField.interp(pos);
 			break;
 		case InterpolationOrder::CUBIC:
-			field(cell) = m_field.cubic_interp(pos, false, true);
+			field(cell) = myField.cubicInterp(pos, false, true);
 			break;
 		default:
 			assert(false);
@@ -60,3 +63,5 @@ void AdvectField<Field>::advect_field(Real dt, Field& field, const VelocityField
 		}
 	});
 }
+
+#endif

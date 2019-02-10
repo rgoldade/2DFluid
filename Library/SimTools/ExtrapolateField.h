@@ -1,4 +1,6 @@
-#pragma once
+#ifndef LIBRARY_EXTRAPOLATEFIELD_H
+#define LIBRARY_EXTRAPOLATEFIELD_H
+
 
 #include <queue>
 
@@ -27,13 +29,13 @@ class ExtrapolateField
 {
 public:
 	ExtrapolateField(Field& field)
-		: m_field(field)
+		: myField(field)
 		{}
 
 	void extrapolate(const Field& mask, unsigned bandwidth = std::numeric_limits<unsigned>::max());
 
 private:
-	Field& m_field;
+	Field& myField;
 };
 
 template<>
@@ -45,104 +47,109 @@ void ExtrapolateField<Field>::extrapolate(const Field& mask, unsigned bandwidth)
 	// Run a BFS flood outwards from masked cells and average the values of the neighbouring "finished" cells
 	// It could be made more accurate if we used the value of the "closer" cell (smaller SDF value)
 	// It could be made more efficient if we truncated the BFS after a large enough distance (max SDF value)
-	assert(m_field.is_matched(mask));
+	assert(myField.isMatched(mask));
 
-	UniformGrid<MarkedCells> marked_cells(m_field.size(), MarkedCells::UNVISITED);
+	UniformGrid<MarkedCells> markedCells(myField.size(), MarkedCells::UNVISITED);
 
 	using Voxel = std::pair<Vec2ui, unsigned>;
 
 	// Initialize flood fill queue
-	std::queue<Voxel> marker_q;
+	std::queue<Voxel> markerQ;
 
 	// If a face has fluid through it, the weight should be greater than zero
 	// and so it should be marked
-	for_each_voxel_range(Vec2ui(0), m_field.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2ui(0), myField.size(), [&](const Vec2ui& cell)
 	{
-		if (mask(cell) > 0.) marked_cells(cell) = MarkedCells::FINISHED;
+		if (mask(cell) > 0.) markedCells(cell) = MarkedCells::FINISHED;
 	});
 
 	// Load up neighbouring faces and push into queue
-	for_each_voxel_range(Vec2ui(0), m_field.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2ui(0), myField.size(), [&](const Vec2ui& cell)
 	{
-		if (marked_cells(cell) == MarkedCells::FINISHED)
+		if (markedCells(cell) == MarkedCells::FINISHED)
 		{
-			for (unsigned dir = 0; dir < 4; ++dir)
-			{
-				Vec2i cidx = Vec2i(cell) + cell_to_cell[dir];
-
-				unsigned axis = dir / 2;
-				// Boundary check
-				if (cidx[axis] < 0 ||
-					cidx[axis] >= marked_cells.size()[axis]) continue;
-
-				Vec2ui ucidx(cidx);
-				if (marked_cells(ucidx) == MarkedCells::UNVISITED)
+			for (unsigned axis : {0, 1})
+				for (unsigned direction : {0, 1})
 				{
-					marker_q.push(Voxel(ucidx, 1));
-					marked_cells(ucidx) = MarkedCells::VISITED;
+					Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+
+					// Boundary check
+					if (direction == 0 && adjacentCell[axis] < 0)
+						continue;
+					else if (direction == 1 && adjacentCell[axis] >= markedCells.size()[axis])
+						continue;
+
+					if (markedCells(Vec2ui(adjacentCell)) == MarkedCells::UNVISITED)
+					{
+						markerQ.push(Voxel(Vec2ui(adjacentCell), 1));
+						markedCells(Vec2ui(adjacentCell)) = MarkedCells::VISITED;
+					}
 				}
-			}
 		}
 	});
 
-	while (!marker_q.empty())
+	while (!markerQ.empty())
 	{
 		// Store reference to updated faces to set as finished after
 		// this layer is completed
-		std::queue<Voxel> temp_q = marker_q;
+		std::queue<Voxel> tempQ = markerQ;
 		// Store references to next layer of faces
-		std::queue<Voxel> new_layer;
+		std::queue<Voxel> newLayer;
 
-		while (!marker_q.empty())
+		while (!markerQ.empty())
 		{
-			Voxel voxel = marker_q.front();
-			Vec2ui idx = voxel.first;
-			marker_q.pop();
+			Voxel voxel = markerQ.front();
+			Vec2ui cell = voxel.first;
+			markerQ.pop();
 
-			assert(marked_cells(idx) == MarkedCells::VISITED);
+			assert(markedCells(cell) == MarkedCells::VISITED);
 
-			Real val = 0.;
+			Real value = 0.;
 			Real count = 0.;
 
 			if (voxel.second < bandwidth)
 			{
-				for (unsigned dir = 0; dir < 4; ++dir)
-				{
-					Vec2i cidx = Vec2i(idx) + cell_to_cell[dir];
-
-					unsigned axis = dir / 2;
-					//Boundary check
-					if (cidx[axis] < 0 || cidx[axis] >= marked_cells.size()[axis]) continue;
-
-					Vec2ui ucidx(cidx);
-					if (marked_cells(ucidx) == MarkedCells::FINISHED)
+				for (unsigned axis : {0, 1})
+					for (unsigned direction : {0, 1})
 					{
-						val += m_field(ucidx);
-						++count;
+						Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+
+						// Boundary check
+						if (direction == 0 && adjacentCell[axis] < 0)
+							continue;
+						else if (direction == 1 && adjacentCell[axis] >= markedCells.size()[axis])
+							continue;
+
+						if (markedCells(Vec2ui(adjacentCell)) == MarkedCells::FINISHED)
+						{
+							value += myField(Vec2ui(adjacentCell));
+							++count;
+						}
+						else if (markedCells(Vec2ui(adjacentCell)) == MarkedCells::UNVISITED)
+						{
+							newLayer.push(Voxel(Vec2ui(adjacentCell), voxel.second + 1));
+							markedCells(Vec2ui(adjacentCell)) = MarkedCells::VISITED;
+						}
 					}
-					else if (marked_cells(ucidx) == MarkedCells::UNVISITED)
-					{
-						new_layer.push(Voxel(ucidx, voxel.second + 1));
-						marked_cells(ucidx) = MarkedCells::VISITED;
-					}
-				}
 
 				assert(count > 0);
-				m_field(idx) = val / count;
+				myField(cell) = value / count;
 			}
 		}
 
 		//Set update cells to finished
-		while (!temp_q.empty())
+		while (!tempQ.empty())
 		{
-			Voxel voxel = temp_q.front();
+			Voxel voxel = tempQ.front();
 			Vec2ui idx = voxel.first;
-			temp_q.pop();
-			assert(marked_cells(idx) == MarkedCells::VISITED);
-			marked_cells(idx) = MarkedCells::FINISHED;
+			tempQ.pop();
+			assert(markedCells(idx) == MarkedCells::VISITED);
+			markedCells(idx) = MarkedCells::FINISHED;
 		}
 
 		//Copy new queue
-		marker_q = new_layer;
+		std::swap(markerQ, newLayer);
 	}
 }
+
+#endif

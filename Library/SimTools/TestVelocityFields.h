@@ -1,6 +1,8 @@
-#pragma once
+#ifndef LIBRARY_TESTVELOCITYFIELDS_H
+#define LIBRARY_TESTVELOCITYFIELDS_H
 
 #include "Common.h"
+#include "Noise.h"
 #include "Renderer.h"
 
 ///////////////////////////////////
@@ -20,56 +22,55 @@
 class SingleVortexSim2D
 {
 public:
-	SingleVortexSim2D() : m_time(0), m_totaltime(6)
+	SingleVortexSim2D() : myTime(0), myTotalTime(6)
 	{}
 
-	SingleVortexSim2D(Real t0, Real T) : m_time(t0), m_totaltime(T)
+	SingleVortexSim2D(Real t0, Real T) : myTime(t0), myTotalTime(T)
 	{}
 
-	void draw_sim_vectors(Renderer& renderer, Real dt = 1., Real radius = 10., const Vec3f& colour = Vec3f(0))
+	void drawSimVectors(Renderer& renderer, Real dt = 1., Real radius = 10., const Vec3f& colour = Vec3f(0))
 	{
-		std::vector<Vec2R> start_points;
-		std::vector<Vec2R> end_points;
-		for (Real r = 0.0; r <= radius; r += radius / 10.)
+		std::vector<Vec2R> startPoints;
+		std::vector<Vec2R> endPoints;
+
+		for (Real r = 0.; r <= radius; r += radius / 10.)
 		{
-			for (Real theta = 0.0; theta < 2 * M_PI; theta += M_PI / 16.0)
+			for (Real theta = 0.; theta < 2 * Util::PI; theta += Util::PI / 16.)
 			{
 				Vec2R p0 = Vec2R(r * cos(theta), r * sin(theta));
 				Vec2R p1 = p0 + dt * (*this)(dt, p0);
 
-				start_points.push_back(p0);
-				end_points.push_back(p1);
+				startPoints.push_back(p0);
+				endPoints.push_back(p1);
 			}
 		}
-		renderer.add_lines(start_points, end_points, colour);
+		renderer.addLines(startPoints, endPoints, colour);
 	}
 
 	void advance(double dt)
 	{
-		m_time += dt;
+		myTime += dt;
 	}
 
 	// Sample positions given in world space
 	Vec2R operator()(Real dt, const Vec2R& pos) const
 	{
-		double sin_x = sin(M_PI * pos[0]);
-		double sin_y = sin(M_PI * pos[1]);
+		double sinX = sin(Util::PI * pos[0]);
+		double sinY = sin(Util::PI * pos[1]);
 
-		double cos_x = cos(M_PI * pos[0]);
-		double cos_y = cos(M_PI * pos[1]);
+		double cosX = cos(Util::PI * pos[0]);
+		double cosY = cos(Util::PI * pos[1]);
 
-		double u = 2.0 * sin_y * cos_y * sin_x * sin_x;
-		double v = -2.0 * sin_x * cos_x * sin_y * sin_y;
+		double u = 2.0 * sinY * cosY * sinX * sinX;
+		double v = -2.0 * sinX * cosX * sinY * sinY;
 
-		return Vec2R(u, v) * cos(M_PI * (m_time + dt) / m_totaltime);
+		return Vec2R(u, v) * cos(Util::PI * (myTime + dt) / myTotalTime);
 	}
 
 private:
 
-	Real m_time, m_totaltime;
+	Real myTime, myTotalTime;
 };
-
-#include "Noise.h"
 
 ///////////////////////////////////
 //
@@ -82,65 +83,65 @@ class CurlNoise2D
 {
 public:
 	CurlNoise2D()
-		: noise_length_scale(1),
-		noise_gain(1),
-		noise(),
-		m_dx(1E-4)
+		: myNoiseLengthScale(1),
+		myNoiseGain(1),
+		myNoiseFunction(),
+		myDx(1E-4)
 	{
-		noise_length_scale[0] = 1.5;
-		noise_gain[0] = 1.3;
+		myNoiseLengthScale[0] = 1.5;
+		myNoiseGain[0] = 1.3;
 	}
 
-	Vec2R get_velocity(const Vec2R &x) const
+	Vec2R getVelocity(const Vec2R &x) const
 	{
-		Vec2R v;
-		v[0] = ((potential(x[0], x[1] + m_dx)[2] - potential(x[0], x[1] - m_dx)[2])
-			- (potential(x[0], x[1], m_dx)[1] - potential(x[0], x[1], -m_dx)[1])) / (2 * m_dx);
-		v[1] = ((potential(x[0], x[1], m_dx)[0] - potential(x[0], x[1], -m_dx)[0])
-			- (potential(x[0] + m_dx, x[1])[2] - potential(x[0] - m_dx, x[1])[2])) / (2 * m_dx);
+		Vec2R vel;
+		vel[0] = ((potential(x[0], x[1] + myDx)[2] - potential(x[0], x[1] - myDx)[2])
+			- (potential(x[0], x[1], myDx)[1] - potential(x[0], x[1], -myDx)[1])) / (2 * myDx);
+		vel[1] = ((potential(x[0], x[1], myDx)[0] - potential(x[0], x[1], -myDx)[0])
+			- (potential(x[0] + myDx, x[1])[2] - potential(x[0] - myDx, x[1])[2])) / (2 * myDx);
 
-		return v;
+		return vel;
 	}
 
 	Vec3R potential(Real x, Real y, Real z = 0.) const
 	{
 		Vec3R psi(0, 0, 0);
-		Real height_factor = 0.5;
+		Real heightFactor = 0.5;
 
 		Vec3R centre(0.0, 1.0, 0.0);
 		Real radius = 4.0;
 
-		for (unsigned int i = 0; i<noise_length_scale.size(); ++i)
+		for (unsigned int i = 0; i<myNoiseLengthScale.size(); ++i)
 		{
-			Real sx = x / noise_length_scale[i];
-			Real sy = y / noise_length_scale[i];
-			Real sz = z / noise_length_scale[i];
+			Real sx = x / myNoiseLengthScale[i];
+			Real sy = y / myNoiseLengthScale[i];
+			Real sz = z / myNoiseLengthScale[i];
 
 			Vec3R psi_i(0.f, 0.f, noise2(sx, sy, sz));
 
 			Real dist = mag(Vec3R(x, y, z) - centre);
-			Real scale = max((radius - dist) / radius, Real(0));
+			Real scale = Util::max((radius - dist) / radius, Real(0));
 			psi_i *= scale;
 
-			psi += height_factor * noise_gain[i] * psi_i;
+			psi += heightFactor * myNoiseGain[i] * psi_i;
 		}
 
 		return psi;
 	}
 
-	Real noise2(Real x, Real y, Real z) const { return noise(z - 203.994, x + 169.47, y - 205.31); }
+	Real noise2(Real x, Real y, Real z) const { return myNoiseFunction(z - 203.994, x + 169.47, y - 205.31); }
 
 	inline Vec2R operator()(Real, const Vec2R& pos) const
 	{
-		return get_velocity(pos);
+		return getVelocity(pos);
 	}
 
 private:
 
-	std::vector<Real> noise_length_scale, noise_gain;
-	Real m_dx;
+	std::vector<Real> myNoiseLengthScale, myNoiseGain;
+	Real myDx;
 
-	FlowNoise3 noise;
+	FlowNoise3 myNoiseFunction;
 };
 
 ///////////////////////////////////
@@ -153,36 +154,36 @@ private:
 class CircularSim2D
 {
 public:
-	CircularSim2D() : m_center(Vec2R(0)), m_scale(1.) {}
-	CircularSim2D(const Vec2R& c, Real scale = 1.) : m_center(c), m_scale(scale) {}
+	CircularSim2D() : myCenter(Vec2R(0)), myScale(1.) {}
+	CircularSim2D(const Vec2R& c, Real scale = 1.) : myCenter(c), myScale(scale) {}
 
 	void drawSimVectors(Renderer& renderer, Real dt = 1., Real radius = 10., const Vec3f& colour = Vec3f(0))
 	{
-		std::vector<Vec2R> start_points;
-		std::vector<Vec2R> end_points;
+		std::vector<Vec2R> startPoints;
+		std::vector<Vec2R> endPoints;
 
 		for (Real r = 0.0; r <= radius; r += radius / 10.)
 		{
-			for (Real theta = 0.0; theta < 2 * M_PI; theta += M_PI / 16.0)
+			for (Real theta = 0.0; theta < 2 * Util::PI; theta += Util::PI / 16.0)
 			{
-				Vec2R p0 = Vec2R(r * cos(theta), r * sin(theta)) + m_center;
-				Vec2R p1 = p0 + dt * (*this)(dt, p0);
+				Vec2R startPoint = Vec2R(r * cos(theta), r * sin(theta)) + myCenter;
+				Vec2R endPoint = startPoint + dt * (*this)(dt, startPoint);
 
-				start_points.push_back(p0);
-				end_points.push_back(p1);
+				startPoints.push_back(startPoint);
+				endPoints.push_back(endPoint);
 			}
 		}
-		renderer.add_lines(start_points, end_points, colour);
+		renderer.addLines(startPoints, endPoints, colour);
 	};
 
 	inline Vec2R operator()(Real, const Vec2R& pos) const
 	{
-		return Vec2R(pos[1] - m_center[1], -(pos[0] - m_center[0])) * m_scale;
+		return Vec2R(pos[1] - myCenter[1], -(pos[0] - myCenter[0])) * myScale;
 	}
 
 private:
-	Vec2R m_center;
-	Real m_scale;
+	Vec2R myCenter;
+	Real myScale;
 };
 
 ///////////////////////////////////
@@ -199,26 +200,28 @@ public:
 
 	void drawSimVectors(Renderer& renderer, Real dt = 1., Real radius = 10., const Vec3f& colour = Vec3f(0))
 	{
-		std::vector<Vec2R> start_points;
-		std::vector<Vec2R> end_points;
+		std::vector<Vec2R> startPoints;
+		std::vector<Vec2R> endPoints;
 
 		for (Real r = 0.0; r <= radius; r += radius / 10.)
 		{
-			for (Real theta = 0.0; theta < 2 * M_PI; theta += M_PI / 16.0)
+			for (Real theta = 0.0; theta < 2 * Util::PI; theta += Util::PI / 16.0)
 			{
-				Vec2R p0 = Vec2R(r * cos(theta), r * sin(theta));
-				Vec2R p1 = p0 + dt * (*this)(dt, p0);
+				Vec2R startPoint = Vec2R(r * cos(theta), r * sin(theta));
+				Vec2R endPoint = startPoint + dt * (*this)(dt, startPoint);
 
-				start_points.push_back(p0);
-				end_points.push_back(p1);
+				startPoints.push_back(startPoint);
+				endPoints.push_back(endPoint);
 			}
 		}
-		renderer.add_lines(start_points, end_points, colour);
+		renderer.addLines(startPoints, endPoints, colour);
 	};
 
 	// Procedural velocity field
 	inline Vec2R operator()(Real, const Vec2R& pos) const
 	{
-		return Vec2R((M_PI / 314.) * (50.0 - pos[1]), (M_PI / 314.) * (pos[0] - 50.0));
+		return Vec2R((Util::PI / 314.) * (50.0 - pos[1]), (Util::PI / 314.) * (pos[0] - 50.0));
 	}
 };
+
+#endif
