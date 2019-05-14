@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LIBRARY_INITIALCONDITIONS_H
+#define LIBRARY_INITIALCONDITIONS_H
 
 ///////////////////////////////////
 //
@@ -162,3 +163,5 @@ Mesh2D vortexMesh()
 
 	return Mesh2D(edges, verts);
 }
+
+#endif

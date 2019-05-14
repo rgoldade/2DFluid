@@ -1,15 +1,14 @@
-#pragma once
+#ifndef TESTS_ANALYTICALPOISSON_H
+#define TESTS_ANALYTICALPOISSON_H
 
 #include "Common.h"
-
-#include "ScalarGrid.h"
-#include "VectorGrid.h"
-#include "LevelSet2D.h"
-#include "Transform.h"
-
 #include "Integrator.h"
-#include "Solver.h"
+#include "LevelSet2D.h"
 #include "Renderer.h"
+#include "ScalarGrid.h"
+#include "Solver.h"
+#include "Transform.h"
+#include "VectorGrid.h"
 
 class AnalyticalPoissonSolver
 {
@@ -113,3 +112,5 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 
 	return error;
 }
+
+#endif

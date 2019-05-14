@@ -26,6 +26,8 @@ class Solver
 public:
 	Solver(unsigned rowcount, unsigned nonzeros = 0)
 	{
+		Eigen::initParallel();
+
 		myMatrix.reserve(nonzeros);
 		myRhs = Vector::Zero(rowcount);
 		mySolution = Vector::Zero(rowcount);
@@ -66,15 +68,14 @@ public:
 	}
 
 	//Call to solve linear system
-	bool solve()
+	bool solveDirect()
 	{
 		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
 		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
+
 		sparseMatrix.makeCompressed();
 		Eigen::SparseLU<Eigen::SparseMatrix<SolverReal>> solver;
 
-		/*solver.analyzePattern(sparseMatrix);
-		solver.factorize(sparseMatrix);*/
 		solver.compute(sparseMatrix);
 
 		if (solver.info() != Eigen::Success) return false;
@@ -130,34 +131,6 @@ public:
 		return true;
 	}
 
-	//Call to solve linear system
-	bool solve_nonsymmetric()
-	{
-		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
-		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
-		sparseMatrix.makeCompressed();
-		Eigen::SparseLU<Eigen::SparseMatrix<SolverReal>> solver;
-
-		solver.analyzePattern(sparseMatrix);
-		solver.factorize(sparseMatrix);
-		solver.compute(sparseMatrix);
-
-		if (solver.info() != Eigen::Success)
-		{
-			std::cout << "Solve failed on build" << std::endl;
-			return false;
-		}
-
-		mySolution = solver.solve(myRhs);
-
-		if (solver.info() != Eigen::Success)
-		{
-			std::cout << "Solve failed" << std::endl;
-			return false;
-		}
-
-		return true;
-	}
 
 	bool isSymmetric()
 	{
@@ -169,7 +142,11 @@ public:
 			for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
 			{
 				if (!Util::isEqual(sparseMatrix.coeff(it.row(), it.col()), sparseMatrix.coeff(it.col(), it.row())))
+				{
+					std::cout << "Value at row " << it.row() << ", col " << it.col() << " is " << sparseMatrix.coeff(it.row(), it.col()) << std::endl;
+					std::cout << "Value at row " << it.col() << ", col " << it.row() << " is " << sparseMatrix.coeff(it.col(), it.row()) << std::endl;
 					return false;
+				}
 			}
 
 		return true;
@@ -189,6 +166,26 @@ public:
 			}
 
 		return true;
+	}
+
+	void printMatrix(std::string filename) const
+	{
+		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
+		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
+		sparseMatrix.makeCompressed();
+
+		std::ofstream writer(filename);
+
+		if (writer)
+		{
+			for (int k = 0; k < sparseMatrix.outerSize(); ++k)
+				for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
+				{
+					writer << it.row() + 1 << " " << it.col() + 1 << " " << it.value() << "\n";
+				}
+		}
+		else
+			std::cerr << "Failed to write to file: " << filename << std::endl;
 	}
 
 private:

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.9)
 set (CMAKE_CXX_STANDARD 14)
 project(2DFluid)
 
@@ -9,7 +9,7 @@ SET(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
 
 find_package(OpenGL REQUIRED)
 
-find_package(OpenMP)
+find_package(OpenMP REQUIRED)
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -25,8 +25,6 @@ endif()
 if(MSVC)
 	include_directories( ${OPENGL_INCLUDE_DIR}  ${FREEGLUT_INCLUDE_DIR} )
 	link_libraries(${OPENGL_LIBRARY} ${FREEGLUT_LIBRARY} )
-	set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" "/MP")
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" "/MP")
 else()
 	include_directories( ${OPENGL_INCLUDE_DIRS}  ${GLUT_INCLUDE_DIRS} )
 	link_libraries(${OPENGL_LIBRARIES} ${GLUT_LIBRARIES} )

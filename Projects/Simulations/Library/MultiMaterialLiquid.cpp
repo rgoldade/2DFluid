@@ -1,5 +1,3 @@
-#include <limits>
-
 #include "MultiMaterialLiquid.h"
 
 #include "ComputeWeights.h"
@@ -81,9 +79,6 @@ void MultiMaterialLiquid::advectSurface(Real dt, IntegrationOrder integrator)
 	// Fix possible overlaps between the materials.
 	forEachVoxelRange(Vec2ui(0), myGridSize, [&](const Vec2ui& cell)
 	{
-		/*Real firstMin = std::min(mySurfaces[0](cell), myCollisionSurface(cell));
-		Real secondMin = std::max(mySurfaces[0](cell), myCollisionSurface(cell));*/
-
 		Real firstMin = std::min(mySurfaces[0](cell), myCollisionSurface(cell));
 		Real secondMin = std::max(mySurfaces[0](cell), myCollisionSurface(cell));
 
@@ -140,31 +135,19 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	Real dx = myCollisionSurface.dx();
 	forEachVoxelRange(Vec2ui(0), myGridSize, [&](const Vec2ui& cell)
 	{
-		// Extrapolate the closest fluid into the collision surfaces
-		if (myCollisionSurface(cell) <= 0.)
+		for (unsigned material = 0; material < myMaterialCount; ++material)
 		{
-			Real minSDF = std::numeric_limits<Real>::max();
-			unsigned minMaterial = -1;
-			for (unsigned material = 0; material < myMaterialCount; ++material)
-			{
-				Real localSDF = extrapolatedSurfaces[material](cell);
-
-				if (localSDF < minSDF)
-				{
-					minSDF = localSDF;
-					minMaterial = material;
-				}
-			}
-				
-			extrapolatedSurfaces[minMaterial](cell) -= dx;
+			if (myCollisionSurface(cell) <= 0. ||
+				(myCollisionSurface(cell) <= dx && mySurfaces[material](cell) <= 0))
+				extrapolatedSurfaces[material](cell) -= dx;
 		}
 	});
 
 	for (unsigned material = 0; material < myMaterialCount; ++material)
 		extrapolatedSurfaces[material].reinitMesh();
 
-	for (unsigned material = 0; material < myMaterialCount; ++material)
-		extrapolatedSurfaces[material].drawSurface(renderer);
+	//for (unsigned material = 0; material < myMaterialCount; ++material)
+	//	extrapolatedSurfaces[material].drawSurface(renderer);
 
 	std::cout << "  Extrapolate into solids: " << simTimer.stop() << "s" << std::endl;
 	
@@ -218,7 +201,39 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 			for (unsigned material = 0; material < myMaterialCount; ++material)
 				totalWeight += materialCutCellWeights[material](face, axis);
 
-			assert(Util::isEqual(totalWeight, 1.));
+			if (!Util::isEqual(totalWeight, 1.))
+			{
+				// If there is a zero total weight it is likely due to a fluid-fluid boundary
+				// falling exactly across a grid face. There should never be a zero weight
+				// along a fluid-solid boundary.
+
+				std::vector<unsigned> faceAlignedSurfaces;
+
+				unsigned otherAxis = (axis + 1) % 2;
+
+				Vec2R offset(0); offset[otherAxis] = .5;
+
+				for (unsigned material = 0; material < myMaterialCount; ++material)
+				{
+					Vec2R pos0 = materialCutCellWeights[material].indexToWorld(Vec2R(face) - offset, axis);
+					Vec2R pos1 = materialCutCellWeights[material].indexToWorld(Vec2R(face) + offset, axis);
+
+					Real weight = lengthFraction(mySurfaces[material].interp(pos0), mySurfaces[material].interp(pos1));
+
+					if (weight == 0)
+						faceAlignedSurfaces.push_back(material);
+				}
+
+				if (!(faceAlignedSurfaces.size() > 1))
+				{
+					
+					std::cout << "Zero weight problems!!!!!!!!!!!!!!" << std::endl;
+					exit(-1);
+				}
+				assert(faceAlignedSurfaces.size() > 1);
+
+				materialCutCellWeights[faceAlignedSurfaces[0]](face, axis) = 1.;
+			}
 		});
 	}
 
@@ -229,12 +244,11 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	// Solve for pressure for each material to return their velocities to an incompressible state
 	//
 
-	MultiMaterialPressureProjection pressureSolver(extrapolatedSurfaces, myVelocities, myDensities, myCollisionSurface);
+	BoydMultiMaterialPressureProjection pressureSolver(extrapolatedSurfaces, myVelocities, myDensities, myCollisionSurface);
 
 	pressureSolver.project(materialCutCellWeights, collisionCutCellWeight);
 	pressureSolver.applySolution(myVelocities, materialCutCellWeights);
 
-	pressureSolver.drawPressure(renderer);
 	std::cout << "  Solve for multi-material pressure: " << simTimer.stop() << "s" << std::endl;
 
 	simTimer.reset();
@@ -245,54 +259,27 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 
 	for (unsigned material = 0; material < myMaterialCount; ++material)
 	{
-		VectorGrid<Real> valid(myXform, myGridSize, 0, VectorGridSettings::SampleType::STAGGERED);
+		VectorGrid<MarkedCells> valid(myXform, myGridSize, MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
 
 		for (auto axis : { 0,1 })
 		{
 			forEachVoxelRange(Vec2ui(0), myVelocities[material].size(axis), [&](const Vec2ui& face)
 			{
 				if (materialCutCellWeights[material](face, axis) > 0.)
-					valid(face, axis) = 1;
+					valid(face, axis) = MarkedCells::FINISHED;
 			});
-		}
 
-		// Extrapolate velocity
-		ExtrapolateField<VectorGrid<Real>> extrapolator(myVelocities[material]);
-		extrapolator.extrapolate(valid, 5);
+			// Extrapolate velocity
+			ExtrapolateField<ScalarGrid<Real>> extrapolator(myVelocities[material].grid(axis));
+			extrapolator.extrapolate(valid.grid(axis), 5);
+		}
 	}
 
-	//for (auto axis : { 0,1 })
-	//{
-	//	Vec2ui velSize = myVelocities[0].size(axis);
-
-	//	forEachVoxelRange(Vec2ui(0), velSize, [&](const Vec2ui& face)
-	//	{
-	//		Real totalVelocity = 0.;
-	//		Real totalWeight = 0.;
-
-	//		for (unsigned material = 0; material < myMaterialCount; ++material)
-	//		{
-	//			Real localWeight = materialCutCellWeights[material](face, axis);
-	//			if (localWeight > 0.)
-	//			{
-	//				totalWeight += localWeight;
-	//				totalVelocity += localWeight * myVelocities[material](face, axis);
-	//			}
-	//		}
-
-	//		if (totalWeight > 0.)
-	//			totalVelocity /= totalWeight;
-
-	//		for (unsigned material = 0; material < myMaterialCount; ++material)
-	//			myVelocities[material](face, axis) = totalVelocity;
-	//	});
-	//}
-
-    std::cout << "  Extrapolate velocity: " << simTimer.stop() << "s" << std::endl;
-    simTimer.reset();
+	std::cout << "  Extrapolate velocity: " << simTimer.stop() << "s" << std::endl;
+	simTimer.reset();
     
-    advectSurface(dt, IntegrationOrder::RK3);
-    advectVelocity(dt, IntegrationOrder::RK3);
+	advectSurface(dt, IntegrationOrder::RK3);
+	advectVelocity(dt, IntegrationOrder::RK3);
 
-    std::cout << "  Advect simulation: " << simTimer.stop() << "s" << std::endl;
+	std::cout << "  Advect simulation: " << simTimer.stop() << "s" << std::endl;
 }

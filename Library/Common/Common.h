@@ -18,6 +18,8 @@ using Real = double;
 using Vec2R = Vec<Real, 2>;
 using Vec3R = Vec<Real, 3>;
 
+static constexpr Real MINTHETA = 0.01;
+
 // Helper arrays to iterate over neighbouring cells or faces
 static const Vec2i cellToCellArray[] = { Vec2i(-1,0), Vec2i(1,0), Vec2i(0,-1), Vec2i(0,1) };
 static const Vec2ui cellToFaceArray[] = { Vec2ui(0,0), Vec2ui(1,0), Vec2ui(0,0), Vec2ui(0,1) };
@@ -125,6 +127,16 @@ inline Vec2i nodeToFace(Vec2i node, const unsigned axis, const unsigned directio
 	return node;
 }
 
+inline Vec2i nodeToCell(Vec2i node, const unsigned cellIndex)
+{
+	if (cellIndex == 2 || cellIndex == 3)
+		--node[0];
+	if (cellIndex == 1 || cellIndex == 2)
+		--node[1];
+
+	return node;
+}
+
 static const Vec3f colours[] = { Vec3f(1., 0., 0.),
 									Vec3f(0., 1., 0.),
 									Vec3f(0., 0., 1.),
@@ -158,7 +170,7 @@ void forEachVoxelRange(const Vec<T, 2>& start, const Vec<T, 2>& end, const Funct
 }
 
 // BFS markers
-enum class MarkedCells { UNVISITED, VISITED, FINISHED };
+enum class MarkedCells { UNVISITED = -1, VISITED = 0, FINISHED = 1 };
 
 // The marching squares template uses a binary encoding of
 // inside/outside cell nodes to provide a set of

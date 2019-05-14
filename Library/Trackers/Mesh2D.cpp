@@ -4,6 +4,7 @@
 
 void Mesh2D::drawMesh(Renderer& renderer,
 	Vec3f edgeColour,
+	Real edgeWidth,
 	bool renderEdgeNormals,
 	bool renderVertices,
 	Vec3f vertexColour)
@@ -20,7 +21,7 @@ void Mesh2D::drawMesh(Renderer& renderer,
 		endPoints.push_back(end);
 	}
 
-	renderer.addLines(startPoints, endPoints, edgeColour);
+	renderer.addLines(startPoints, endPoints, edgeColour, edgeWidth);
 	
 	if (renderEdgeNormals)
 	{

@@ -137,7 +137,7 @@ public:
 	T interp(Real x, Real y, bool isIndexSpace = false) const { return interp(Vec2R(x, y), isIndexSpace); }
 	T interp(const Vec2R& pos, bool isIndexSpace = false) const;
 	
-	T cubicInterp(Real x, Real y, bool isIndexSpace = false, bool applyClamp = false) const { return cubic_interp(Vec2R(x, y), isIndexSpace, applyClamp); }
+	T cubicInterp(Real x, Real y, bool isIndexSpace = false, bool applyClamp = false) const { return cubicInterp(Vec2R(x, y), isIndexSpace, applyClamp); }
 	T cubicInterp(const Vec2R& pos, bool isIndexSpace = false, bool applyClamp = false) const;
 
 	// Converters between world space and local index space
@@ -174,6 +174,9 @@ public:
 	void drawSampleGradients(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
 	void drawVolumetric(Renderer& renderer, const Vec3f& minColour, const Vec3f& maxColour, T minVal, T maxVal) const;
 
+	void printAsCSV(std::string filename) const;
+	void printAsOBJ(std::string filename) const;
+
 private:
 
 	// The main interpolation call after the template specialized clamping passes
@@ -206,8 +209,8 @@ T ScalarGrid<T>::cubicInterp(const Vec2R& samplePoint, bool isIndexSpace, bool a
 	Vec2R floorPoint = floor(indexPoint);
 
 	// Revert to linear interpolation near the boundaries
-	if (floorPoint[0] < 1 || floorPoint[0] >= mySize[0] - 2 ||
-		floorPoint[1] < 1 || floorPoint[1] >= mySize[1] - 2)
+	if (floorPoint[0] < 1 || floorPoint[0] >= this->mySize[0] - 2 ||
+		floorPoint[1] < 1 || floorPoint[1] >= this->mySize[1] - 2)
 			return interp(indexPoint, true);
 
 	Vec2R dx = indexPoint - Vec2R(floorPoint);
@@ -316,8 +319,8 @@ void ScalarGrid<T>::drawGridCell(Renderer& renderer, const Vec2ui& cell, const V
 
 	for (int edge = 0; edge < 4; ++edge)
 	{
-		Vec2R nodePoint0 = indexToWorld(Vec2R(coord) - myCellOffset + edgeToNodeOffset[e][0]);
-		Vec2R nodePoint1 = indexToWorld(Vec2R(coord) - myCellOffset + edgeToNodeOffset[e][1]);
+		Vec2R nodePoint0 = indexToWorld(Vec2R(cell) - myCellOffset + edgeToNodeOffset[edge][0]);
+		Vec2R nodePoint1 = indexToWorld(Vec2R(cell) - myCellOffset + edgeToNodeOffset[edge][1]);
 		
 		startPoints.push_back(nodePoint0);
 		endPoints.push_back(nodePoint1);
@@ -395,7 +398,7 @@ void ScalarGrid<T>::drawSupersampledValues(Renderer& renderer, Real radius, unsi
 				Vec2R samplePoint = indexPoint + Vec2R(x, y);
 				Vec2R worldPoint = indexToWorld(samplePoint);
 
-				T val = (interp(worldPoint) - minSample) / maxSample;
+				T val = (interp(worldPoint) - minSample) / (maxSample - minSample);
 				renderer.addPoint(worldPoint, Vec3f(float(val), float(val), 0), size);
 			}
 	});
@@ -475,6 +478,74 @@ void ScalarGrid<T>::drawVolumetric(Renderer& renderer, const Vec3f& minColour, c
 	}
 
 	renderer.addQuads(quadVertices, pixelQuads, colours);
+}
+
+template<typename T>
+void ScalarGrid<T>::printAsCSV(std::string filename) const
+{
+	std::ofstream writer(filename);
+
+	if (writer)
+	{
+		for (unsigned i = 0; i < this->mySize[0]; ++i)
+		{
+			unsigned j = 0;
+			for (; j < this->mySize[1] - 1; ++j)
+			{
+				writer << this->myGrid[this->flatten(Vec2ui(i, j))] << ", ";
+			}
+			writer << this->myGrid[this->flatten(Vec2ui(i, j))];
+			writer << "\n";
+		}
+	}
+	else
+		std::cerr << "Failed to write to file: " << filename << std::endl;
+}
+
+template<typename T>
+void ScalarGrid<T>::printAsOBJ(std::string filename) const
+{
+	std::ofstream writer(filename);
+
+	// Print the grid as a heightfield in the y-axis.
+	if (writer)
+	{
+		// Print vertices first.
+		unsigned vertexCount = 0;
+		forEachVoxelRange(Vec2ui(0), this->mySize, [&](const Vec2ui& cell)
+		{
+			Vec2R position = indexToWorld(Vec2R(cell));
+
+			unsigned flatIndex = this->flatten(cell);
+			assert(this->unflatten(flatIndex) == cell);
+
+			writer << "v " << position[0] << " " << (*this)(cell) << " " << position[1] << "#" << vertexCount << "\n";
+
+			assert(flatIndex == vertexCount);
+			++vertexCount;
+		});
+
+		assert(vertexCount == Real(this->mySize[0] * this->mySize[1]));
+		// Print quad faces
+		forEachVoxelRange(Vec2ui(1), this->mySize, [&](const Vec2ui& node)
+		{
+			writer << "f";
+			for (int cellIndex = 0; cellIndex < 4; ++cellIndex)
+			{
+				Vec2i cell = nodeToCell(Vec2i(node), cellIndex);
+
+				unsigned quadVertexIndex = this->flatten(Vec2ui(cell));
+
+				assert(this->unflatten(quadVertexIndex) == Vec2ui(cell));
+
+				writer << " " << quadVertexIndex + 1;
+			}
+			writer << "\n";
+
+		});
+	}
+	else
+		std::cerr << "Failed to write to file: " << filename << std::endl;
 }
 
 #endif

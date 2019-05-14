@@ -183,18 +183,14 @@ void EulerianSmoke::runTimestep(Real dt, Renderer& renderer)
 	//
 
 	// Initialize and call pressure projection
-	PressureProjection projectdivergence(dt, dummySurface, myVelocity, myCollision, myCollisionVelocity);
-	// TODO: handle moving boundaries.
-
-	VectorGrid<Real> valid(myCollision.xform(), myCollision.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+	PressureProjection projectdivergence(dummySurface, myVelocity, myCollision, myCollisionVelocity);
 	
+	// TODO: handle moving boundaries.
 	projectdivergence.project(ghostFluidWeights, cutCellWeights);
 
 	// Update velocity field
 	projectdivergence.applySolution(myVelocity, ghostFluidWeights);
-
-	projectdivergence.applyValid(valid);
-
+	
 	std::cout << "Pressure projection: " << simTimer.stop() << "s" << std::endl;
 
 	simTimer.reset();

@@ -1,6 +1,5 @@
 add_library(2DFluidSimTools
 				ComputeWeights.cpp
-				ExtrapolateField.cpp
 				PressureProjection.cpp
 				ViscositySolver.cpp
 				Noise.cpp)

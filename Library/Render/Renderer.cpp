@@ -2,6 +2,8 @@
 
 #include <fstream>
 
+#include "simple_svg_1.0.0.hpp"
+
 // Helper struct because glut is a pain.
 // This is probably a very bad design choice
 // but glut doesn't make life easy.
@@ -226,7 +228,7 @@ void Renderer::addPoints(const std::vector<Vec2R>& points, const Vec3f& colour, 
 	myPointSize.push_back(size);
 }
 
-void Renderer::addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour)
+void Renderer::addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour, const Real width)
 {
 	std::vector<Vec2R> lineStarts; lineStarts.push_back(start);
 	std::vector<Vec2R> lineEnds; lineEnds.push_back(end);
@@ -234,14 +236,16 @@ void Renderer::addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour
 	myEndLines.push_back(lineEnds);
 
 	myLineColours.push_back(colour);
+	myLineSizes.push_back(width);
 }
 
-void Renderer::addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour)
+void Renderer::addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour, const Real width)
 {
 	assert(start.size() == end.size());
 	myStartLines.push_back(start);
 	myEndLines.push_back(end);
 	myLineColours.push_back(colour);
+	myLineSizes.push_back(width);
 }
 
 void Renderer::addTris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour)
@@ -267,6 +271,7 @@ void Renderer::clear()
 	myStartLines.clear();
 	myEndLines.clear();
 	myLineColours.clear();
+	myLineSizes.clear();
 
 	myTriVerts.clear();
 	myTriFaces.clear();
@@ -322,28 +327,32 @@ void Renderer::drawPrimitives() const
 			}
 		}
 	}
-	glEnd();
 
-	glBegin(GL_LINES);
+	glEnd();
 
 	unsigned lineListSize = myStartLines.size();
 	for (unsigned lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
 	{
 		Vec3f lineColour = myLineColours[lineListIndex];
+		
 		glColor3f(lineColour[0], lineColour[1], lineColour[2]);
+		glLineWidth(myLineSizes[lineListIndex]);
+		
+		glBegin(GL_LINES);
 
 		unsigned lineSublistSize = myStartLines[lineListIndex].size();
 		for (unsigned lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
 		{
-			Vec2R startriVertexIndexoint = myStartLines[lineListIndex][lineIndex];
+			Vec2R startPoint = myStartLines[lineListIndex][lineIndex];
 			Vec2R endPoint = myEndLines[lineListIndex][lineIndex];
 
-			glVertex2d(startriVertexIndexoint[0], startriVertexIndexoint[1]);
+			glVertex2d(startPoint[0], startPoint[1]);
 			glVertex2d(endPoint[0], endPoint[1]);
 		}
+
+		glEnd();
 	}
-	glEnd();	
-	
+		
 	unsigned pointListSize = myPoints.size();
 	for (unsigned pointListIndex = 0; pointListIndex < pointListSize; ++pointListIndex)
 	{
@@ -367,4 +376,106 @@ void Renderer::drawPrimitives() const
 void Renderer::run()
 {
 	glutMainLoop();
+}
+
+Real Renderer::pixelScale() const
+{
+	return Real(myWindowSize[1]) / myCurrentScreenHeight;
+}
+
+void Renderer::printImage(const std::string &filename) const
+{
+	Real scale = Real(myWindowSize[1]) / myCurrentScreenHeight;
+	svg::Point originOffset(-myCurrentScreenOrigin[0], -myCurrentScreenOrigin[1]);
+
+	svg::Document svgDocument(filename,
+		svg::Layout(svg::Dimensions(myWindowSize[0], myWindowSize[1]),
+			svg::Layout::BottomLeft,
+			scale, originOffset));
+	
+	// Draw rectangles
+	unsigned quadListSize = myQuadFaces.size();
+	for (unsigned quadListIndex = 0; quadListIndex < quadListSize; ++quadListIndex)
+	{
+		unsigned quadSublistSize = myQuadFaces[quadListIndex].size();
+		for (unsigned quadIndex = 0; quadIndex < quadSublistSize; ++quadIndex)
+		{
+			Vec3f quadColour = 255 * myQuadColours[quadListIndex][quadIndex];
+
+			Vec2R min(std::numeric_limits<Real>::max());
+			Vec2R max(std::numeric_limits<Real>::lowest());
+
+			for (unsigned quadVertexIndex = 0; quadVertexIndex < 4; ++quadVertexIndex)
+			{
+				unsigned meshVertexIndex = myQuadFaces[quadListIndex][quadIndex][quadVertexIndex];
+				Vec2R vertex = myQuadVerts[quadListIndex][meshVertexIndex];
+
+				updateMinAndMax(min, max, vertex);
+			}
+
+			svgDocument << svg::Rectangle(svg::Point(min[0], min[1]),
+				max[0] - min[0], max[1] - min[1],
+				svg::Color(quadColour[0], quadColour[1], quadColour[2]));
+		}
+	}
+
+	// Draw triangles
+	unsigned triListSize = myTriFaces.size();
+	for (unsigned triListIndex = 0; triListIndex < triListSize; ++triListIndex)
+	{
+		unsigned triSublistSize = myTriFaces[triListIndex].size();
+		for (unsigned triIndex = 0; triIndex < triSublistSize; ++triIndex)
+		{
+			Vec3f triColour = 255 * myTriColours[triListIndex][triIndex];
+			Vec2R points[3];
+
+			for (unsigned triVertexIndex = 0; triVertexIndex < 3; ++triVertexIndex)
+			{
+				unsigned meshVertexIndex = myTriFaces[triListIndex][triIndex][triVertexIndex];
+				points[triVertexIndex] = myTriVerts[triListIndex][meshVertexIndex];
+			}
+
+			svgDocument << (svg::Polygon(svg::Color(triColour[0], triColour[1], triColour[2]))
+				<< svg::Point(points[0][0], points[0][1])
+				<< svg::Point(points[1][0], points[1][1])
+				<< svg::Point(points[2][0], points[2][1]));
+		}
+	}
+
+	// Draw line segments
+	unsigned lineListSize = myStartLines.size();
+	for (unsigned lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
+	{
+		Vec3f lineColour = 255 * myLineColours[lineListIndex];
+
+		unsigned lineSublistSize = myStartLines[lineListIndex].size();
+		for (unsigned lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
+		{
+			Vec2R startPoint = myStartLines[lineListIndex][lineIndex];
+			Vec2R endPoint = myEndLines[lineListIndex][lineIndex];
+
+			svgDocument << svg::Line(svg::Point(startPoint[0], startPoint[1]),
+				svg::Point(endPoint[0], endPoint[1]),
+				svg::Stroke(myLineSizes[lineListIndex] / scale, svg::Color(lineColour[0], lineColour[1], lineColour[2])));
+		}
+	}
+
+	unsigned pointListSize = myPoints.size();
+	for (unsigned pointListIndex = 0; pointListIndex < pointListSize; ++pointListIndex)
+	{
+		Vec3f pointColour = 255 * myPointColours[pointListIndex];
+		Real pointSize = myPointSize[pointListIndex] / scale;
+
+		unsigned pointSublistSize = myPoints[pointListIndex].size();
+		for (unsigned pointIndex = 0; pointIndex < pointSublistSize; ++pointIndex)
+		{
+			Vec2R point = myPoints[pointListIndex][pointIndex];
+
+			svgDocument << svg::Circle(svg::Point(point[0], point[1]),
+				pointSize,
+				svg::Fill(svg::Color(pointColour[0], pointColour[1], pointColour[2])));
+		}
+	}
+
+	svgDocument.save();
 }

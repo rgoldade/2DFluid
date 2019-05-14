@@ -79,6 +79,7 @@ public:
 		
 	unsigned flatten(const Vec2ui& coord) const
 	{
+		assert(coord[0] < mySize[0] && coord[1] < mySize[1]);
 		return coord[1] + mySize[1] * coord[0];
 	}
 

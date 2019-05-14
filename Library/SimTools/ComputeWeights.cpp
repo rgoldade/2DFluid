@@ -17,8 +17,12 @@ VectorGrid<Real> computeGhostFluidWeights(const LevelSet2D& surface)
 			{
 				Real phiBackward = surface(Vec2ui(backwardCell));
 				Real phiForward = surface(Vec2ui(forwardCell));
-
-				ghostFluidWeights.grid(axis)(face) = lengthFraction(phiBackward, phiForward);
+				
+				if (phiBackward < 0 && phiForward < 0)
+					ghostFluidWeights(face, axis) = 1;
+				else if ((phiBackward < 0. && phiForward >= 0.) ||
+							(phiBackward >= 0. && phiForward < 0.))
+					ghostFluidWeights(face, axis) = lengthFraction(phiBackward, phiForward);
 			}
 		});
 	}
@@ -26,7 +30,7 @@ VectorGrid<Real> computeGhostFluidWeights(const LevelSet2D& surface)
 	return ghostFluidWeights;
 }
 
-VectorGrid<Real> computeCutCellWeights(const LevelSet2D& surface, bool invert)
+VectorGrid<Real> computeCutCellWeights(const LevelSet2D& surface, bool invert, Real minWeight)
 {
 	VectorGrid<Real> cutCellWeights(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 
@@ -45,7 +49,12 @@ VectorGrid<Real> computeCutCellWeights(const LevelSet2D& surface, bool invert)
 
 			if (invert) weight = 1. - weight;
 
+			// Clamp below zero and above one.
 			weight = Util::clamp(weight, 0., 1.);
+
+			// Now clamp any non-zero weight below the minimum weight to the minimum weight
+			if (weight > 0 && weight < minWeight)
+				weight = minWeight;
 
 			cutCellWeights(face, axis) = weight;
 		});

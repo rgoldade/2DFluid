@@ -1,7 +1,6 @@
 #include <limits>
 
 #include "MultiMaterialPressureProjection.h"
-
 #include "Solver.h"
 
 void MultiMaterialPressureProjection::drawPressure(Renderer &renderer) const

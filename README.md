@@ -1,24 +1,9 @@
-# 2dFluidSimulation
+# 2dFluid
 This is a 2D fluid simulation project based largley on the material found in Robert Bridson's textbook "Fluid Simulation for Computer Graphics, 2nd Edition". The code contains implementations for the staggered-grid Eulerian pressure projection and viscosity solve, as well as surface tracking methods for level sets, explicit simplicial meshes and fluid particles (markers, PIC, FLIP).
 
 To build the project in Linux, create a new folder in the root directly (usually "build"), type cmake .. then make. The binaries to run the simulations should compile in the ./bin folder. The project requires Eigen, tbb, and glut to be installed and findable.
 
 For VS, use the cmake-gui to generate the solution file. Make sure to include the path to your Eigen3, freeglut, and tbb folders.
-
-To-do:
-
-1. Add FLIP simulation scene (mechanics are present but no loop has be added to this repo).
-2. Make sure reseeding is deterministic (use a seed based on cell position, etc.,). This is important for repeatability.
-3. Add TBB parallelism to embarassingly parallel loops (e.g., labelling active cells for pressure projection or active faces for viscosity).
-4. Add a scene with moving collisions to demonstrate that it indeed works. (Currently presented in viscosity example)
-5. Add support and an example for variable viscosity.
-6. Test build with Mac.
-7. Consistency when indexing loops -- (i,j) or (x,y)
-
-Stretch to-do:
-
-1. Use pybind, swig or equivalent to script scene files and simulation loops in python.
-2. APIC velocity transfer.
 
 Legal stuff:
 

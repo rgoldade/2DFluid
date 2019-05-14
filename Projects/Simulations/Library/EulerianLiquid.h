@@ -1,5 +1,6 @@
-#pragma once
-#include <limits>
+#ifndef SIMULATIONS_EULERIANLIQUID_H
+#define SIMULATIONS_EULERIANLIQUID_H
+
 #include <vector>
 
 #include "AdvectField.h"
@@ -7,8 +8,8 @@
 #include "ExtrapolateField.h"
 #include "Integrator.h"
 #include "LevelSet2D.h"
-#include "Transform.h"
 #include "ScalarGrid.h"
+#include "Transform.h"
 #include "VectorGrid.h"
 
 ///////////////////////////////////
@@ -97,3 +98,5 @@ private:
 	bool myDoSolveViscosity;
 	Real mySurfaceTensionScale, myCFL;
 };
+
+#endif

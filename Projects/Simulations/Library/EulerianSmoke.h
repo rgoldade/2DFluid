@@ -1,5 +1,6 @@
-#pragma once
-#include <limits>
+#ifndef SIMULATIONS_EULERIANSMOKE_H
+#define SIMULATIONS_EULERIANSMOKE_H
+
 #include <vector>
 
 #include "AdvectField.h"

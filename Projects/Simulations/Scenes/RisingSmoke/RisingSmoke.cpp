@@ -1,5 +1,4 @@
 #include <memory>
-#include <iostream>
 
 #include "Common.h"
 #include "EulerianSmoke.h"
@@ -16,9 +15,10 @@ static std::unique_ptr<EulerianSmoke> simulator;
 static ScalarGrid<Real> smokeDensity;
 static ScalarGrid<Real> smokeTemperature;
 
-bool runSimulation = false;
-bool runSingleStep = false;
-bool isDisplayDirty = true;
+static bool runSimulation = false;
+static bool runSingleStep = false;
+static bool isDisplayDirty = true;
+static bool printFrame = false;
 
 static constexpr Real dt = 1./30.;
 static constexpr Real ambientTemperature = 300;
@@ -29,8 +29,9 @@ void display()
 	if (runSimulation || runSingleStep)
 	{
 		Real frameTime = 0.;
-		std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
+		std::cout << "\n\nStart of frame: " << frameCount << ". Timestep: " << dt << "\n" << std::endl;
 
+		int substep = 0;
 		while (frameTime < dt)
 		{
 			// Set CFL condition
@@ -55,7 +56,13 @@ void display()
 			simulator->setSmokeSource(smokeDensity, smokeTemperature);
 
 			frameTime += localDt;
+
+			++substep;
 		}
+
+		std::cout << "\n\nEnd of frame: " << frameCount << "\n" << std::endl;
+
+		++frameCount;
 
 		runSingleStep = false;
 		isDisplayDirty = true;
@@ -109,8 +116,8 @@ void setSmokeSource(const LevelSet2D &sourceVolume,
 
 			if (insideVolumeCount > 0)
 			{
-				Real temp_density = defaultDensity + .05 * Util::randhashd(cell[0] + cell[1] * sourceVolume.size()[0]);
-				Real temp_temperature = defaultTemperature + 50. * Util::randhashd(cell[0] + cell[1] * sourceVolume.size()[0]);
+				Real temp_density = defaultDensity;// +.05 * Util::randhashd(cell[0] + cell[1] * sourceVolume.size()[0]);
+				Real temp_temperature = defaultTemperature;// +50. * Util::randhashd(cell[0] + cell[1] * sourceVolume.size()[0]);
 				smokeDensity(cell) = temp_density * Real(insideVolumeCount) * sampleDx * sampleDx;
 				smokeTemperature(cell) = temp_temperature * Real(insideVolumeCount) * sampleDx * sampleDx;
 			}
@@ -149,7 +156,6 @@ int main(int argc, char** argv)
 	simulator->setCollisionVolume(solid);
 
 	// Set up source for smoke density and smoke temperature
-	//Mesh2D source_mesh = circle_mesh(center - Vec2R(0, 1.5), .5, 20);
 	Mesh2D sourceMesh = circleMesh(center - Vec2R(0, 2.), .25, 40);
 	LevelSet2D sourceVolume = LevelSet2D(xform, gridSize, 10);
 	sourceVolume.init(sourceMesh, false);

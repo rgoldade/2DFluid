@@ -17,16 +17,7 @@ void PressureProjection::project(const VectorGrid<Real>& ghostFluidWeights, cons
 	int liquidDOFCount = 0;
 	forEachVoxelRange(Vec2ui(0), myLiquidCells.size(), [&](const Vec2ui& cell)
 	{
-		Real sdf = mySurface(cell);
-		bool inFluid = (sdf <= 0.);
-		
-		// Implicit extrapolation of the fluid into the collision. This is an important piece
-		// of Batty et al. 2007. A cell whose center falls inside the solid could still have fluid
-		// in the cell. By extrapolating, we are sure to get all partially filled cells.
-		/*if (!inFluid)
-			if ((sdf + myCollision(cell)) < .5 * dx) inFluid = true;*/
-
-		if (inFluid)
+		if (mySurface(cell) <= 0)
 		{
 			for (auto axis : { 0,1 })
 				for (unsigned direction : {0, 1})
@@ -109,7 +100,8 @@ void PressureProjection::project(const VectorGrid<Real>& ghostFluidWeights, cons
 		}
 	});
 
-	bool result = solver.solve();
+	
+	bool result = solver.solveIterative();
 
 	if (!result)
 	{
@@ -123,6 +115,8 @@ void PressureProjection::project(const VectorGrid<Real>& ghostFluidWeights, cons
 		int row = myLiquidCells(cell);
 		if (row >= 0)
 			myPressure(cell) = solver.solution(row);
+		else
+			myPressure(cell) = 0;
 	});
 
 	// Set valid faces
@@ -139,10 +133,10 @@ void PressureProjection::project(const VectorGrid<Real>& ghostFluidWeights, cons
 			{
 				if ((myLiquidCells(Vec2ui(backwardCell)) >= 0 || myLiquidCells(Vec2ui(forwardCell)) >= 0) &&
 					cutCellWeights(face, axis) > 0)
-					myValid(face, axis) = 1;
-				else myValid(face, axis) = 0;
+					myValid(face, axis) = MarkedCells::FINISHED;
+				else myValid(face, axis) = MarkedCells::UNVISITED;
 			}
-			else myValid(face, axis) = 0;
+			else myValid(face, axis) = MarkedCells::UNVISITED;
 		});
 	}
 }
@@ -158,7 +152,7 @@ void PressureProjection::applySolution(VectorGrid<Real>& velocity, const VectorG
 		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
 		{
 			Real tempVel = 0;
-			if (myValid(face, axis) > 0)
+			if (myValid(face, axis) == MarkedCells::FINISHED)
 			{
 				Real theta = liquidWeights(face, axis);
 				theta = Util::clamp(theta, MINTHETA, Real(1.));
@@ -185,7 +179,7 @@ void PressureProjection::applySolution(VectorGrid<Real>& velocity, const VectorG
 	}
 }
 
-void PressureProjection::applyValid(VectorGrid<Real> &valid)
+void PressureProjection::applyValid(VectorGrid<MarkedCells> &valid)
 {
 	valid = myValid;
 }

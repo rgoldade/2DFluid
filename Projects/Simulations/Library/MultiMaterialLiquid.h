@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SIMULATIONS_MULTIMATERIALLIQUID_H
+#define SIMULATIONS_MULTIMATERIALLIQUID_H
 
 #include "AdvectField.h"
 #include "Common.h"
@@ -64,7 +65,7 @@ public:
 		return maxVelocity;
 	}
 
-    void setCollisionVolume(const LevelSet2D& collision);
+	void setCollisionVolume(const LevelSet2D& collision);
 
 	void setMaterial(const LevelSet2D &surface, const Real density, const unsigned material)
 	{
@@ -106,3 +107,5 @@ private:
 	const unsigned myMaterialCount;
 	unsigned myInitializedMaterialsCount;
 };
+
+#endif

@@ -41,15 +41,18 @@ public:
 	void addPoint(const Vec2R& point, const Vec3f& colour = Vec3f(0,0,0), Real size = 1.);
 	void addPoints(const std::vector<Vec2R>& points, const Vec3f& colour = Vec3f(0, 0, 0), Real size = 1.);
 
-	void addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour = Vec3f(0, 0, 0));
-	void addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour);
+	void addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour = Vec3f(0, 0, 0), const Real width = 1);
+	void addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour, const Real width = 1);
 	void addTris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour);
 	void addQuads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours);
 	
 	void drawPrimitives() const;
 
+	void printImage(const std::string &filename) const;
 	void clear();
 	void run();
+
+	Real pixelScale() const;
 
 private:
 
@@ -60,6 +63,7 @@ private:
 	std::vector<std::vector<Vec2R>> myStartLines;
 	std::vector<std::vector<Vec2R>> myEndLines;
 	std::vector<Vec3f> myLineColours;
+	std::vector<Real> myLineSizes;
 
 	std::vector<std::vector<Vec2R>> myTriVerts;
 	std::vector<std::vector<Vec3ui>> myTriFaces;

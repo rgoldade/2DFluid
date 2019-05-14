@@ -188,21 +188,14 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	simTimer.reset();
 
 	// Initialize and call pressure projection
-	PressureProjection projectdivergence(dt, extrapolatedSurface, myVelocity, myCollisionSurface, myCollisionVelocity);
-
-
-	//if (m_surfacetension_scale != 0.)
-	//{
-	//	const ScalarGrid<Real> surface_tension = m_surface.get_curvature();
-	//	projectdivergence.set_surface_pressure(surface_tension, m_st_scale);
-	//}
+	PressureProjection projectdivergence(extrapolatedSurface, myVelocity, myCollisionSurface, myCollisionVelocity);
 
 	projectdivergence.project(ghostFluidWeights, cutCellWeights);
 	
 	// Update velocity field
 	projectdivergence.applySolution(myVelocity, ghostFluidWeights);
 
-	VectorGrid<Real> valid(extrapolatedSurface.xform(), extrapolatedSurface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+	VectorGrid<MarkedCells> valid(extrapolatedSurface.xform(), extrapolatedSurface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
 	
 	if (myDoSolveViscosity)
 	{
@@ -231,14 +224,14 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 		simTimer.reset();
 
 		// Initialize and call pressure projection		
-		PressureProjection projectdivergence2(dt, extrapolatedSurface, myVelocity, myCollisionSurface, myCollisionVelocity);
+		PressureProjection projectdivergence2(extrapolatedSurface, myVelocity, myCollisionSurface, myCollisionVelocity);
 
-		projectdivergence.project(ghostFluidWeights, cutCellWeights);
+		projectdivergence2.project(ghostFluidWeights, cutCellWeights);
 
 		// Update velocity field
-		projectdivergence.applySolution(myVelocity, ghostFluidWeights);
+		projectdivergence2.applySolution(myVelocity, ghostFluidWeights);
 
-		projectdivergence.applyValid(valid);
+		projectdivergence2.applyValid(valid);
 
 		std::cout << "  Solve for pressure after viscosity: " << simTimer.stop() << "s" << std::endl;
 		
@@ -254,8 +247,11 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	}
 
 	// Extrapolate velocity
-	ExtrapolateField<VectorGrid<Real>> extrapolator(myVelocity);
-	extrapolator.extrapolate(valid, 1.5 * myCFL);
+	for (unsigned axis : {0, 1})
+	{
+		ExtrapolateField<ScalarGrid<Real>> extrapolator(myVelocity.grid(axis));
+		extrapolator.extrapolate(valid.grid(axis), 1.5 * myCFL);
+	}
 
 	std::cout << "  Extrapolate velocity: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();

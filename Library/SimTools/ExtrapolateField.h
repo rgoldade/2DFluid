@@ -32,36 +32,35 @@ public:
 		: myField(field)
 		{}
 
-	void extrapolate(const Field& mask, unsigned bandwidth = std::numeric_limits<unsigned>::max());
+	void extrapolate(const ScalarGrid<MarkedCells>& mask, unsigned bandwidth = std::numeric_limits<unsigned>::max());
 
 private:
 	Field& myField;
 };
 
-template<>
-void ExtrapolateField<VectorGrid<Real>>::extrapolate(const VectorGrid<Real>& mask, unsigned bandwidth);
+//template<>
+//void ExtrapolateField<VectorGrid<Real>>::extrapolate(const VectorGrid<MarkedCells>& mask, unsigned bandwidth);
 
 template<typename Field>
-void ExtrapolateField<Field>::extrapolate(const Field& mask, unsigned bandwidth)
+void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, unsigned bandwidth)
 {
 	// Run a BFS flood outwards from masked cells and average the values of the neighbouring "finished" cells
 	// It could be made more accurate if we used the value of the "closer" cell (smaller SDF value)
 	// It could be made more efficient if we truncated the BFS after a large enough distance (max SDF value)
 	assert(myField.isMatched(mask));
 
+	// Make local copy of mask
 	UniformGrid<MarkedCells> markedCells(myField.size(), MarkedCells::UNVISITED);
+
+	forEachVoxelRange(Vec2ui(0), myField.size(), [&](const Vec2ui& cell)
+	{
+		if (mask(cell) == MarkedCells::FINISHED) markedCells(cell) = MarkedCells::FINISHED;
+	});
 
 	using Voxel = std::pair<Vec2ui, unsigned>;
 
 	// Initialize flood fill queue
 	std::queue<Voxel> markerQ;
-
-	// If a face has fluid through it, the weight should be greater than zero
-	// and so it should be marked
-	forEachVoxelRange(Vec2ui(0), myField.size(), [&](const Vec2ui& cell)
-	{
-		if (mask(cell) > 0.) markedCells(cell) = MarkedCells::FINISHED;
-	});
 
 	// Load up neighbouring faces and push into queue
 	forEachVoxelRange(Vec2ui(0), myField.size(), [&](const Vec2ui& cell)

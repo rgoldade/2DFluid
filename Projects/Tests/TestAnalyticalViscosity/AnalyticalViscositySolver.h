@@ -1,12 +1,13 @@
-#pragma once
+#ifndef TESTS_ANALYTICALVISCOSITY_H
+#define TESTS_ANALYTICALVISCOSITY_H
 
 #include "Eigen/Sparse"
 
 #include "Common.h"
 #include "Renderer.h"
-#include "Transform.h"
 #include "ScalarGrid.h"
 #include "Solver.h"
+#include "Transform.h"
 #include "VectorGrid.h"
 
 ///////////////////////////////////
@@ -179,3 +180,5 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 	return error;
 }
+
+#endif

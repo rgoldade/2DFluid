@@ -325,10 +325,11 @@ public:
 	bool unitTest() const;
 
 	void drawMesh(Renderer& renderer,
-		Vec3f edge_colour = Vec3f(0),
-		bool render_edge_normals = false,
-		bool render_verts = false,
-		Vec3f vert_colour = Vec3f(0));
+		Vec3f edgeColour = Vec3f(0),
+		Real edgeWidth = 1.,
+		bool doRenderEdgeNormals = false,
+		bool doRenderVerts = false,
+		Vec3f vertColour = Vec3f(0));
 
 	template<typename VelocityField>
 	void advect(Real dt, const VelocityField& vel, const IntegrationOrder order);

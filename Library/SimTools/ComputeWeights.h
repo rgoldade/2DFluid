@@ -18,7 +18,7 @@
 ////////////////////////////////////
 
 VectorGrid<Real> computeGhostFluidWeights(const LevelSet2D& surface);
-VectorGrid<Real> computeCutCellWeights(const LevelSet2D &surface, bool invert = false);
+VectorGrid<Real> computeCutCellWeights(const LevelSet2D &surface, bool invert = false, Real minWeight = 0.01);
 ScalarGrid<Real> computeSupersampledAreas(const LevelSet2D& surface,
 	ScalarGridSettings::SampleType sampleType,
 	unsigned samples);

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef SIMULATIONS_MULTIMATERIALPRESSUREPROJECTION_H
+#define SIMULATIONS_MULTIMATERIALPRESSUREPROJECTION_H
 
 #include "Common.h"
 #include "LevelSet2D.h"
@@ -15,7 +16,6 @@
 ////////////////////////////////////
 
 static constexpr int UNSOLVED = -1;
-static constexpr Real MINTHETA = 0.01;
 
 class MultiMaterialPressureProjection
 {
