@@ -86,7 +86,7 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 		solver.addElement(row, row, -4.);
 	});
 
-	bool solved = solver.solve();
+	bool solved = solver.solveDirect();
 
 	if (!solved)
 	{

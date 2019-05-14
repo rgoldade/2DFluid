@@ -76,3 +76,5 @@ private:
     const LevelSet2D &myCollisionSurface;
     const unsigned myMaterialsCount;
 };
+
+#endif

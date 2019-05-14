@@ -244,7 +244,7 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	// Solve for pressure for each material to return their velocities to an incompressible state
 	//
 
-	BoydMultiMaterialPressureProjection pressureSolver(extrapolatedSurfaces, myVelocities, myDensities, myCollisionSurface);
+	MultiMaterialPressureProjection pressureSolver(extrapolatedSurfaces, myVelocities, myDensities, myCollisionSurface);
 
 	pressureSolver.project(materialCutCellWeights, collisionCutCellWeight);
 	pressureSolver.applySolution(myVelocities, materialCutCellWeights);

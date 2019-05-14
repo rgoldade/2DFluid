@@ -65,7 +65,7 @@ private:
 	LARGE_INTEGER StartingTime, EndingTime, ElapsedMicroseconds;
 	LARGE_INTEGER Frequency;
 #else
-	struct timeval myStart, myEend;
+	struct timeval myStart, myEnd;
 #endif
 };
 

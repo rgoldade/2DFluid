@@ -73,3 +73,5 @@ private:
 
 	Transform myXform;
 };
+
+#endif

@@ -156,7 +156,7 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 		});
 	}
 
-	bool solved = solver.solve();
+	bool solved = solver.solveDirect();
 
 	Real error = 0;
 

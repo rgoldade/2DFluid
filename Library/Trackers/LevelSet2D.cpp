@@ -31,16 +31,16 @@ void LevelSet2D::drawNormals(Renderer& renderer, const Vec3f& colour, Real lengt
 	myPhiGrid.drawSampleGradients(renderer, colour, length);
 }
 
-void LevelSet2D::drawSurface(Renderer& renderer, const Vec3f& colour)
+void LevelSet2D::drawSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth)
 {
 	Mesh2D surface = buildMSMesh();
-	surface.drawMesh(renderer, colour);
+	surface.drawMesh(renderer, colour, lineWidth);
 }
 
-void LevelSet2D::drawDCSurface(Renderer& renderer, const Vec3f& colour)
+void LevelSet2D::drawDCSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth)
 {
 	Mesh2D surface = buildDCMesh();
-	surface.drawMesh(renderer, colour, true, true, Vec3f(1.,0,0));
+	surface.drawMesh(renderer, colour, lineWidth);
 }
 
 // Find the nearest point on the interface starting from the index position.

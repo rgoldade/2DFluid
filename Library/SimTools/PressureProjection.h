@@ -30,8 +30,6 @@ public:
 		, myVelocity(vel)
 		, myCollision(collision)
 		, myCollisionVelocity(collisionVelocity)
-		, myPrintResiduals(false)
-		, myUseOldPressureAsGuess(false)
 	{
 		assert(surface.isMatched(collision));
 

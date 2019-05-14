@@ -204,7 +204,7 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 	assert(solver.isSymmetric());
 	assert(solver.isFinite());
 
-    bool result = solver.solve();
+    bool result = solver.solveDirect();
 
     if (!result)
     {
