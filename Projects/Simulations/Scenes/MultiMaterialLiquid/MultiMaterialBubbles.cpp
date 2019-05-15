@@ -69,7 +69,7 @@ void display()
     {
 		renderer->clear();
 		multiMaterialSimulator->drawMaterialSurface(*renderer, currentMaterial);
-		multiMaterialSimulator->drawCollisionSurface(*renderer);
+		multiMaterialSimulator->drawSolidSurface(*renderer);
 		multiMaterialSimulator->drawMaterialVelocity(*renderer, .5, currentMaterial);
 
 		isDisplayDirty = false;
@@ -150,7 +150,7 @@ int main(int argc, char** argv)
 
 	multiMaterialSimulator = std::make_unique<MultiMaterialLiquid>(xform, gridSize, 2, 5);
 
-	multiMaterialSimulator->setCollisionVolume(solidSurface);
+	multiMaterialSimulator->setSolidSurface(solidSurface);
 
 	multiMaterialSimulator->setMaterial(liquidSurface, 1000, 0);
 	multiMaterialSimulator->setMaterial(bubbleSurface, bubbleDensity, 1);

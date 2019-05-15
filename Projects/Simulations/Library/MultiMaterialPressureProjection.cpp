@@ -17,8 +17,8 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 
     const Vec2ui gridSize = mySurfaceList[0].size();
 
-    myMaterialLabels = UniformGrid<int>(myCollisionSurface.size(), UNSOLVED);
-    mySolverIndex = UniformGrid<int>(myCollisionSurface.size(), UNSOLVED);
+    myMaterialLabels = UniformGrid<int>(mySolidSurface.size(), UNSOLVED);
+    mySolverIndex = UniformGrid<int>(mySolidSurface.size(), UNSOLVED);
 
     // Determine which material a voxel falls into
     int liquidDOFCount = 0;
@@ -78,14 +78,14 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 
 			assert(minMaterial >= 0);
 
-			if (minDistance > 0) assert(myCollisionSurface(cell) <= 0);
+			if (minDistance > 0) assert(mySolidSurface(cell) <= 0);
 
 			mySolverIndex(cell) = liquidDOFCount++;
 			myMaterialLabels(cell) = minMaterial;
 
 		}
 		else
-			assert(myCollisionSurface(cell) <= 0);
+			assert(mySolidSurface(cell) <= 0);
     });
 
     Solver<true> solver(liquidDOFCount, liquidDOFCount * 5);

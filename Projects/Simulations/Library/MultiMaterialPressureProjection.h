@@ -27,7 +27,7 @@ public:
     : mySurfaceList(surface)
     , myVelocityList(velocity)
     , myDensityList(density)
-    , myCollisionSurface(collision)
+    , mySolidSurface(collision)
     , myMaterialsCount(surface.size())
     {
 		assert(mySurfaceList.size() == myVelocityList.size() &&
@@ -47,10 +47,10 @@ public:
 				myVelocityList[0].size(1)[0] == mySurfaceList[0].size()[0] &&
 				myVelocityList[0].size(1)[1] - 1 == mySurfaceList[0].size()[1]);
 
-		assert(mySurfaceList[0].isMatched(myCollisionSurface));
+		assert(mySurfaceList[0].isMatched(mySolidSurface));
 
-		myPressure = ScalarGrid<Real>(myCollisionSurface.xform(), myCollisionSurface.size(), 0);
-		myValid = VectorGrid<Real>(myCollisionSurface.xform(), myCollisionSurface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+		myPressure = ScalarGrid<Real>(mySolidSurface.xform(), mySolidSurface.size(), 0);
+		myValid = VectorGrid<Real>(mySolidSurface.xform(), mySolidSurface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
     }
 
     void project(const std::vector<VectorGrid<Real>> &materialCutCellWeights,
@@ -73,7 +73,7 @@ private:
     const std::vector<VectorGrid<Real>> &myVelocityList;
     const std::vector<Real> &myDensityList;
 
-    const LevelSet2D &myCollisionSurface;
+    const LevelSet2D &mySolidSurface;
     const unsigned myMaterialsCount;
 };
 

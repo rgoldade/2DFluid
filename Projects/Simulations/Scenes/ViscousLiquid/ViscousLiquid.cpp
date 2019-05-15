@@ -84,15 +84,15 @@ void display()
 			combinedSolidSurface.init(staticSolidsMesh, false);
 			combinedSolidSurface.unionSurface(movindSolidsSurface);
 
-			simulator->setCollisionVolume(combinedSolidSurface);
-			simulator->setCollisionVelocity(movingSolidVelocity);
+			simulator->setSolidSurface(combinedSolidSurface);
+			simulator->setSolidVelocity(movingSolidVelocity);
 
 
 			simulator->setViscosity(30.);
 			// Projection set unfortunately includes viscosity at the moment
 			simulator->runTimestep(localDt, *renderer);
 
-			simulator->addSurfaceVolume(seedLiquidSurface);
+			simulator->unionLiquidSurface(seedLiquidSurface);
 
 			frameTime += localDt;
 		}
@@ -105,8 +105,8 @@ void display()
 	{
 		renderer->clear();
 
-		simulator->drawSurface(*renderer);
-		simulator->drawCollisionSurface(*renderer);
+		simulator->drawLiquidSurface(*renderer);
+		simulator->drawSolidSurface(*renderer);
 
 		isDisplayDirty = false;
 
@@ -158,9 +158,9 @@ int main(int argc, char** argv)
 
 	// Set up simulation
 	simulator = std::unique_ptr<EulerianLiquid>(new EulerianLiquid(xform, gridSize, 10));
-	simulator->setSurfaceVolume(beamLiquidSurface);
-	simulator->addSurfaceVolume(seedLiquidSurface);
-	simulator->setCollisionVolume(solidSurface);
+	simulator->setLiquidSurface(beamLiquidSurface);
+	simulator->unionLiquidSurface(seedLiquidSurface);
+	simulator->setSolidSurface(solidSurface);
 
 	// Set up simulation
 	solidSimulator = std::unique_ptr<CircularSim2D>(new CircularSim2D(center, .5));

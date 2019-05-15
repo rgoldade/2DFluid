@@ -30,43 +30,44 @@ public:
 	EulerianSmoke(const Transform& xform, Vec2ui size, Real ambienttemp = 300)
 		: myXform(xform), myAmbientTemperature(ambienttemp)
 	{
-		myVelocity = VectorGrid<Real>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
-		myCollisionVelocity = VectorGrid<Real>(myXform, size, 0., VectorGridSettings::SampleType::STAGGERED);
+		myFluidVelocity = VectorGrid<Real>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
+		mySolidVelocity = VectorGrid<Real>(myXform, size, 0., VectorGridSettings::SampleType::STAGGERED);
 
-		myCollision = LevelSet2D(myXform, size, 5);
+		mySolidSurface = LevelSet2D(myXform, size, 5);
 
 		mySmokeDensity = ScalarGrid<Real>(myXform, size, 0);
 		mySmokeTemperature = ScalarGrid<Real>(myXform, size, myAmbientTemperature);
 	}
 
-	void setCollisionVolume(const LevelSet2D& collision);
-	void setCollisionVelocity(const VectorGrid<Real>& collision_vel);
+	void setSolidSurface(const LevelSet2D& solidSurface);
+	void setSolidVelocity(const VectorGrid<Real>& solidVelocity);
 
-	void setSmokeVelocity(const VectorGrid<Real>& vel);
+	void setFluidVelocity(const VectorGrid<Real>& vel);
 
 	void setSmokeSource(const ScalarGrid<Real>& density, const ScalarGrid<Real>& temperature);
 
-	void advectSmoke(Real dt, const InterpolationOrder& order);
-	void advectVelocity(Real dt, const InterpolationOrder& order);
+	void advectFluidDensity(Real dt, const InterpolationOrder& order);
+	void advectFluidVelocity(Real dt, const InterpolationOrder& order);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
 	void runTimestep(Real dt, Renderer& renderer);
 
 	// Useful for CFL
-	Real maxVelocityMagnitude() { return myVelocity.maxMagnitude(); }
+	Real maxVelocityMagnitude() { return myFluidVelocity.maxMagnitude(); }
 
 	// Rendering tools
 	void drawGrid(Renderer& renderer) const;
-	void drawSmoke(Renderer& renderer, Real maxDensity);
-	void drawCollisionSurface(Renderer& renderer);
-	void drawCollisionVelocity(Renderer& renderer, Real length) const;
-	void drawVelocity(Renderer& renderer, Real length) const;
+	void drawFluidDensity(Renderer& renderer, Real maxDensity);
+	void drawFluidVelocity(Renderer& renderer, Real length) const;
+
+	void drawSolidSurface(Renderer& renderer);
+	void drawSolidVelocity(Renderer& renderer, Real length) const;
 
 private:
 
 	// Simulation containers
-	VectorGrid<Real> myVelocity, myCollisionVelocity;
-	LevelSet2D myCollision;
+	VectorGrid<Real> myFluidVelocity, mySolidVelocity;
+	LevelSet2D mySolidSurface;
 	ScalarGrid<Real> mySmokeDensity, mySmokeTemperature;
 
 	Real myAmbientTemperature;

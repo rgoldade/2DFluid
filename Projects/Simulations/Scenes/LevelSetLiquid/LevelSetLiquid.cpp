@@ -53,7 +53,7 @@ void display()
 
 				LevelSet2D seedSurface = LevelSet2D(xform, gridSize, 5);
 				seedSurface.init(seedMesh, false);
-				simulator->addSurfaceVolume(seedSurface);
+				simulator->unionLiquidSurface(seedSurface);
 				seedTime = 0.;
 			}
 			
@@ -75,8 +75,8 @@ void display()
 	{
 		renderer->clear();
 
-		simulator->drawSurface(*renderer);
-		simulator->drawCollisionSurface(*renderer);
+		simulator->drawLiquidSurface(*renderer);
+		simulator->drawSolidSurface(*renderer);
 
 		isDisplayDirty = false;
 
@@ -121,8 +121,8 @@ int main(int argc, char** argv)
 	
 	// Set up simulation
 	simulator = std::unique_ptr<EulerianLiquid>(new EulerianLiquid(xform, gridSize, 10));
-	simulator->setSurfaceVolume(liquidSurface);
-	simulator->setCollisionVolume(solidSurface);
+	simulator->unionLiquidSurface(liquidSurface);
+	simulator->setSolidSurface(solidSurface);
 
 	std::function<void()> displayFunc = display;
 	renderer->setUserDisplay(displayFunc);

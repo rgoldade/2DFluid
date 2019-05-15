@@ -7,17 +7,17 @@
 
 void MultiMaterialLiquid::drawMaterialSurface(Renderer& renderer, unsigned material)
 {
-	mySurfaces[material].drawSurface(renderer, Vec3f(0., 0., 1.0));
+	myFluidSurfaces[material].drawSurface(renderer, Vec3f(0., 0., 1.0));
 }
 
 void MultiMaterialLiquid::drawMaterialVelocity(Renderer& renderer, Real length, unsigned material) const
 {
-	myVelocities[material].drawSamplePointVectors(renderer, Vec3f(0), myVelocities[material].dx() * length);
+	myFluidVelocities[material].drawSamplePointVectors(renderer, Vec3f(0), myFluidVelocities[material].dx() * length);
 }
 
-void MultiMaterialLiquid::drawCollisionSurface(Renderer &renderer)
+void MultiMaterialLiquid::drawSolidSurface(Renderer &renderer)
 {
-    myCollisionSurface.drawSurface(renderer, Vec3f(1.,0.,1.));
+    mySolidSurface.drawSurface(renderer, Vec3f(1.,0.,1.));
 }
 
 template<typename ForceSampler>
@@ -25,12 +25,12 @@ void MultiMaterialLiquid::addForce(const Real dt, const unsigned material, const
 {
 	for (auto axis : { 0,1 })
     {
-		Vec2ui size = myVelocities[material].size(axis);
+		Vec2ui size = myFluidVelocities[material].size(axis);
 
 		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
 		{
-			Vec2R worldPosition = myVelocities[material].indexToWorld(Vec2R(face), axis);
-			myVelocities[material](face, axis) += dt * force(worldPosition, axis);
+			Vec2R worldPosition = myFluidVelocities[material].indexToWorld(Vec2R(face), axis);
+			myFluidVelocities[material](face, axis) += dt * force(worldPosition, axis);
 		});
     }
 }
@@ -40,53 +40,53 @@ void MultiMaterialLiquid::addForce(const Real dt, const unsigned material, const
     addForce(dt, material, [&](Vec2R, unsigned axis) { return force[axis]; });
 }
 
-void MultiMaterialLiquid::advectVelocity(Real dt, IntegrationOrder integrator, InterpolationOrder interpolator)
+void MultiMaterialLiquid::advectFluidVelocities(Real dt, IntegrationOrder integrator, InterpolationOrder interpolator)
 {
-    VectorGrid<Real> tempVelocity;
+    VectorGrid<Real> localVelocity;
     for (unsigned material = 0; material < myMaterialCount; ++material)
     {
 		auto velocityFunc = [&](Real, const Vec2R& point)
 		{
-			return myVelocities[material].interp(point);
+			return myFluidVelocities[material].interp(point);
 		};
 
-		tempVelocity = VectorGrid<Real>(myVelocities[material].xform(), myVelocities[material].gridSize(), VectorGridSettings::SampleType::STAGGERED);
+		localVelocity = VectorGrid<Real>(myFluidVelocities[material].xform(), myFluidVelocities[material].gridSize(), VectorGridSettings::SampleType::STAGGERED);
 
 		for (auto axis : { 0,1 })
 		{
-			AdvectField<ScalarGrid<Real>> advector(myVelocities[material].grid(axis));
-			advector.advectField(dt, tempVelocity.grid(axis), velocityFunc, integrator, interpolator);
+			AdvectField<ScalarGrid<Real>> advector(myFluidVelocities[material].grid(axis));
+			advector.advectField(dt, localVelocity.grid(axis), velocityFunc, integrator, interpolator);
 		}
 
-		std::swap(myVelocities[material], tempVelocity);
+		std::swap(myFluidVelocities[material], localVelocity);
     }
 }
 
-void MultiMaterialLiquid::advectSurface(Real dt, IntegrationOrder integrator)
+void MultiMaterialLiquid::advectFluidSurfaces(Real dt, IntegrationOrder integrator)
 {
     for (unsigned material = 0; material < myMaterialCount; ++material)
     {
 		auto velocityFunc = [&](Real, const Vec2R& point)
 		{
-			return myVelocities[material].interp(point);
+			return myFluidVelocities[material].interp(point);
 		};
 
-		Mesh2D tempMesh = mySurfaces[material].buildMSMesh();
-		tempMesh.advect(dt, velocityFunc, integrator);
-		mySurfaces[material].init(tempMesh, false);
+		Mesh2D localMesh = myFluidSurfaces[material].buildMSMesh();
+		localMesh.advect(dt, velocityFunc, integrator);
+		myFluidSurfaces[material].init(localMesh, false);
     }
 
 	// Fix possible overlaps between the materials.
 	forEachVoxelRange(Vec2ui(0), myGridSize, [&](const Vec2ui& cell)
 	{
-		Real firstMin = std::min(mySurfaces[0](cell), myCollisionSurface(cell));
-		Real secondMin = std::max(mySurfaces[0](cell), myCollisionSurface(cell));
+		Real firstMin = std::min(myFluidSurfaces[0](cell), mySolidSurface(cell));
+		Real secondMin = std::max(myFluidSurfaces[0](cell), mySolidSurface(cell));
 
 		if (myMaterialCount > 1)
 		{
 			for (unsigned material = 1; material < myMaterialCount; ++material)
 			{
-				Real localMin = mySurfaces[material](cell);
+				Real localMin = myFluidSurfaces[material](cell);
 				if (localMin < firstMin)
 				{
 					secondMin = firstMin;
@@ -99,22 +99,21 @@ void MultiMaterialLiquid::advectSurface(Real dt, IntegrationOrder integrator)
 		Real avgSDF = .5 * (firstMin + secondMin);
 
 		for (unsigned material = 0; material < myMaterialCount; ++material)
-			mySurfaces[material](cell) -= avgSDF;
+			myFluidSurfaces[material](cell) -= avgSDF;
 	});
 
 	for (unsigned material = 0; material < myMaterialCount; ++material)
-		mySurfaces[material].reinitMesh();
+		myFluidSurfaces[material].reinitMesh();
 }
 
-void MultiMaterialLiquid::setCollisionVolume(const LevelSet2D &collision)
+void MultiMaterialLiquid::setSolidSurface(const LevelSet2D &solidSurface)
 {
-    assert(collision.inverted());
+    assert(solidSurface.inverted());
 
-    Mesh2D tempMesh = collision.buildDCMesh();
+    Mesh2D localMesh = solidSurface.buildDCMesh();
     
-    // TODO : consider making collision node sampled
-    myCollisionSurface.setInverted();
-    myCollisionSurface.init(tempMesh, false);
+    mySolidSurface.setInverted();
+    mySolidSurface.init(localMesh, false);
 }
 
 void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
@@ -130,15 +129,15 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	std::vector<LevelSet2D> extrapolatedSurfaces(myMaterialCount);
 
 	for (unsigned material = 0; material < myMaterialCount; ++material)
-		extrapolatedSurfaces[material] = mySurfaces[material];
+		extrapolatedSurfaces[material] = myFluidSurfaces[material];
 
-	Real dx = myCollisionSurface.dx();
+	Real dx = mySolidSurface.dx();
 	forEachVoxelRange(Vec2ui(0), myGridSize, [&](const Vec2ui& cell)
 	{
 		for (unsigned material = 0; material < myMaterialCount; ++material)
 		{
-			if (myCollisionSurface(cell) <= 0. ||
-				(myCollisionSurface(cell) <= dx && mySurfaces[material](cell) <= 0))
+			if (mySolidSurface(cell) <= 0. ||
+				(mySolidSurface(cell) <= dx && myFluidSurfaces[material](cell) <= 0))
 				extrapolatedSurfaces[material](cell) -= dx;
 		}
 	});
@@ -159,20 +158,20 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	// one.
 	//
 
-	VectorGrid<Real> collisionCutCellWeight = computeCutCellWeights(myCollisionSurface);
+	VectorGrid<Real> solidCutCellWeights = computeCutCellWeights(mySolidSurface);
 
 	std::vector<VectorGrid<Real>> materialCutCellWeights(myMaterialCount);
 
 	for (unsigned material = 0; material < myMaterialCount; ++material)
 		materialCutCellWeights[material] = computeCutCellWeights(extrapolatedSurfaces[material]);
 
-	// Now normalize the weights, removing the collision contribution first.
+	// Now normalize the weights, removing the solid boundary contribution first.
 	for (auto axis : { 0,1 })
 	{
-		forEachVoxelRange(Vec2ui(0), myVelocities[0].size(axis), [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2ui(0), myFluidVelocities[0].size(axis), [&](const Vec2ui& face)
 		{
 			Real weight = 1;
-			weight -= collisionCutCellWeight(face, axis);
+			weight -= solidCutCellWeights(face, axis);
 			weight = Util::clamp(weight, 0., weight);
 
 			if (weight > 0)
@@ -196,7 +195,7 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 			}
 
 			// Debug check
-			Real totalWeight = collisionCutCellWeight(face, axis);
+			Real totalWeight = solidCutCellWeights(face, axis);
 
 			for (unsigned material = 0; material < myMaterialCount; ++material)
 				totalWeight += materialCutCellWeights[material](face, axis);
@@ -218,7 +217,7 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 					Vec2R pos0 = materialCutCellWeights[material].indexToWorld(Vec2R(face) - offset, axis);
 					Vec2R pos1 = materialCutCellWeights[material].indexToWorld(Vec2R(face) + offset, axis);
 
-					Real weight = lengthFraction(mySurfaces[material].interp(pos0), mySurfaces[material].interp(pos1));
+					Real weight = lengthFraction(myFluidSurfaces[material].interp(pos0), myFluidSurfaces[material].interp(pos1));
 
 					if (weight == 0)
 						faceAlignedSurfaces.push_back(material);
@@ -226,8 +225,7 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 
 				if (!(faceAlignedSurfaces.size() > 1))
 				{
-					
-					std::cout << "Zero weight problems!!!!!!!!!!!!!!" << std::endl;
+					std::cout << "Zero weight problems!!" << std::endl;
 					exit(-1);
 				}
 				assert(faceAlignedSurfaces.size() > 1);
@@ -244,10 +242,10 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	// Solve for pressure for each material to return their velocities to an incompressible state
 	//
 
-	MultiMaterialPressureProjection pressureSolver(extrapolatedSurfaces, myVelocities, myDensities, myCollisionSurface);
+	MultiMaterialPressureProjection pressureSolver(extrapolatedSurfaces, myFluidVelocities, myFluidDensities, mySolidSurface);
 
-	pressureSolver.project(materialCutCellWeights, collisionCutCellWeight);
-	pressureSolver.applySolution(myVelocities, materialCutCellWeights);
+	pressureSolver.project(materialCutCellWeights, solidCutCellWeights);
+	pressureSolver.applySolution(myFluidVelocities, materialCutCellWeights);
 
 	std::cout << "  Solve for multi-material pressure: " << simTimer.stop() << "s" << std::endl;
 
@@ -263,14 +261,14 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 
 		for (auto axis : { 0,1 })
 		{
-			forEachVoxelRange(Vec2ui(0), myVelocities[material].size(axis), [&](const Vec2ui& face)
+			forEachVoxelRange(Vec2ui(0), myFluidVelocities[material].size(axis), [&](const Vec2ui& face)
 			{
 				if (materialCutCellWeights[material](face, axis) > 0.)
 					valid(face, axis) = MarkedCells::FINISHED;
 			});
 
 			// Extrapolate velocity
-			ExtrapolateField<ScalarGrid<Real>> extrapolator(myVelocities[material].grid(axis));
+			ExtrapolateField<ScalarGrid<Real>> extrapolator(myFluidVelocities[material].grid(axis));
 			extrapolator.extrapolate(valid.grid(axis), 5);
 		}
 	}
@@ -278,8 +276,8 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	std::cout << "  Extrapolate velocity: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();
     
-	advectSurface(dt, IntegrationOrder::RK3);
-	advectVelocity(dt, IntegrationOrder::RK3);
+	advectFluidSurfaces(dt, IntegrationOrder::RK3);
+	advectFluidVelocities(dt, IntegrationOrder::RK3);
 
 	std::cout << "  Advect simulation: " << simTimer.stop() << "s" << std::endl;
 }

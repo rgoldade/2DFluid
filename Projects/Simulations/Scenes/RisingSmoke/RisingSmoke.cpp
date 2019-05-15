@@ -71,8 +71,8 @@ void display()
 	{
 		renderer->clear();
 
-		simulator->drawSmoke(*renderer, 1);
-		simulator->drawCollisionSurface(*renderer);
+		simulator->drawFluidDensity(*renderer, 1);
+		simulator->drawSolidSurface(*renderer);
 
 		isDisplayDirty = false;
 
@@ -153,7 +153,7 @@ int main(int argc, char** argv)
 	solid.init(solidMesh, false);
 
 	simulator = std::make_unique<EulerianSmoke>(xform, gridSize, 300);
-	simulator->setCollisionVolume(solid);
+	simulator->setSolidSurface(solid);
 
 	// Set up source for smoke density and smoke temperature
 	Mesh2D sourceMesh = circleMesh(center - Vec2R(0, 2.), .25, 40);

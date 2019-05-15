@@ -8,14 +8,14 @@
 void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 							ScalarGrid<Real>& centerVolumes,
 							ScalarGrid<Real>& nodeVolumes,
-							const ScalarGrid<Real>& collisionCenterVolumes,
-							const ScalarGrid<Real>& collisionNodeVolumes)
+							const ScalarGrid<Real>& solidCenterVolumes,
+							const ScalarGrid<Real>& solidNodeVolumes)
 {
 	// Debug check that grids are the same
 	assert(myVelocity.isMatched(faceVolumes));
 	assert(mySurface.isMatched(centerVolumes));
-	assert(mySurface.isMatched(collisionCenterVolumes));
-	assert(mySurface.size() + Vec2ui(1) == collisionNodeVolumes.size());
+	assert(mySurface.isMatched(solidCenterVolumes));
+	assert(mySurface.size() + Vec2ui(1) == solidNodeVolumes.size());
 	assert(mySurface.size() + Vec2ui(1) == nodeVolumes.size());
 
 	VectorGrid<int> liquidFaces(mySurface.xform(), mySurface.size(), UNSOLVED, VectorGridSettings::SampleType::STAGGERED);
@@ -53,8 +53,8 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 
 			if (inSolve)
 			{
-				if (myCollisionSurface.interp(liquidFaces.indexToWorld(Vec2R(face), axis)) <= 0.)
-					liquidFaces(face, axis) = COLLISION;
+				if (mySolidSurface.interp(liquidFaces.indexToWorld(Vec2R(face), axis)) <= 0.)
+					liquidFaces(face, axis) = SOLIDBOUNDARY;
 				else
 					liquidFaces(face, axis) = liquidDOFCount++;
 			}
@@ -68,7 +68,7 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 		{
 			centerVolumes(cell) *= myDt * invDx2;
 			centerVolumes(cell) *= myViscosity(cell);
-			centerVolumes(cell) *= Util::clamp(collisionCenterVolumes(cell), 0.01, 1.);
+			centerVolumes(cell) *= Util::clamp(solidCenterVolumes(cell), 0.01, 1.);
 		});
 	}
 
@@ -77,7 +77,7 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 		{
 			nodeVolumes(node) *= myDt * invDx2;
 			nodeVolumes(node) *= myViscosity.interp(nodeVolumes.indexToWorld(Vec2R(node)));
-			nodeVolumes(node) *= Util::clamp(collisionNodeVolumes(node), 0.01, 1.);
+			nodeVolumes(node) *= Util::clamp(solidNodeVolumes(node), 0.01, 1.);
 		});
 	}
 
@@ -123,8 +123,8 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 						int faceIndex = liquidFaces(adjacentFace, axis);
 						if (faceIndex >= 0)
 							solver.addElement(index, faceIndex, -centerSign * faceSign * coeff);
-						else if (faceIndex == COLLISION)
-							solver.addRhs(index, centerSign * faceSign * coeff * myCollisionVelocity(adjacentFace, axis));
+						else if (faceIndex == SOLIDBOUNDARY)
+							solver.addRhs(index, centerSign * faceSign * coeff * mySolidVelocity(adjacentFace, axis));
 					}
 				}
 
@@ -151,8 +151,8 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 
 								if (faceIndex >= 0)
 									solver.addElement(index, faceIndex, -nodeSign * faceSign * coeff);
-								else if (faceIndex == COLLISION)
-									solver.addRhs(index, nodeSign * faceSign * coeff * myCollisionVelocity(Vec2ui(adjacentFace), faceAxis));
+								else if (faceIndex == SOLIDBOUNDARY)
+									solver.addRhs(index, nodeSign * faceSign * coeff * mySolidVelocity(Vec2ui(adjacentFace), faceAxis));
 							}
 						}
 				}
@@ -178,8 +178,8 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 			int index = liquidFaces(face, axis);
 			if (index >= 0)
 				myVelocity(face, axis) = solver.solution(index);
-			else if (index == COLLISION)
-				myVelocity(face, axis) = myCollisionVelocity(face, axis);
+			else if (index == SOLIDBOUNDARY)
+				myVelocity(face, axis) = mySolidVelocity(face, axis);
 		});
 	}
 }

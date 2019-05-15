@@ -30,67 +30,64 @@ public:
 	EulerianLiquid(const Transform& xform, Vec2ui size, Real cfl = 5.)
 		: myXform(xform)
 		, myDoSolveViscosity(false)
-		, mySurfaceTensionScale(0.)
 		, myCFL(cfl)
 	{
-		myVelocity = VectorGrid<Real>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
-		myCollisionVelocity = VectorGrid<Real>(myXform, size, 0., VectorGridSettings::SampleType::STAGGERED);
+		myLiquidVelocity = VectorGrid<Real>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
+		mySolidVelocity = VectorGrid<Real>(myXform, size, 0., VectorGridSettings::SampleType::STAGGERED);
 
-		mySurface = LevelSet2D(myXform, size, myCFL);
-		myCollisionSurface = LevelSet2D(myXform, size, myCFL);
+		myLiquidSurface = LevelSet2D(myXform, size, myCFL);
+		mySolidSurface = LevelSet2D(myXform, size, myCFL);
 	}
 
-	void setCollisionVolume(const LevelSet2D& collision);
-	void setCollisionVelocity(const VectorGrid<Real>& collisionVelocity);
-	void setSurfaceVolume(const LevelSet2D& surface);
-	void setSurfaceVelocity(const VectorGrid<Real>& velocity);
-	void setSurfaceTension(Real surfaceTensionScale)
-	{
-		mySurfaceTensionScale = surfaceTensionScale;
-	}
+	void setSolidSurface(const LevelSet2D& solidSurface);
+	void setSolidVelocity(const VectorGrid<Real>& solidVelocity);
+	void setLiquidSurface(const LevelSet2D& liquidSurface);
+	void setLiquidVelocity(const VectorGrid<Real>& liquidVelocity);
 
 	void setViscosity(const ScalarGrid<Real>& viscosityGrid)
 	{
-		assert(mySurface.isMatched(viscosityGrid));
+		assert(myLiquidSurface.isMatched(viscosityGrid));
 		myViscosity = viscosityGrid;
 		myDoSolveViscosity = true;
 	}
 
 	void setViscosity(Real constantViscosity = 1.)
 	{
-		myViscosity = ScalarGrid<Real>(mySurface.xform(), mySurface.size(), constantViscosity);
+		myViscosity = ScalarGrid<Real>(myLiquidSurface.xform(), myLiquidSurface.size(), constantViscosity);
 		myDoSolveViscosity = true;
 	}
 
-	void addSurfaceVolume(const LevelSet2D& surface);
+	void unionLiquidSurface(const LevelSet2D& addedLiquidSurface);
 
 	template<typename ForceSampler>
 	void addForce(Real dt, const ForceSampler& force);
 	
 	void addForce(Real dt, const Vec2R& force);
 
-	void advectSurface(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
+	void advectLiquidSurface(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
 	void advectViscosity(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
-	void advectVelocity(Real dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
+	void advectLiquidVelocity(Real dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
 	void runTimestep(Real dt, Renderer& debugRenderer);
 
 	// Useful for CFL
-	Real maxVelocityMagnitude() { return myVelocity.maxMagnitude(); }
+	Real maxVelocityMagnitude() { return myLiquidVelocity.maxMagnitude(); }
 	
 	// Rendering tools
 	void drawGrid(Renderer& renderer) const;
-	void drawSurface(Renderer& renderer);
-	void drawCollisionSurface(Renderer& renderer);
-	void drawCollisionVelocity(Renderer& renderer, Real length) const;
-	void drawVelocity(Renderer& renderer, Real length) const;
 
+	void drawLiquidSurface(Renderer& renderer);
+	void drawLiquidVelocity(Renderer& renderer, Real length) const;
+
+	void drawSolidSurface(Renderer& renderer);
+	void drawSolidVelocity(Renderer& renderer, Real length) const;
+	
 private:
 
 	// Simulation containers
-	VectorGrid<Real> myVelocity, myCollisionVelocity;
-	LevelSet2D mySurface, myCollisionSurface;
+	VectorGrid<Real> myLiquidVelocity, mySolidVelocity;
+	LevelSet2D myLiquidSurface, mySolidSurface;
 	ScalarGrid<Real> myViscosity;
 
 	Transform myXform;
