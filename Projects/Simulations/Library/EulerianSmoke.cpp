@@ -19,7 +19,7 @@ void EulerianSmoke::drawFluidDensity(Renderer& renderer, Real maxDensity)
 
 void EulerianSmoke::drawFluidVelocity(Renderer& renderer, Real length) const
 {
-	myFluidVelocity.drawSamplePointVectors(renderer, Vec3f(0), myFluidVelocity.dx() * length);
+	myVelocity.drawSamplePointVectors(renderer, Vec3f(0), myVelocity.dx() * length);
 }
 
 void EulerianSmoke::drawSolidSurface(Renderer& renderer)
@@ -33,26 +33,25 @@ void EulerianSmoke::drawSolidVelocity(Renderer& renderer, Real length) const
 }
 
 // Incoming solid surface must already be inverted
-void EulerianSmoke::setSolidSurface(const LevelSet2D& solidSurface)
+void EulerianSmoke::setSolidSurface(const LevelSet& solidSurface)
 {
 	assert(solidSurface.isGridMatched(mySolidSurface));
+	assert(solidSurface.isBoundaryNegative());
 
-	assert(solidSurface.inverted());
+	EdgeMesh localMesh = solidSurface.buildDCMesh();
 
-	Mesh2D localMesh = solidSurface.buildDCMesh();
-
-	mySolidSurface.setInverted();
-	mySolidSurface.init(localMesh, false);
+	mySolidSurface.setBoundaryNegative();
+	mySolidSurface.initFromMesh(localMesh, false);
 }
 
 void EulerianSmoke::setSolidVelocity(const VectorGrid<Real>& solidVelocity)
 {
 	assert(solidVelocity.isGridMatched(mySolidVelocity));
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = mySolidVelocity.size(axis);
+		Vec2i size = mySolidVelocity.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& cell)
 		{
 			Vec2R worldPosition = mySolidVelocity.indexToWorld(Vec2R(cell), axis);
 			mySolidVelocity(cell, axis) = solidVelocity.interp(worldPosition, axis);
@@ -62,16 +61,16 @@ void EulerianSmoke::setSolidVelocity(const VectorGrid<Real>& solidVelocity)
 
 void EulerianSmoke::setFluidVelocity(const VectorGrid<Real>& velocity)
 {
-	assert(velocity.isGridMatched(myFluidVelocity));
+	assert(velocity.isGridMatched(myVelocity));
 
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = myFluidVelocity.size(axis);
+		Vec2i size = myVelocity.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& cell)
 		{
-			Vec2R worldPosition = myFluidVelocity.indexToWorld(Vec2R(cell), axis);
-			myFluidVelocity(cell, axis) = velocity.interp(worldPosition, axis);
+			Vec2R worldPosition = myVelocity.indexToWorld(Vec2R(cell), axis);
+			myVelocity(cell, axis) = velocity.interp(worldPosition, axis);
 		});
 	}
 }
@@ -81,9 +80,9 @@ void EulerianSmoke::setSmokeSource(const ScalarGrid<Real>& density, const Scalar
 	assert(density.isGridMatched(mySmokeDensity));
 	assert(temperature.isGridMatched(mySmokeTemperature));
 
-	Vec2ui size = mySmokeDensity.size();
+	Vec2i size = mySmokeDensity.size();
 
-	forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& cell)
 	{
 		if (density(cell) > 0)
 		{
@@ -95,7 +94,7 @@ void EulerianSmoke::setSmokeSource(const ScalarGrid<Real>& density, const Scalar
 
 void EulerianSmoke::advectOldPressure(const Real dt, const InterpolationOrder order)
 {
-	auto velocityFunc = [&](Real, const Vec2R& pos) { return myFluidVelocity.interp(pos); };
+	auto velocityFunc = [&](Real, const Vec2R& pos) { return myVelocity.interp(pos); };
 
 	{
 		AdvectField<ScalarGrid<Real>> pressureAdvector(myOldPressure);
@@ -110,7 +109,7 @@ void EulerianSmoke::advectOldPressure(const Real dt, const InterpolationOrder or
 
 void EulerianSmoke::advectFluidMaterial(const Real dt, const InterpolationOrder order)
 {
-	auto velocityFunc = [&](Real, const Vec2R& pos) { return myFluidVelocity.interp(pos); };
+	auto velocityFunc = [&](Real, const Vec2R& pos) { return myVelocity.interp(pos); };
 
 	{
 		AdvectField<ScalarGrid<Real>> densityAdvector(mySmokeDensity);
@@ -135,18 +134,18 @@ void EulerianSmoke::advectFluidMaterial(const Real dt, const InterpolationOrder 
 
 void EulerianSmoke::advectFluidVelocity(const Real dt, const InterpolationOrder order)
 {
-	auto velocityFunc = [&](Real, const Vec2R& pos) { return myFluidVelocity.interp(pos);  };
+	auto velocityFunc = [&](Real, const Vec2R& pos) { return myVelocity.interp(pos);  };
 	
-	VectorGrid<Real> tempVelocity(myFluidVelocity.xform(), myFluidVelocity.gridSize(), 0, VectorGridSettings::SampleType::STAGGERED);
+	VectorGrid<Real> tempVelocity(myVelocity.xform(), myVelocity.gridSize(), 0, VectorGridSettings::SampleType::STAGGERED);
 
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		AdvectField<ScalarGrid<Real>> advector(myFluidVelocity.grid(axis));
+		AdvectField<ScalarGrid<Real>> advector(myVelocity.grid(axis));
 
 		advector.advectField(dt, tempVelocity.grid(axis), velocityFunc, IntegrationOrder::RK3, order);
 	}
 
-	std::swap(myFluidVelocity, tempVelocity);
+	std::swap(myVelocity, tempVelocity);
 }
 
 void EulerianSmoke::runTimestep(Real dt, Renderer& renderer)
@@ -162,15 +161,15 @@ void EulerianSmoke::runTimestep(Real dt, Renderer& renderer)
 	Real alpha = 1.;
 	Real beta = 1.;
 
-	forEachVoxelRange(Vec2ui(0), myFluidVelocity.size(1), [&](const Vec2ui& face)
+	forEachVoxelRange(Vec2i(0), myVelocity.size(1), [&](const Vec2i& face)
 	{
 		// Average density and temperature values at velocity face
-		Vec2R worldPosition = myFluidVelocity.indexToWorld(Vec2R(face), 1);
+		Vec2R worldPosition = myVelocity.indexToWorld(Vec2R(face), 1);
 		Real density = mySmokeDensity.interp(worldPosition);
 		Real temperature = mySmokeTemperature.interp(worldPosition);
 
 		Real force = dt * (-alpha * density + beta * (temperature - myAmbientTemperature));
-		myFluidVelocity(face, 1) += force;
+		myVelocity(face, 1) += force;
 
 	});
 	
@@ -182,7 +181,7 @@ void EulerianSmoke::runTimestep(Real dt, Renderer& renderer)
 	// Build weights for pressure projection
 	//
 	
-	LevelSet2D dummySurface(mySolidSurface.xform(), mySolidSurface.size(), 5, true);
+	LevelSet dummySurface(mySolidSurface.xform(), mySolidSurface.size(), 5, true);
 		
 	// Compute weights for both liquid-solid side and air-liquid side
 	VectorGrid<Real> ghostFluidWeights(mySolidSurface.xform(), mySolidSurface.size(), 1., VectorGridSettings::SampleType::STAGGERED);
@@ -197,14 +196,14 @@ void EulerianSmoke::runTimestep(Real dt, Renderer& renderer)
 	//
 
 	// Initialize and call pressure projection
-	PressureProjection projectDivergence(dummySurface, myFluidVelocity, mySolidSurface, mySolidVelocity);
+	PressureProjection projectDivergence(dummySurface, myVelocity, mySolidSurface, mySolidVelocity);
 
 	projectDivergence.setInitialGuess(myOldPressure);
 	// TODO: handle moving boundaries.
 	projectDivergence.project(ghostFluidWeights, cutCellWeights);
 
 	// Update velocity field
-	projectDivergence.applySolution(myFluidVelocity, ghostFluidWeights);
+	projectDivergence.applySolution(myVelocity, ghostFluidWeights);
 	
 	myOldPressure = projectDivergence.getPressureGrid();
 

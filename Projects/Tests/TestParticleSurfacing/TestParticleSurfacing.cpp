@@ -3,8 +3,8 @@
 #include "Common.h"
 #include "FluidParticles.h"
 #include "InitialConditions.h"
-#include "LevelSet2D.h"
-#include "Mesh2D.h"
+#include "LevelSet.h"
+#include "EdgeMesh.h"
 #include "Renderer.h"
 #include "TestVelocityFields.h"
 #include "Transform.h"
@@ -12,7 +12,7 @@
 static std::unique_ptr<Renderer> renderer;
 static std::unique_ptr<FluidParticles> particles;
 static Transform xform;
-static Vec2ui gridSize;
+static Vec2i gridSize;
 
 void keyboard(unsigned char key, int x, int y)
 {
@@ -20,7 +20,7 @@ void keyboard(unsigned char key, int x, int y)
 	{	
 		renderer->clear();
 
-		LevelSet2D rebuiltSurface = particles->surfaceParticles(xform, gridSize, 5);
+		LevelSet rebuiltSurface = particles->surfaceParticles(xform, gridSize, 5);
 
 		particles->reseed(rebuiltSurface);
 
@@ -36,9 +36,9 @@ void keyboard(unsigned char key, int x, int y)
 
 int main(int argc, char** argv)
 {
-	Mesh2D initialMesh = circleMesh();
+	EdgeMesh initialMesh = circleMesh();
 	
-	Mesh2D tempMesh = circleMesh(Vec2R(.5), 1., 10);
+	EdgeMesh tempMesh = circleMesh(Vec2R(.5), 1., 10);
 	assert(tempMesh.unitTest());
 	initialMesh.insertMesh(tempMesh);
 
@@ -51,14 +51,14 @@ int main(int argc, char** argv)
 	Real dx = .125;
 	Vec2R topRightCorner(2.25);
 	Vec2R bottomLeftCorner(-1.5);
-	gridSize = Vec2ui((topRightCorner - bottomLeftCorner) / dx);
+	gridSize = Vec2i((topRightCorner - bottomLeftCorner) / dx);
 	xform = Transform(dx, bottomLeftCorner);
 	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
 
-	renderer = std::make_unique<Renderer>("Particle Surfacing Test", Vec2ui(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Particle Surfacing Test", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	LevelSet2D initialSurface(xform, gridSize, 5);
-	initialSurface.init(initialMesh, false);
+	LevelSet initialSurface(xform, gridSize, 5);
+	initialSurface.initFromMesh(initialMesh, false);
 	initialSurface.reinit();
 	initialSurface.drawGrid(*renderer);
 	initialSurface.drawSurface(*renderer, Vec3f(0., 1.0, 1.));

@@ -2,7 +2,7 @@
 
 #include "Common.h"
 
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
@@ -21,18 +21,18 @@ int main(int argc, char** argv)
 	Real dx = 2;
 	Vec2R topRightCorner(20);
 	Vec2R bottomLeftCorner(-20);
-	Vec2ui size((topRightCorner - bottomLeftCorner) / dx);
+	Vec2i size((topRightCorner - bottomLeftCorner) / dx);
 	Transform xform(dx, bottomLeftCorner);
 	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
 
-	renderer = std::make_unique<Renderer>("Scalar Grid Test", Vec2ui(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Scalar Grid Test", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
 	// Test scalar grid
 	if (doScalarTest)
 	{
 		ScalarGrid<Real> testGrid(xform, size, ScalarGridSettings::SampleType::NODE, ScalarGridSettings::BorderType::CLAMP);
 
-		forEachVoxelRange(Vec2ui(0), testGrid.size(), [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2i(0), testGrid.size(), [&](const Vec2i& cell)
 		{
 			Vec2R worldPosition = testGrid.indexToWorld(Vec2R(cell));
 			testGrid(cell) = mag(worldPosition - center);
@@ -47,9 +47,9 @@ int main(int argc, char** argv)
 	{
 		VectorGrid<Real> testVectorGrid(xform, size, VectorGridSettings::SampleType::STAGGERED, ScalarGridSettings::BorderType::CLAMP);
 
-		for (auto axis : { 0, 1 })
+		for (int axis : { 0, 1 })
 		{
-			forEachVoxelRange(Vec2ui(0), testVectorGrid.size(axis), [&](const Vec2ui& cell)
+			forEachVoxelRange(Vec2i(0), testVectorGrid.size(axis), [&](const Vec2i& cell)
 			{
 				Vec2R offset(0); offset[axis] += .5;
 				Vec2R worldPosition0 = testVectorGrid.indexToWorld(Vec2R(cell) - offset, axis);
@@ -66,10 +66,10 @@ int main(int argc, char** argv)
 	}
 	else if (doLevelSetTest)
 	{
-		LevelSet2D testLevelSet(xform, size, 5);
+		LevelSet testLevelSet(xform, size, 5);
 
 		Real radius = .3 * mag(topRightCorner - center);
-		forEachVoxelRange(Vec2ui(0), testLevelSet.size(), [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2i(0), testLevelSet.size(), [&](const Vec2i& cell)
 		{
 			Vec2R worldPosition = testLevelSet.indexToWorld(Vec2R(cell));
 			testLevelSet(cell) = mag(worldPosition - center) - radius;

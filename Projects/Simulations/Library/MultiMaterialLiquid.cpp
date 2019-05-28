@@ -5,12 +5,12 @@
 #include "MultiMaterialPressureProjection.h"
 #include "Timer.h"
 
-void MultiMaterialLiquid::drawMaterialSurface(Renderer& renderer, unsigned material)
+void MultiMaterialLiquid::drawMaterialSurface(Renderer& renderer, int material)
 {
 	myFluidSurfaces[material].drawSurface(renderer, Vec3f(0., 0., 1.0));
 }
 
-void MultiMaterialLiquid::drawMaterialVelocity(Renderer& renderer, Real length, unsigned material) const
+void MultiMaterialLiquid::drawMaterialVelocity(Renderer& renderer, Real length, int material) const
 {
 	myFluidVelocities[material].drawSamplePointVectors(renderer, Vec3f(0), myFluidVelocities[material].dx() * length);
 }
@@ -21,13 +21,13 @@ void MultiMaterialLiquid::drawSolidSurface(Renderer &renderer)
 }
 
 template<typename ForceSampler>
-void MultiMaterialLiquid::addForce(const Real dt, const unsigned material, const ForceSampler& force)
+void MultiMaterialLiquid::addForce(Real dt, int material, const ForceSampler& force)
 {
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
     {
-		Vec2ui size = myFluidVelocities[material].size(axis);
+		Vec2i size = myFluidVelocities[material].size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
 		{
 			Vec2R worldPosition = myFluidVelocities[material].indexToWorld(Vec2R(face), axis);
 			myFluidVelocities[material](face, axis) += dt * force(worldPosition, axis);
@@ -35,15 +35,15 @@ void MultiMaterialLiquid::addForce(const Real dt, const unsigned material, const
     }
 }
 
-void MultiMaterialLiquid::addForce(const Real dt, const unsigned material, const Vec2R& force)
+void MultiMaterialLiquid::addForce(Real dt, int material, const Vec2R& force)
 {
-    addForce(dt, material, [&](Vec2R, unsigned axis) { return force[axis]; });
+    addForce(dt, material, [&](Vec2R, int axis) { return force[axis]; });
 }
 
 void MultiMaterialLiquid::advectFluidVelocities(Real dt, IntegrationOrder integrator, InterpolationOrder interpolator)
 {
     VectorGrid<Real> localVelocity;
-    for (unsigned material = 0; material < myMaterialCount; ++material)
+    for (int material = 0; material < myMaterialCount; ++material)
     {
 		auto velocityFunc = [&](Real, const Vec2R& point)
 		{
@@ -52,7 +52,7 @@ void MultiMaterialLiquid::advectFluidVelocities(Real dt, IntegrationOrder integr
 
 		localVelocity = VectorGrid<Real>(myFluidVelocities[material].xform(), myFluidVelocities[material].gridSize(), VectorGridSettings::SampleType::STAGGERED);
 
-		for (auto axis : { 0,1 })
+		for (int axis : {0, 1})
 		{
 			AdvectField<ScalarGrid<Real>> advector(myFluidVelocities[material].grid(axis));
 			advector.advectField(dt, localVelocity.grid(axis), velocityFunc, integrator, interpolator);
@@ -64,27 +64,27 @@ void MultiMaterialLiquid::advectFluidVelocities(Real dt, IntegrationOrder integr
 
 void MultiMaterialLiquid::advectFluidSurfaces(Real dt, IntegrationOrder integrator)
 {
-    for (unsigned material = 0; material < myMaterialCount; ++material)
+    for (int material = 0; material < myMaterialCount; ++material)
     {
 		auto velocityFunc = [&](Real, const Vec2R& point)
 		{
 			return myFluidVelocities[material].interp(point);
 		};
 
-		Mesh2D localMesh = myFluidSurfaces[material].buildMSMesh();
+		EdgeMesh localMesh = myFluidSurfaces[material].buildMSMesh();
 		localMesh.advect(dt, velocityFunc, integrator);
-		myFluidSurfaces[material].init(localMesh, false);
+		myFluidSurfaces[material].initFromMesh(localMesh, false);
     }
 
 	// Fix possible overlaps between the materials.
-	forEachVoxelRange(Vec2ui(0), myGridSize, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
 	{
 		Real firstMin = std::min(myFluidSurfaces[0](cell), mySolidSurface(cell));
 		Real secondMin = std::max(myFluidSurfaces[0](cell), mySolidSurface(cell));
 
 		if (myMaterialCount > 1)
 		{
-			for (unsigned material = 1; material < myMaterialCount; ++material)
+			for (int material = 1; material < myMaterialCount; ++material)
 			{
 				Real localMin = myFluidSurfaces[material](cell);
 				if (localMin < firstMin)
@@ -98,22 +98,22 @@ void MultiMaterialLiquid::advectFluidSurfaces(Real dt, IntegrationOrder integrat
 
 		Real avgSDF = .5 * (firstMin + secondMin);
 
-		for (unsigned material = 0; material < myMaterialCount; ++material)
+		for (int material = 0; material < myMaterialCount; ++material)
 			myFluidSurfaces[material](cell) -= avgSDF;
 	});
 
-	for (unsigned material = 0; material < myMaterialCount; ++material)
+	for (int material = 0; material < myMaterialCount; ++material)
 		myFluidSurfaces[material].reinitMesh();
 }
 
-void MultiMaterialLiquid::setSolidSurface(const LevelSet2D &solidSurface)
+void MultiMaterialLiquid::setSolidSurface(const LevelSet &solidSurface)
 {
-    assert(solidSurface.inverted());
+    assert(solidSurface.isBoundaryNegative());
 
-    Mesh2D localMesh = solidSurface.buildDCMesh();
+    EdgeMesh localMesh = solidSurface.buildDCMesh();
     
-    mySolidSurface.setInverted();
-    mySolidSurface.init(localMesh, false);
+    mySolidSurface.setBoundaryNegative();
+    mySolidSurface.initFromMesh(localMesh, false /* don't resize grid*/);
 }
 
 void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
@@ -126,15 +126,15 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	// Extrapolate materials into solids
 	//
 
-	std::vector<LevelSet2D> extrapolatedSurfaces(myMaterialCount);
+	std::vector<LevelSet> extrapolatedSurfaces(myMaterialCount);
 
 	for (unsigned material = 0; material < myMaterialCount; ++material)
 		extrapolatedSurfaces[material] = myFluidSurfaces[material];
 
 	Real dx = mySolidSurface.dx();
-	forEachVoxelRange(Vec2ui(0), myGridSize, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
 	{
-		for (unsigned material = 0; material < myMaterialCount; ++material)
+		for (int material = 0; material < myMaterialCount; ++material)
 		{
 			if (mySolidSurface(cell) <= 0. ||
 				(mySolidSurface(cell) <= dx && myFluidSurfaces[material](cell) <= 0))
@@ -142,11 +142,8 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 		}
 	});
 
-	for (unsigned material = 0; material < myMaterialCount; ++material)
+	for (int material = 0; material < myMaterialCount; ++material)
 		extrapolatedSurfaces[material].reinitMesh();
-
-	//for (unsigned material = 0; material < myMaterialCount; ++material)
-	//	extrapolatedSurfaces[material].drawSurface(renderer);
 
 	std::cout << "  Extrapolate into solids: " << simTimer.stop() << "s" << std::endl;
 	
@@ -162,13 +159,13 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 
 	std::vector<VectorGrid<Real>> materialCutCellWeights(myMaterialCount);
 
-	for (unsigned material = 0; material < myMaterialCount; ++material)
+	for (int material = 0; material < myMaterialCount; ++material)
 		materialCutCellWeights[material] = computeCutCellWeights(extrapolatedSurfaces[material]);
 
 	// Now normalize the weights, removing the solid boundary contribution first.
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2ui(0), myFluidVelocities[0].size(axis), [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), myFluidVelocities[0].size(axis), [&](const Vec2i& face)
 		{
 			Real weight = 1;
 			weight -= solidCutCellWeights(face, axis);
@@ -177,42 +174,42 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 			if (weight > 0)
 			{
 				Real accumulatedWeight = 0;
-				for (unsigned material = 0; material < myMaterialCount; ++material)
+				for (int material = 0; material < myMaterialCount; ++material)
 					accumulatedWeight += materialCutCellWeights[material](face, axis);
 
 				if (accumulatedWeight > 0)
 				{
 					weight /= accumulatedWeight;
 
-					for (unsigned material = 0; material < myMaterialCount; ++material)
+					for (int material = 0; material < myMaterialCount; ++material)
 						materialCutCellWeights[material](face, axis) *= weight;
 				}
 			}
 			else
 			{
-				for (unsigned material = 0; material < myMaterialCount; ++material)
+				for (int material = 0; material < myMaterialCount; ++material)
 					materialCutCellWeights[material](face, axis) = 0;
 			}
 
 			// Debug check
 			Real totalWeight = solidCutCellWeights(face, axis);
 
-			for (unsigned material = 0; material < myMaterialCount; ++material)
+			for (int material = 0; material < myMaterialCount; ++material)
 				totalWeight += materialCutCellWeights[material](face, axis);
 
-			if (totalWeight < 1.)
+			if (totalWeight == 0)
 			{
 				// If there is a zero total weight it is likely due to a fluid-fluid boundary
 				// falling exactly across a grid face. There should never be a zero weight
 				// along a fluid-solid boundary.
 
-				std::vector<unsigned> faceAlignedSurfaces;
+				std::vector<int> faceAlignedSurfaces;
 
-				unsigned otherAxis = (axis + 1) % 2;
+				int otherAxis = (axis + 1) % 2;
 
 				Vec2R offset(0); offset[otherAxis] = .5;
 
-				for (unsigned material = 0; material < myMaterialCount; ++material)
+				for (int material = 0; material < myMaterialCount; ++material)
 				{
 					Vec2R pos0 = materialCutCellWeights[material].indexToWorld(Vec2R(face) - offset, axis);
 					Vec2R pos1 = materialCutCellWeights[material].indexToWorld(Vec2R(face) + offset, axis);
@@ -255,13 +252,13 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 	// Build a list of valid faces for each material so we can extrapolate with.
 	//
 
-	for (unsigned material = 0; material < myMaterialCount; ++material)
+	for (int material = 0; material < myMaterialCount; ++material)
 	{
 		VectorGrid<MarkedCells> valid(myXform, myGridSize, MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
 
-		for (auto axis : { 0,1 })
+		for (int axis : {0, 1})
 		{
-			forEachVoxelRange(Vec2ui(0), myFluidVelocities[material].size(axis), [&](const Vec2ui& face)
+			forEachVoxelRange(Vec2i(0), myFluidVelocities[material].size(axis), [&](const Vec2i& face)
 			{
 				if (materialCutCellWeights[material](face, axis) > 0.)
 					valid(face, axis) = MarkedCells::FINISHED;

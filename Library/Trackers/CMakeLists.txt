@@ -1,7 +1,7 @@
 add_library(2DFluidTrackers
 				FluidParticles.cpp
-				LevelSet2D.cpp
-				Mesh2D.cpp
+				LevelSet.cpp
+				EdgeMesh.cpp
 				Predicates.cpp)
 
 target_link_libraries(2DFluidTrackers

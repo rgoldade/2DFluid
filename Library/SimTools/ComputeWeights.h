@@ -2,7 +2,7 @@
 #define LIBRARY_COMPUTEWEIGHTS_H
 
 #include "Common.h"
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
 
@@ -17,11 +17,11 @@
 //
 ////////////////////////////////////
 
-VectorGrid<Real> computeGhostFluidWeights(const LevelSet2D& surface);
-VectorGrid<Real> computeCutCellWeights(const LevelSet2D &surface, bool invert = false, Real minWeight = 0.01);
-ScalarGrid<Real> computeSupersampledAreas(const LevelSet2D& surface,
-	ScalarGridSettings::SampleType sampleType,
-	unsigned samples);
-VectorGrid<Real> computeSupersampledFaceAreas(const LevelSet2D& surface, unsigned samples);
+VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface);
+VectorGrid<Real> computeCutCellWeights(const LevelSet& surface, bool invert = false);
+ScalarGrid<Real> computeSuperSampledAreas(const LevelSet& surface,
+											ScalarGridSettings::SampleType sampleType,
+											int samples);
+VectorGrid<Real> computeSuperSampledFaceAreas(const LevelSet& surface, int samples);
 
 #endif

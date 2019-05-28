@@ -4,8 +4,8 @@
 #include "EulerianLiquid.h"
 #include "InitialConditions.h"
 #include "Integrator.h"
-#include "LevelSet2D.h"
-#include "Mesh2D.h"
+#include "LevelSet.h"
+#include "EdgeMesh.h"
 #include "Renderer.h"
 #include "TestVelocityFields.h"
 
@@ -20,13 +20,13 @@ static bool isDisplayDirty = true;
 static constexpr Real dt = 1. / 30;
 
 static Transform xform;
-static Vec2ui gridSize;
+static Vec2i gridSize;
 
-static Mesh2D seedLiquidMesh;
-static Mesh2D movingSolidsMesh;
-static Mesh2D staticSolidsMesh;
+static EdgeMesh seedLiquidMesh;
+static EdgeMesh movingSolidsMesh;
+static EdgeMesh staticSolidsMesh;
 
-static LevelSet2D seedLiquidSurface;
+static LevelSet seedLiquidSurface;
 
 static int frameCount = 0;
 
@@ -62,15 +62,15 @@ void display()
 			movingSolidsMesh.advect(localDt, *solidSimulator, IntegrationOrder::FORWARDEULER);
 
 			// Need moving solid volume to build sampled velocity
-			LevelSet2D movindSolidsSurface = LevelSet2D(xform, gridSize, 10);
-			movindSolidsSurface.init(movingSolidsMesh, false);
+			LevelSet movindSolidsSurface = LevelSet(xform, gridSize, 10);
+			movindSolidsSurface.initFromMesh(movingSolidsMesh, false);
 
 			VectorGrid<Real> movingSolidVelocity(xform, gridSize, 0, VectorGridSettings::SampleType::STAGGERED);
 	
 			// Set moving solid velocity
-			for (auto axis : { 0,1 })
+			for (int axis : {0, 1})
 			{
-				forEachVoxelRange(Vec2ui(0), movingSolidVelocity.size(axis), [&](const Vec2ui& face)
+				forEachVoxelRange(Vec2i(0), movingSolidVelocity.size(axis), [&](const Vec2i& face)
 				{
 					Vec2R worldPosition = movingSolidVelocity.indexToWorld(Vec2R(face), axis);
 					
@@ -79,9 +79,9 @@ void display()
 				});
 			}
 
-			LevelSet2D combinedSolidSurface = LevelSet2D(xform, gridSize, 10);
-			combinedSolidSurface.setInverted();
-			combinedSolidSurface.init(staticSolidsMesh, false);
+			LevelSet combinedSolidSurface = LevelSet(xform, gridSize, 10);
+			combinedSolidSurface.setBoundaryNegative();
+			combinedSolidSurface.initFromMesh(staticSolidsMesh, false);
 			combinedSolidSurface.unionSurface(movindSolidsSurface);
 
 			simulator->setSolidSurface(combinedSolidSurface);
@@ -128,11 +128,11 @@ int main(int argc, char** argv)
 	Real dx = .025;
 	Vec2R topRightCorner(2.5);
 	Vec2R bottomLeftCorner(-2.5);
-	gridSize = Vec2ui((topRightCorner - bottomLeftCorner) / dx);
+	gridSize = Vec2i((topRightCorner - bottomLeftCorner) / dx);
 	xform = Transform(dx, bottomLeftCorner);
 	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
 
-	renderer = std::make_unique<Renderer>("Viscous Liquid Simulator", Vec2ui(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Viscous Liquid Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
 	movingSolidsMesh = circleMesh(center + Vec2R(1.2, 0), .25, 20);
 	
@@ -140,21 +140,21 @@ int main(int argc, char** argv)
 	staticSolidsMesh.reverse();
 	assert(staticSolidsMesh.unitTest());
 	
-	Mesh2D beamLiquidMesh = squareMesh(center - Vec2R(.8, 0), Vec2R(1.5, .2));
+	EdgeMesh beamLiquidMesh = squareMesh(center - Vec2R(.8, 0), Vec2R(1.5, .2));
 	assert(beamLiquidMesh.unitTest());
 
-	LevelSet2D beamLiquidSurface = LevelSet2D(xform, gridSize, 10);
-	beamLiquidSurface.init(beamLiquidMesh, false);
+	LevelSet beamLiquidSurface = LevelSet(xform, gridSize, 10);
+	beamLiquidSurface.initFromMesh(beamLiquidMesh, false);
 
 	seedLiquidMesh = squareMesh(center + Vec2R(0, .6), Vec2R(.075, .25));
 	assert(seedLiquidMesh.unitTest());
 
-	seedLiquidSurface = LevelSet2D(xform, gridSize, 10);
-	seedLiquidSurface.init(seedLiquidMesh, false);
+	seedLiquidSurface = LevelSet(xform, gridSize, 10);
+	seedLiquidSurface.initFromMesh(seedLiquidMesh, false);
 
-	LevelSet2D solidSurface(xform, gridSize, 10);
-	solidSurface.setInverted();
-	solidSurface.init(staticSolidsMesh, false);
+	LevelSet solidSurface(xform, gridSize, 10);
+	solidSurface.setBoundaryNegative();
+	solidSurface.initFromMesh(staticSolidsMesh, false);
 
 	// Set up simulation
 	simulator = std::unique_ptr<EulerianLiquid>(new EulerianLiquid(xform, gridSize, 10));

@@ -5,7 +5,7 @@
 #include "Common.h"
 #include "ExtrapolateField.h"
 #include "Integrator.h"
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "VectorGrid.h"
@@ -25,7 +25,7 @@
 class MultiMaterialLiquid
 {
 public:
-	MultiMaterialLiquid(const Transform& xform, Vec2ui size, unsigned materials, Real narrowBand = 5.)
+	MultiMaterialLiquid(const Transform& xform, Vec2i size, int materials, Real narrowBand = 5.)
 		: myXform(xform)
 		, myGridSize(size)
 		, myMaterialCount(materials)
@@ -36,19 +36,19 @@ public:
 		myFluidSurfaces.resize(myMaterialCount);
 		myFluidDensities.resize(myMaterialCount);
 
-		for (unsigned i = 0; i < myMaterialCount; ++i)
+		for (int i = 0; i < myMaterialCount; ++i)
 			myFluidVelocities[i] = VectorGrid<Real>(xform, size, 0, VectorGridSettings::SampleType::STAGGERED);
 	
-		for (unsigned i = 0; i < myMaterialCount; ++i)
-			myFluidSurfaces[i] = LevelSet2D(xform, size, narrowBand);
+		for (int i = 0; i < myMaterialCount; ++i)
+			myFluidSurfaces[i] = LevelSet(xform, size, narrowBand);
 
-		mySolidSurface = LevelSet2D(myXform, size, narrowBand);
+		mySolidSurface = LevelSet(myXform, size, narrowBand);
 	}
 
 	template<typename ForceSampler>
-	void addForce(const Real dt, const unsigned material, const ForceSampler& force);
+	void addForce(Real dt, int material, const ForceSampler& force);
 
-	void addForce(const Real dt, const unsigned material, const Vec2R& force);
+	void addForce(Real dt, int material, const Vec2R& force);
 
 	void advectFluidSurfaces(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
 	void advectFluidVelocities(Real dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
@@ -65,9 +65,9 @@ public:
 		return maxVelocity;
 	}
 
-	void setSolidSurface(const LevelSet2D& solidSurface);
+	void setSolidSurface(const LevelSet& solidSurface);
 
-	void setMaterial(const LevelSet2D &surface, const Real density, const unsigned material)
+	void setMaterial(const LevelSet &surface, Real density, int material)
 	{
 	    assert(material < myMaterialCount);
 
@@ -76,8 +76,8 @@ public:
 	    myFluidDensities[material] = density;
 	}
 
-	void setMaterial(const LevelSet2D &surface, const VectorGrid<Real> &velocity,
-						const Real density, const unsigned material)
+	void setMaterial(const LevelSet &surface, const VectorGrid<Real> &velocity,
+						Real density, int material)
 	{
 	    assert(material < myMaterialCount);
 
@@ -90,19 +90,19 @@ public:
 	    myFluidDensities[material] = density;
 	}
 
-	void drawMaterialSurface(Renderer &renderer, unsigned material);
-	void drawMaterialVelocity(Renderer &renderer, Real length, unsigned material) const;
+	void drawMaterialSurface(Renderer &renderer, int material);
+	void drawMaterialVelocity(Renderer &renderer, Real length, int material) const;
 	void drawSolidSurface(Renderer &renderer);
 
 private:
 
 	std::vector<VectorGrid<Real>> myFluidVelocities;
-	std::vector<LevelSet2D> myFluidSurfaces;
+	std::vector<LevelSet> myFluidSurfaces;
 	std::vector<Real> myFluidDensities;
 
-	LevelSet2D mySolidSurface;
+	LevelSet mySolidSurface;
 
-	const Vec2ui myGridSize;
+	const Vec2i myGridSize;
 	const Transform myXform;
 	const unsigned myMaterialCount;
 	unsigned myInitializedMaterialsCount;

@@ -2,7 +2,7 @@
 #define LIBRARY_PRESSUREPROJECTION_H
 
 #include "Common.h"
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
@@ -24,10 +24,10 @@ class PressureProjection
 
 public:
 	// For variational solve, surface should be extrapolated into the solid boundary
-	PressureProjection(const LevelSet2D& surface, const VectorGrid<Real>& liquidVelocity,
-			    const LevelSet2D& solidSurface, const VectorGrid<Real>& solidVelocity)
-		: myFluidSurface(surface)
-		, myFluidVelocity(liquidVelocity)
+	PressureProjection(const LevelSet& surface, const VectorGrid<Real>& liquidVelocity,
+			    const LevelSet& solidSurface, const VectorGrid<Real>& solidVelocity)
+		: mySurface(surface)
+		, myVelocity(liquidVelocity)
 		, mySolidSurface(solidSurface)
 		, mySolidVelocity(solidVelocity)
 		, myUseInitialGuess(false)
@@ -61,7 +61,7 @@ public:
 
 	void setInitialGuess(const ScalarGrid<Real>& initialGuessPressure)
 	{
-		assert(myFluidSurface.isGridMatched(initialGuessPressure));
+		assert(mySurface.isGridMatched(initialGuessPressure));
 		myUseInitialGuess = true;
 		myInitialGuess = &initialGuessPressure;
 	}
@@ -79,11 +79,11 @@ public:
 
 private:
 
-	const VectorGrid<Real> &myFluidVelocity, &mySolidVelocity;
+	const VectorGrid<Real> &myVelocity, &mySolidVelocity;
 
 	VectorGrid<MarkedCells> myValid; // Store solved faces
 
-	const LevelSet2D &myFluidSurface, &mySolidSurface;
+	const LevelSet &mySurface, &mySolidSurface;
 	
 	ScalarGrid<Real> myPressure;
 	UniformGrid<int> myFluidCellIndex;

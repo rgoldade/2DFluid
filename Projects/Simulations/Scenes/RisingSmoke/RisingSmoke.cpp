@@ -4,8 +4,8 @@
 #include "EulerianSmoke.h"
 #include "InitialConditions.h"
 #include "Integrator.h"
-#include "LevelSet2D.h"
-#include "Mesh2D.h"
+#include "LevelSet.h"
+#include "EdgeMesh.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 
@@ -89,18 +89,18 @@ void keyboard(unsigned char key, int x, int y)
 }
 
 
-void setSmokeSource(const LevelSet2D &sourceVolume,
+void setSmokeSource(const LevelSet &sourceVolume,
 						Real defaultDensity, ScalarGrid<Real> &smokeDensity,
 						Real defaultTemperature, ScalarGrid<Real> &smokeTemperature)
 {
-	Vec2ui size = sourceVolume.size();
+	Vec2i size = sourceVolume.size();
 
 	Real samples = 2;
 	Real sampleDx = 1. / samples;
 
 	Real dx = sourceVolume.dx();
 
-	forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& cell)
 	{
 		// Super sample to determine 
 		if (fabs(sourceVolume.interp(sourceVolume.indexToWorld(Vec2R(cell))) < dx * 2.))
@@ -116,10 +116,10 @@ void setSmokeSource(const LevelSet2D &sourceVolume,
 
 			if (insideVolumeCount > 0)
 			{
-				Real temp_density = defaultDensity;// +.05 * Util::randhashd(cell[0] + cell[1] * sourceVolume.size()[0]);
-				Real temp_temperature = defaultTemperature;// +50. * Util::randhashd(cell[0] + cell[1] * sourceVolume.size()[0]);
-				smokeDensity(cell) = temp_density * Real(insideVolumeCount) * sampleDx * sampleDx;
-				smokeTemperature(cell) = temp_temperature * Real(insideVolumeCount) * sampleDx * sampleDx;
+				Real tempDensity = defaultDensity;// +.05 * Util::randhashd(cell[0] + cell[1] * sourceVolume.size()[0]);
+				Real tempTemperature = defaultTemperature;// +50. * Util::randhashd(cell[0] + cell[1] * sourceVolume.size()[0]);
+				smokeDensity(cell) = tempDensity * Real(insideVolumeCount) * sampleDx * sampleDx;
+				smokeTemperature(cell) = tempTemperature * Real(insideVolumeCount) * sampleDx * sampleDx;
 			}
 		}
 	});
@@ -138,27 +138,27 @@ int main(int argc, char** argv)
 	bottomLeftCorner -= dx * boundaryPadding;
 
 	Vec2R simulationSize = topRightCorner - bottomLeftCorner;
-	Vec2ui gridSize(simulationSize / dx);
+	Vec2i gridSize(simulationSize / dx);
 	Transform xform(dx, bottomLeftCorner);
 	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
 
-	renderer = std::make_unique<Renderer>("Smoke Simulator", Vec2ui(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Smoke Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	Mesh2D solidMesh = squareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
+	EdgeMesh solidMesh = squareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
 	solidMesh.reverse();
 	assert(solidMesh.unitTest());
 
-	LevelSet2D solid = LevelSet2D(xform, gridSize, 10);
-	solid.setInverted();
-	solid.init(solidMesh, false);
+	LevelSet solid = LevelSet(xform, gridSize, 10);
+	solid.setBoundaryNegative();
+	solid.initFromMesh(solidMesh, false);
 
 	simulator = std::make_unique<EulerianSmoke>(xform, gridSize, 300);
 	simulator->setSolidSurface(solid);
 
 	// Set up source for smoke density and smoke temperature
-	Mesh2D sourceMesh = circleMesh(center - Vec2R(0, 2.), .25, 40);
-	LevelSet2D sourceVolume = LevelSet2D(xform, gridSize, 10);
-	sourceVolume.init(sourceMesh, false);
+	EdgeMesh sourceMesh = circleMesh(center - Vec2R(0, 2.), .25, 40);
+	LevelSet sourceVolume = LevelSet(xform, gridSize, 10);
+	sourceVolume.initFromMesh(sourceMesh, false);
 	
 	// Super sample source volume to get a smooth volumetric representation.
 	smokeDensity = ScalarGrid<Real>(xform, gridSize, 0);

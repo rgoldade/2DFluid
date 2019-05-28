@@ -24,7 +24,7 @@
 class Renderer
 {
 public:
-	Renderer(const char *title, Vec2ui windowSize, Vec2R screenOrigin,
+	Renderer(const char *title, Vec2i windowSize, Vec2R screenOrigin,
 				Real screenHeight, int *argc, char **argv);
 
 	void display();
@@ -43,8 +43,8 @@ public:
 
 	void addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour = Vec3f(0, 0, 0), const Real width = 1);
 	void addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour, const Real width = 1);
-	void addTris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour);
-	void addQuads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours);
+	void addTris(const std::vector<Vec2R>& verts, const std::vector<Vec3i>& faces, const std::vector<Vec3f>& colour);
+	void addQuads(const std::vector<Vec2R>& verts, const std::vector<Vec4i>& faces, const std::vector<Vec3f>& colours);
 	
 	void drawPrimitives() const;
 
@@ -66,15 +66,15 @@ private:
 	std::vector<Real> myLineSizes;
 
 	std::vector<std::vector<Vec2R>> myTriVerts;
-	std::vector<std::vector<Vec3ui>> myTriFaces;
+	std::vector<std::vector<Vec3i>> myTriFaces;
 	std::vector<std::vector<Vec3f>> myTriColours;
 
 	std::vector<std::vector<Vec2R>> myQuadVerts;
-	std::vector<std::vector<Vec4ui>> myQuadFaces;
+	std::vector<std::vector<Vec4i>> myQuadFaces;
 	std::vector<std::vector<Vec3f>> myQuadColours;
 
 	// width, height
-	Vec2ui myWindowSize;
+	Vec2i myWindowSize;
 
 	Vec2R myCurrentScreenOrigin;
 	Real myCurrentScreenHeight;

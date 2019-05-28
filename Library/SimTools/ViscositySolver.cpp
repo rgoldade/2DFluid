@@ -15,38 +15,38 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 	assert(myVelocity.isGridMatched(faceVolumes));
 	assert(mySurface.isGridMatched(centerVolumes));
 	assert(mySurface.isGridMatched(solidCenterVolumes));
-	assert(mySurface.size() + Vec2ui(1) == solidNodeVolumes.size());
-	assert(mySurface.size() + Vec2ui(1) == nodeVolumes.size());
+	assert(mySurface.size() + Vec2i(1) == solidNodeVolumes.size());
+	assert(mySurface.size() + Vec2i(1) == nodeVolumes.size());
 
 	VectorGrid<int> liquidFaces(mySurface.xform(), mySurface.size(), UNSOLVED, VectorGridSettings::SampleType::STAGGERED);
 
 	// Build solvable faces. Assumes the grid limits are solid boundaries and left out
 	// of the system.
 
-	unsigned liquidDOFCount = 0;
+	int liquidDOFCount = 0;
 
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = liquidFaces.size(axis);
+		Vec2i size = liquidFaces.size(axis);
 
-		Vec2ui start(0); ++start[axis];
-		Vec2ui end(size); --end[axis];
+		Vec2i start(0); ++start[axis];
+		Vec2i end(size); --end[axis];
 
-		forEachVoxelRange(start, end, [&](const Vec2ui& face)
+		forEachVoxelRange(start, end, [&](const Vec2i& face)
 		{
 			bool inSolve = false;
 
-			for (unsigned direction : {0, 1})
+			for (int direction : {0, 1})
 			{
-				Vec2i cell = faceToCell(Vec2i(face), axis, direction);
-				if (centerVolumes(Vec2ui(cell)) > 0.) inSolve = true;
+				Vec2i cell = faceToCell(face, axis, direction);
+				if (centerVolumes(cell) > 0.) inSolve = true;
 			}
 
 			if (!inSolve)
 			{
-				for (unsigned direction : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2ui node = faceToNode(face, axis, direction);
+					Vec2i node = faceToNode(face, axis, direction);
 					if (nodeVolumes(node) > 0.) inSolve = true;
 				}
 			}
@@ -64,7 +64,7 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 	// Build a single container of the viscosity weights (liquid volumes, gf weights, viscosity coefficients)
 	Real invDx2 = 1. / Util::sqr(mySurface.dx());
 	{
-		forEachVoxelRange(Vec2ui(0), centerVolumes.size(), [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2i(0), centerVolumes.size(), [&](const Vec2i& cell)
 		{
 			centerVolumes(cell) *= myDt * invDx2;
 			centerVolumes(cell) *= myViscosity(cell);
@@ -73,7 +73,7 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 	}
 
 	{
-		forEachVoxelRange(Vec2ui(0), nodeVolumes.size(), [&](const Vec2ui& node)
+		forEachVoxelRange(Vec2i(0), nodeVolumes.size(), [&](const Vec2i& node)
 		{
 			nodeVolumes(node) *= myDt * invDx2;
 			nodeVolumes(node) *= myViscosity.interp(nodeVolumes.indexToWorld(Vec2R(node)));
@@ -83,11 +83,10 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 
 	Solver<true> solver(liquidDOFCount, liquidDOFCount * 9);
 
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = myVelocity.size(axis);
-
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		Vec2i faceGridSize = myVelocity.size(axis);
+		forEachVoxelRange(Vec2i(0), faceGridSize, [&](const Vec2i& face)
 		{
 			int index = liquidFaces(face, axis);
 			if (index >= 0)
@@ -102,21 +101,21 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 				solver.addToElement(index, index, volume);
 
 				// Build cell-centered stresses.
-				for (unsigned cellDirection : {0, 1})
+				for (int cellDirection : {0, 1})
 				{
-					Vec2i cell = faceToCell(Vec2i(face), axis, cellDirection);
+					Vec2i cell = faceToCell(face, axis, cellDirection);
 
-					Real coeff = 2. * centerVolumes(Vec2ui(cell));
+					Real coeff = 2. * centerVolumes(cell);
 
 					Real centerSign = (cellDirection == 0) ? -1. : 1.;
 
-					for (unsigned faceDirection : {0, 1})
+					for (int faceDirection : {0, 1})
 					{
 						// Since we've assumed grid boundaries are static solids
 						// we don't have any solveable faces with adjacent cells
 						// out of the grid bounds. We can skip that check here.
 
-						Vec2ui adjacentFace = cellToFace(Vec2ui(cell), axis, faceDirection);
+						Vec2i adjacentFace = cellToFace(cell, axis, faceDirection);
 
 						Real faceSign = (faceDirection == 0) ? -1. : 1.;
 
@@ -129,30 +128,30 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 				}
 
 				// Build node stresses.
-				for (unsigned nodeDirection : {0, 1})
+				for (int nodeDirection : {0, 1})
 				{
-					Vec2ui node = faceToNode(face, axis, nodeDirection);
+					Vec2i node = faceToNode(face, axis, nodeDirection);
 
 					Real nodeSign = (nodeDirection == 0) ? -1. : 1.;
 
 					Real coeff = nodeVolumes(node);
 
-					for (unsigned gradientAxis : {0, 1})
-						for (unsigned faceDirection : {0, 1})
+					for (int gradientAxis : {0, 1})
+						for (int faceDirection : {0, 1})
 						{
-							Vec2i adjacentFace = nodeToFace(Vec2i(node), gradientAxis, faceDirection);
+							Vec2i adjacentFace = nodeToFace(node, gradientAxis, faceDirection);
 
 							Real faceSign = faceDirection == 0 ? -1. : 1.;
 
-							if (adjacentFace[gradientAxis] >= 0 && adjacentFace[gradientAxis] < size[gradientAxis])
+							if (adjacentFace[gradientAxis] >= 0 && adjacentFace[gradientAxis] < faceGridSize[gradientAxis])
 							{
-								unsigned faceAxis = (gradientAxis + 1) % 2;
-								int faceIndex = liquidFaces(Vec2ui(adjacentFace), faceAxis);
+								int faceAxis = (gradientAxis + 1) % 2;
+								int faceIndex = liquidFaces(adjacentFace, faceAxis);
 
 								if (faceIndex >= 0)
 									solver.addToElement(index, faceIndex, -nodeSign * faceSign * coeff);
 								else if (faceIndex == SOLIDBOUNDARY)
-									solver.addToRhs(index, nodeSign * faceSign * coeff * mySolidVelocity(Vec2ui(adjacentFace), faceAxis));
+									solver.addToRhs(index, nodeSign * faceSign * coeff * mySolidVelocity(adjacentFace, faceAxis));
 							}
 						}
 				}
@@ -169,11 +168,11 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 	}
 
 	// Update velocity
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = myVelocity.size(axis);
+		Vec2i size = myVelocity.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
 		{
 			int index = liquidFaces(face, axis);
 			if (index >= 0)

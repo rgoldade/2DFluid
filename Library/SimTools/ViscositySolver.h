@@ -1,7 +1,7 @@
 #ifndef LIBRARY_VISCOSITYSOLVER_H
 #define LIBRARY_VISCOSITYSOLVER_H
 
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
@@ -26,8 +26,8 @@ class ViscositySolver
 
 public:
 
-	ViscositySolver(Real dt, const LevelSet2D& surface, VectorGrid<Real>& velocity,
-					const LevelSet2D& solidSurface, const VectorGrid<Real>& solidVelocity)
+	ViscositySolver(Real dt, const LevelSet& surface, VectorGrid<Real>& velocity,
+					const LevelSet& solidSurface, const VectorGrid<Real>& solidVelocity)
 		: myDt(dt)
 		, myVelocity(velocity)
 		, mySurface(surface)
@@ -64,8 +64,8 @@ private:
 	VectorGrid<Real>& myVelocity;
 	const VectorGrid<Real>& mySolidVelocity;
 	
-	const LevelSet2D& mySurface;
-	const LevelSet2D& mySolidSurface;
+	const LevelSet& mySurface;
+	const LevelSet& mySolidSurface;
 
 	ScalarGrid<Real> myViscosity;
 

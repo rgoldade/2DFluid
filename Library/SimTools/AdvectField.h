@@ -18,7 +18,7 @@
 //
 ////////////////////////////////////
 
-class LevelSet2D;
+class LevelSet;
 
 enum class InterpolationOrder { LINEAR, CUBIC };
 
@@ -32,7 +32,7 @@ public:
 		{}
 
 	template<typename VelocityField>
-	void advectField(Real dt, Field& field, const VelocityField& vel, const IntegrationOrder order, const InterpolationOrder interpOrder = InterpolationOrder::LINEAR);
+	void advectField(Real dt, Field& field, const VelocityField& velocity, const IntegrationOrder order, const InterpolationOrder interpOrder = InterpolationOrder::LINEAR);
 
 private:
 	const Field &myField;
@@ -40,22 +40,22 @@ private:
 
 template<typename Field>
 template<typename VelocityField>
-void AdvectField<Field>::advectField(Real dt, Field& field, const VelocityField& vel, const IntegrationOrder order, const InterpolationOrder interpOrder)
+void AdvectField<Field>::advectField(Real dt, Field& field, const VelocityField& velocity, const IntegrationOrder order, const InterpolationOrder interpOrder)
 {
 	assert(&field != &myField);
 
-	forEachVoxelRange(Vec2ui(0), field.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), field.size(), [&](const Vec2i& cell)
 	{
-		Vec2R pos = field.indexToWorld(Vec2R(cell));
-		pos = Integrator(-dt, pos, vel, order);
+		Vec2R worldPoint = field.indexToWorld(Vec2R(cell));
+		worldPoint = Integrator(-dt, worldPoint, velocity, order);
 
 		switch (interpOrder)
 		{
 		case InterpolationOrder::LINEAR:
-			field(cell) = myField.interp(pos);
+			field(cell) = myField.interp(worldPoint);
 			break;
 		case InterpolationOrder::CUBIC:
-			field(cell) = myField.cubicInterp(pos, false, true);
+			field(cell) = myField.cubicInterp(worldPoint, false, true);
 			break;
 		default:
 			assert(false);

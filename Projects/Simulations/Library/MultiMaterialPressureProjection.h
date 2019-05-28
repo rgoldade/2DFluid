@@ -2,7 +2,7 @@
 #define SIMULATIONS_MULTIMATERIALPRESSUREPROJECTION_H
 
 #include "Common.h"
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "UniformGrid.h"
@@ -20,10 +20,10 @@ static constexpr int UNSOLVED = -1;
 class MultiMaterialPressureProjection
 {
 public:
-    MultiMaterialPressureProjection(const std::vector<LevelSet2D> &surface,
+    MultiMaterialPressureProjection(const std::vector<LevelSet> &surface,
 				    const std::vector<VectorGrid<Real>> &velocity,
 				    const std::vector<Real> &density,
-				    const LevelSet2D &collision)
+				    const LevelSet &collision)
     : mySurfaceList(surface)
     , myVelocityList(velocity)
     , myDensityList(density)
@@ -31,9 +31,9 @@ public:
     , myMaterialsCount(surface.size())
     {
 		assert(mySurfaceList.size() == myVelocityList.size() &&
-			mySurfaceList.size() == myDensityList.size());
+				mySurfaceList.size() == myDensityList.size());
 
-		for (unsigned material = 1; material < myMaterialsCount; ++material)
+		for (int material = 1; material < myMaterialsCount; ++material)
 		{
 			assert(mySurfaceList[material - 1].isGridMatched(mySurfaceList[material]));
 			assert(myVelocityList[material - 1].isGridMatched(myVelocityList[material]));
@@ -69,12 +69,12 @@ private:
     UniformGrid<int> myMaterialLabels;
     UniformGrid<int> mySolverIndex;
 
-    const std::vector<LevelSet2D> &mySurfaceList;
+    const std::vector<LevelSet> &mySurfaceList;
     const std::vector<VectorGrid<Real>> &myVelocityList;
     const std::vector<Real> &myDensityList;
 
-    const LevelSet2D &mySolidSurface;
-    const unsigned myMaterialsCount;
+    const LevelSet &mySolidSurface;
+    const int myMaterialsCount;
 };
 
 #endif

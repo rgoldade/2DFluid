@@ -3,7 +3,7 @@
 
 #include "Common.h"
 #include "Integrator.h"
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Solver.h"
@@ -13,7 +13,7 @@
 class AnalyticalPoissonSolver
 {
 public:
-	AnalyticalPoissonSolver(const Transform& xform, const Vec2ui& size)
+	AnalyticalPoissonSolver(const Transform& xform, const Vec2i& size)
 		: myXform(xform)
 	{
 		myPoissonGrid = ScalarGrid<Real>(myXform, size, 0);
@@ -36,11 +36,11 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 {
 	UniformGrid<int> solvableCells(myPoissonGrid.size(), -1);
 
-	unsigned solutionDOFCount = 0;
+	int solutionDOFCount = 0;
 
-	Vec2ui gridSize = myPoissonGrid.size();
+	Vec2i gridSize = myPoissonGrid.size();
 
-	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
 	{
 		solvableCells(cell) = solutionDOFCount++;
 	});
@@ -50,7 +50,7 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 	Real dx = myPoissonGrid.dx();
 	Real coeff = Util::sqr(dx);
 
-	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
 	{
 		int row = solvableCells(cell);
 
@@ -64,7 +64,7 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 		for (auto axis : { 0, 1 })
 			for (auto direction : { 0,1 })
 			{
-				Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+				Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 				// Bounds check. Use analytical solution for Dirichlet condition.
 				if ((direction == 0 && adjacentCell[axis] < 0) ||
@@ -76,7 +76,7 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 				else
 				{
 					// If neighbouring cell is solvable, it should have an entry in the system
-					int adjacentRow = solvableCells(Vec2ui(adjacentCell));
+					int adjacentRow = solvableCells(adjacentCell);
 					assert(adjacentRow >= 0);
 
 					solver.addToElement(row, adjacentRow, 1.);
@@ -96,7 +96,7 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 
 	Real error = 0;
 
-	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
 	{
 		int row = solvableCells(cell);
 

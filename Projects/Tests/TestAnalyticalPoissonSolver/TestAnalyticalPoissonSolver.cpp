@@ -17,14 +17,14 @@ int main(int argc, char** argv)
 		return std::exp(-pos[0] - pos[1]);
 	};
 
-	unsigned baseGrid = 32;
-	unsigned maxBaseGrid = baseGrid * pow(2,4);
+	int baseGrid = 32;
+	int maxBaseGrid = baseGrid * pow(2,4);
 	
 	for (; baseGrid < maxBaseGrid; baseGrid *= 2)
 	{
 		Real dx = Util::PI / Real(baseGrid);
 		Vec2R origin(0);
-		Vec2ui size(round(Util::PI / dx));
+		Vec2i size(round(Util::PI / dx));
 		Transform xform(dx, origin);
 
 		AnalyticalPoissonSolver solver(xform, size);

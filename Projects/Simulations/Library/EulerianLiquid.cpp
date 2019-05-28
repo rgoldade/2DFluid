@@ -34,29 +34,29 @@ void EulerianLiquid::drawSolidVelocity(Renderer& renderer, Real length) const
 }
 
 // Incoming solid surface must already be inverted
-void EulerianLiquid::setSolidSurface(const LevelSet2D& solidSurface)
+void EulerianLiquid::setSolidSurface(const LevelSet& solidSurface)
 {
-    assert(solidSurface.inverted());
+    assert(solidSurface.isBoundaryNegative());
 
-    Mesh2D localMesh = solidSurface.buildDCMesh();
+    EdgeMesh localMesh = solidSurface.buildDCMesh();
     
-    mySolidSurface.setInverted();
-    mySolidSurface.init(localMesh, false);
+    mySolidSurface.setBoundaryNegative();
+    mySolidSurface.initFromMesh(localMesh, false);
 }
 
-void EulerianLiquid::setLiquidSurface(const LevelSet2D& surface)
+void EulerianLiquid::setLiquidSurface(const LevelSet& surface)
 {
-	Mesh2D localMesh = surface.buildDCMesh();
-	myLiquidSurface.init(localMesh, false);
+	EdgeMesh localMesh = surface.buildDCMesh();
+	myLiquidSurface.initFromMesh(localMesh, false);
 }
 
 void EulerianLiquid::setLiquidVelocity(const VectorGrid<Real>& velocity)
 {
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = myLiquidVelocity.size(axis);
+		Vec2i size = myLiquidVelocity.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
 		{
 			Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
 			myLiquidVelocity(face, axis) = velocity.interp(facePosition, axis);
@@ -66,11 +66,11 @@ void EulerianLiquid::setLiquidVelocity(const VectorGrid<Real>& velocity)
 
 void EulerianLiquid::setSolidVelocity(const VectorGrid<Real>& solidVelocity)
 {
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = mySolidVelocity.size(axis);
+		Vec2i size = mySolidVelocity.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
 		{
 			Vec2R facePosition = mySolidVelocity.indexToWorld(Vec2R(face), axis);
 			mySolidVelocity(face, axis) = solidVelocity.interp(facePosition, axis);
@@ -78,12 +78,12 @@ void EulerianLiquid::setSolidVelocity(const VectorGrid<Real>& solidVelocity)
 	}
 }
 
-void EulerianLiquid::unionLiquidSurface(const LevelSet2D& addedLiquidSurface)
+void EulerianLiquid::unionLiquidSurface(const LevelSet& addedLiquidSurface)
 {
 	// Need to zero out velocity in this added region as it could get extrapolated values
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2ui(0), myLiquidVelocity.size(axis), [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), myLiquidVelocity.size(axis), [&](const Vec2i& face)
 		{
 			Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
 			if (addedLiquidSurface.interp(facePosition) <= 0. && myLiquidSurface.interp(facePosition) > 0.)
@@ -99,9 +99,9 @@ void EulerianLiquid::unionLiquidSurface(const LevelSet2D& addedLiquidSurface)
 template<typename ForceSampler>
 void EulerianLiquid::addForce(Real dt, const ForceSampler& force)
 {
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2ui(0), myLiquidVelocity.size(axis), [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), myLiquidVelocity.size(axis), [&](const Vec2i& face)
 		{
 			Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
 			myLiquidVelocity(face, axis) = myLiquidVelocity(face, axis) + dt * force(facePosition, axis);
@@ -111,7 +111,7 @@ void EulerianLiquid::addForce(Real dt, const ForceSampler& force)
 
 void EulerianLiquid::addForce(Real dt, const Vec2R& force)
 {
-	addForce(dt, [&](Vec2R, unsigned axis) {return force[axis]; });
+	addForce(dt, [&](Vec2R, int axis) {return force[axis]; });
 }
 
 void EulerianLiquid::advectOldPressure(const Real dt, const InterpolationOrder order)
@@ -132,14 +132,14 @@ void EulerianLiquid::advectOldPressure(const Real dt, const InterpolationOrder o
 void EulerianLiquid::advectLiquidSurface(Real dt, IntegrationOrder integrator)
 {
 	auto velocityFunc = [&](Real, const Vec2R& pos) { return myLiquidVelocity.interp(pos);  };
-	Mesh2D localMesh = myLiquidSurface.buildDCMesh();
+	EdgeMesh localMesh = myLiquidSurface.buildDCMesh();
 	localMesh.advect(dt, velocityFunc, integrator);
 	assert(localMesh.unitTest());
 
-	myLiquidSurface.init(localMesh, false);
+	myLiquidSurface.initFromMesh(localMesh, false);
 
 	// Remove solid regions from liquid surface
-	forEachVoxelRange(Vec2ui(0), myLiquidSurface.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myLiquidSurface.size(), [&](const Vec2i& cell)
 	{
 		myLiquidSurface(cell) = std::max(myLiquidSurface(cell), -mySolidSurface(cell));
 	});
@@ -164,7 +164,7 @@ void EulerianLiquid::advectLiquidVelocity(Real dt, IntegrationOrder integrator, 
 
 	VectorGrid<Real> tempVelocity(myLiquidVelocity.xform(), myLiquidVelocity.gridSize(), VectorGridSettings::SampleType::STAGGERED);
 
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
 		AdvectField<ScalarGrid<Real>> advector(myLiquidVelocity.grid(axis));
 		advector.advectField(dt, tempVelocity.grid(axis), velocityFunc, integrator, interpolator);
@@ -179,10 +179,10 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 
 	Timer simTimer;
 
-	LevelSet2D extrapolatedSurface = myLiquidSurface;
+	LevelSet extrapolatedSurface = myLiquidSurface;
 
 	Real dx = extrapolatedSurface.dx();
-	forEachVoxelRange(Vec2ui(0), extrapolatedSurface.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), extrapolatedSurface.size(), [&](const Vec2i& cell)
 	{
 		if (mySolidSurface(cell) <= 0)
 			extrapolatedSurface(cell) -= dx;
@@ -218,14 +218,14 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 		std::cout << "  Solve for pressure: " << simTimer.stop() << "s" << std::endl;
 		simTimer.reset();
 		
-		unsigned samples = 3;
+		int samples = 3;
 
-		ScalarGrid<Real> centerAreas = computeSupersampledAreas(extrapolatedSurface, ScalarGridSettings::SampleType::CENTER, 3);
-		ScalarGrid<Real> nodeAreas = computeSupersampledAreas(extrapolatedSurface, ScalarGridSettings::SampleType::NODE, 3);
-		VectorGrid<Real> faceAreas = computeSupersampledFaceAreas(extrapolatedSurface, 3);
+		ScalarGrid<Real> centerAreas = computeSuperSampledAreas(extrapolatedSurface, ScalarGridSettings::SampleType::CENTER, 3);
+		ScalarGrid<Real> nodeAreas = computeSuperSampledAreas(extrapolatedSurface, ScalarGridSettings::SampleType::NODE, 3);
+		VectorGrid<Real> faceAreas = computeSuperSampledFaceAreas(extrapolatedSurface, 3);
 		
-		ScalarGrid<Real> solidCenterAreas = computeSupersampledAreas(extrapolatedSurface, ScalarGridSettings::SampleType::CENTER, 3);
-		ScalarGrid<Real> solidNodeAreas = computeSupersampledAreas(extrapolatedSurface, ScalarGridSettings::SampleType::NODE, 3);
+		ScalarGrid<Real> solidCenterAreas = computeSuperSampledAreas(extrapolatedSurface, ScalarGridSettings::SampleType::CENTER, 3);
+		ScalarGrid<Real> solidNodeAreas = computeSuperSampledAreas(extrapolatedSurface, ScalarGridSettings::SampleType::NODE, 3);
 
 		std::cout << "  Compute viscosity weights: " << simTimer.stop() << "s" << std::endl;
 		simTimer.reset();
@@ -263,7 +263,7 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	}
 
 	// Extrapolate velocity
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
 		ExtrapolateField<ScalarGrid<Real>> extrapolator(myLiquidVelocity.grid(axis));
 		extrapolator.extrapolate(valid.grid(axis), 1.5 * myCFL);

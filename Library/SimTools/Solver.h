@@ -143,7 +143,7 @@ public:
 		for (int k = 0; k < sparseMatrix.outerSize(); ++k)
 			for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
 			{
-				if (fabs(sparseMatrix.coeff(it.row(), it.col()) - sparseMatrix.coeff(it.col(), it.row())) < 1E-7)
+				if (fabs(sparseMatrix.coeff(it.row(), it.col()) - sparseMatrix.coeff(it.col(), it.row())) > 1E-7)
 				{
 					std::cout << "Value at row " << it.row() << ", col " << it.col() << " is " << sparseMatrix.coeff(it.row(), it.col()) << std::endl;
 					std::cout << "Value at row " << it.col() << ", col " << it.row() << " is " << sparseMatrix.coeff(it.col(), it.row()) << std::endl;

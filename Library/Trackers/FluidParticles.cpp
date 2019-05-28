@@ -2,7 +2,7 @@
 
 #include "FluidParticles.h"
 
-static Vec2R randomizer(const Vec2ui& coord, unsigned count, Real seed)
+static Vec2R randomizer(const Vec2i& coord, unsigned count, Real seed)
 {
 	int pos0 = (5915587277 * coord[0]) ^ (3367900313 * count) ^ int(3267000013. * seed);
 	int pos1 = (2860486313 * coord[1]) ^ (9576890767 * count) ^ int(5463458053. * seed);
@@ -13,9 +13,9 @@ static Vec2R randomizer(const Vec2ui& coord, unsigned count, Real seed)
 	return Vec2R(Real(pos0) / 100. - .5, Real(pos1) / 100. - .5);
 };
 
-void FluidParticles::drawPoints(Renderer& renderer, const Vec3f& colour, unsigned size) const
+void FluidParticles::drawPoints(Renderer& renderer, const Vec3f& colour, Real pointSize) const
 {
-	renderer.addPoints(myParticles, colour, size);
+	renderer.addPoints(myParticles, colour, pointSize);
 }
 
 void FluidParticles::drawVelocity(Renderer& renderer, const Vec3f& colour, Real length) const
@@ -35,11 +35,11 @@ void FluidParticles::drawVelocity(Renderer& renderer, const Vec3f& colour, Real 
 	renderer.addLines(startPoints, endPoints, colour);
 }
 
-void FluidParticles::init(const LevelSet2D& surface)
+void FluidParticles::init(const LevelSet& surface)
 {
 	myParticles.clear();
 
-	forEachVoxelRange(Vec2ui(0), surface.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), surface.size(), [&](const Vec2i& cell)
 	{
 		if (surface(cell) < surface.dx())
 		{
@@ -49,7 +49,7 @@ void FluidParticles::init(const LevelSet2D& surface)
 
 			for (unsigned seedCount = 0; seedCount < sampleCount; ++seedCount)
 			{
-				Vec2R randOffset = randomizer(Vec2ui(cell), seedCount, 15);
+				Vec2R randOffset = randomizer(cell, seedCount, 15);
 				Vec2R indexPoint = Vec2R(cell) + randOffset;
 				Vec2R worldPoint = surface.indexToWorld(indexPoint);
 
@@ -68,20 +68,20 @@ void FluidParticles::setVelocity(const VectorGrid<Real>& vel)
 	assert(myTrackVelocity);
 	myVelocity.resize(myParticles.size());
 
-	for (unsigned p = 0; p < myParticles.size(); ++p)
-		myVelocity[p] = vel.interp(myParticles[p]);
+	for (int pointIndex = 0; pointIndex < myParticles.size(); ++pointIndex)
+		myVelocity[pointIndex] = vel.interp(myParticles[pointIndex]);
 }
 
 void FluidParticles::applyVelocity(VectorGrid<Real>& velocity)
 {
 	assert(myTrackVelocity);
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
 		UniformGrid<Real> denominator(velocity.size(axis), 0);
 		UniformGrid<Real> numerator(velocity.size(axis), 0);
 
-		unsigned particleCount = myParticles.size();
-		for (unsigned particleIndex = 0; particleIndex < particleCount; ++particleIndex)
+		const int particleCount = myParticles.size();
+		for (int particleIndex = 0; particleIndex < particleCount; ++particleIndex)
 		{
 			// Iterate over nearby voxels
 			Vec2R minBoundingBox = floor(velocity.worldToIndex(myParticles[particleIndex], axis));
@@ -107,7 +107,7 @@ void FluidParticles::applyVelocity(VectorGrid<Real>& velocity)
 				}
 		}
 
-		forEachVoxelRange(Vec2ui(0), velocity.size(axis), [&](const Vec2ui& cell)
+		forEachVoxelRange(Vec2i(0), velocity.size(axis), [&](const Vec2i& cell)
 		{
 			if (denominator(cell) > 0.)
 			{
@@ -120,9 +120,9 @@ void FluidParticles::incrementVelocity(VectorGrid<Real>& velocity)
 {
 	assert(myVelocity.size() == myParticles.size() && myTrackVelocity);
 
-	unsigned particleCount = myParticles.size();
+	const int particleCount = myParticles.size();
 
-	for (unsigned particleIndex = 0; particleIndex < particleCount; ++particleIndex)
+	for (int particleIndex = 0; particleIndex < particleCount; ++particleIndex)
 		myVelocity[particleIndex] += velocity.interp(myParticles[particleIndex]);
 }
 
@@ -132,7 +132,7 @@ void FluidParticles::blendVelocity(const VectorGrid<Real>& oldVelocity,
 {
 	assert(myVelocity.size() == myParticles.size() && myTrackVelocity);
 
-	for (unsigned particleIndex = 0; particleIndex < myParticles.size(); ++particleIndex)
+	for (int particleIndex = 0; particleIndex < myParticles.size(); ++particleIndex)
 	{
 		Vec2R particleVelocity = myVelocity[particleIndex];
 		Vec2R picVelocity = newVelocity.interp(myParticles[particleIndex]);
@@ -142,9 +142,9 @@ void FluidParticles::blendVelocity(const VectorGrid<Real>& oldVelocity,
 	}
 }
 
-LevelSet2D FluidParticles::surfaceParticles(const Transform& xform, const Vec2ui& size, unsigned narrowBand) const
+LevelSet FluidParticles::surfaceParticles(const Transform& xform, const Vec2i& size, int narrowBand) const
 {
-	LevelSet2D surface(xform, size, narrowBand);
+	LevelSet surface(xform, size, narrowBand);
 	Real dx = xform.dx();
 
 	for (auto particlePoint : myParticles)
@@ -173,17 +173,17 @@ LevelSet2D FluidParticles::surfaceParticles(const Transform& xform, const Vec2ui
 	return surface;
 }
 
-void FluidParticles::reseed(const LevelSet2D& surface, Real minDensity, Real maxDensity, const VectorGrid<Real>* velocity, Real seed)
+void FluidParticles::reseed(const LevelSet& surface, Real minDensity, Real maxDensity, const VectorGrid<Real>* velocity, Real seed)
 {
 	myNewParticles.clear();
 
 	// Load up particles into grid cells
-	UniformGrid<std::vector<size_t>> particleIndexGrid(surface.size());
+	UniformGrid<std::vector<int>> particleIndexGrid(surface.size());
 
 	std::vector<Vec2R> addParticlesList;
-	std::vector<unsigned> deleteParticlesList;
+	std::vector<int> deleteParticlesList;
 
-	for (unsigned particleIndex = 0; particleIndex < myParticles.size(); ++particleIndex)
+	for (int particleIndex = 0; particleIndex < myParticles.size(); ++particleIndex)
 	{
 		Vec2R particlePoint = surface.worldToIndex(myParticles[particleIndex]);
 		Vec2R gridPoint = round(particlePoint);
@@ -202,7 +202,7 @@ void FluidParticles::reseed(const LevelSet2D& surface, Real minDensity, Real max
 
 	maxDensity = std::max(maxDensity, myOversampleRate);
 	minDensity = std::min(maxDensity, myOversampleRate);
-	forEachVoxelRange(Vec2ui(0), surface.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), surface.size(), [&](const Vec2i& cell)
 	{
 		// If there are more particles in a cell than the max value, delete down to the target density
 		if (particleIndexGrid(cell).size() > maxDensity)
@@ -234,11 +234,11 @@ void FluidParticles::reseed(const LevelSet2D& surface, Real minDensity, Real max
 	});
 
 	// Reverse sort the parts to be deleted so we don't accidentally swap and delete the wrong particles
-	std::sort(deleteParticlesList.begin(), deleteParticlesList.end(), std::greater<unsigned>());
+	std::sort(deleteParticlesList.begin(), deleteParticlesList.end(), std::greater<int>());
 
 	for (auto deleteIndex : deleteParticlesList)
 	{
-		unsigned particleCount = myParticles.size();
+		int particleCount = myParticles.size();
 		std::swap(myParticles[deleteIndex], myParticles[particleCount - 1]);
 		
 		if (myTrackVelocity) std::swap(myVelocity[deleteIndex], myVelocity[particleCount - 1]);
@@ -272,9 +272,9 @@ void FluidParticles::reseed(const LevelSet2D& surface, Real minDensity, Real max
 	myNewParticles = addParticlesList;
 }
 
-void FluidParticles::bumpParticles(const LevelSet2D& collision)
+void FluidParticles::bumpParticles(const LevelSet& collision)
 {
-	for (unsigned particleIndex = 0; particleIndex < myParticles.size(); ++particleIndex)
+	for (int particleIndex = 0; particleIndex < myParticles.size(); ++particleIndex)
 	{
 		if (collision.interp(myParticles[particleIndex]) <= 0.)
 			myParticles[particleIndex] -= .9 *collision.interp(myParticles[particleIndex]) * collision.normal(myParticles[particleIndex]);

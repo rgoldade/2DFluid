@@ -29,7 +29,7 @@ class AnalyticalViscositySolver
 	static constexpr int UNASSIGNED = -1;
 
 public:
-	AnalyticalViscositySolver(const Transform& xform, const Vec2ui& size)
+	AnalyticalViscositySolver(const Transform& xform, const Vec2i& size)
 		: myXform(xform)
 	{
 		myVelocityIndex = VectorGrid<int>(xform, size, UNASSIGNED, VectorGridSettings::SampleType::STAGGERED);
@@ -37,8 +37,7 @@ public:
 
 	// Returns the infinity-norm error of the numerical solution
 	template<typename Initial, typename Solution, typename Viscosity>
-	Real solve(const Initial& initial, const Solution& solution, const Viscosity& viscosity,
-				const Real dt);
+	Real solve(const Initial& initial, const Solution& solution, const Viscosity& viscosity, const Real dt);
 
 	Vec2R cellIndexToWorld(const Vec2R& index) const { return myXform.indexToWorld(index + Vec2R(.5)); }
 	Vec2R nodeIndexToWorld(const Vec2R& index) const { return myXform.indexToWorld(index); }
@@ -59,7 +58,7 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 										const Viscosity& viscosityFunction,
 										const Real dt)
 {
-	unsigned velocityDOFCount = setVelocityIndex();
+	int velocityDOFCount = setVelocityIndex();
 
 	// Build reduced system.
 	// (Note we don't need control volumes since the cells are the same size and there is no free surface).
@@ -70,23 +69,23 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 	Real dx = myVelocityIndex.dx();
 	Real baseCoeff = dt / Util::sqr(dx);
 
-	for (auto axis : { 0,1 })
+	for (int axis : { 0,1 })
 	{
-		Vec2ui size = myVelocityIndex.size(axis);
+		Vec2i size = myVelocityIndex.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
 		{
-			int row = myVelocityIndex(face, axis);
+			int velocityIndex = myVelocityIndex(face, axis);
 
-			if (row >= 0)
+			if (velocityIndex >= 0)
 			{
 				Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(face), axis);
 
-				solver.addToRhs(row, initialFunction(facePosition, axis));
-				solver.addToElement(row, row, 1.);
+				solver.addToRhs(velocityIndex, initialFunction(facePosition, axis));
+				solver.addToElement(velocityIndex, velocityIndex, 1.);
 
 				// Build cell-centered stresses.
-				for (auto cellDirection : { 0,1 })
+				for (int cellDirection : { 0,1 })
 				{
 					Vec2i cell = faceToCell(Vec2i(face), axis, cellDirection);
 
@@ -95,36 +94,36 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 					Real cellSign = (cellDirection == 0) ? -1. : 1.;
 
-					for (auto faceDirection : { 0,1 })
+					for (int faceDirection : { 0,1 })
 					{
-						Vec2ui adjacentFace = cellToFace(Vec2ui(cell), axis, faceDirection);
+						Vec2i adjacentFace = cellToFace(cell, axis, faceDirection);
 
 						Real faceSign = (faceDirection == 0) ? -1. : 1.;
 
 						int faceRow = myVelocityIndex(adjacentFace, axis);
 						if (faceRow >= 0)
-							solver.addToElement(row, faceRow, -cellSign * faceSign * cellCoeff);
+							solver.addToElement(velocityIndex, faceRow, -cellSign * faceSign * cellCoeff);
 						// No solid boundary to deal with since faces on the boundary
 						// are not included.
 					}
 				}
 
 				// Build node stresses.
-				for (auto nodeDirection : { 0,1 })
+				for (int nodeDirection : { 0, 1})
 				{
-					Vec2ui node = faceToNode(face, axis, nodeDirection);
+					Vec2i node = faceToNode(face, axis, nodeDirection);
 
 					Real nodeSign = (nodeDirection == 0) ? -1. : 1.;
 
 					Vec2R nodePosition = nodeIndexToWorld(Vec2R(node));
 					Real nodeCoeff = viscosityFunction(nodePosition) * baseCoeff;
 
-					for (auto gradientAxis : { 0,1 })
-						for (auto faceDirection : { 0,1 })
+					for (int gradientAxis : {0, 1})
+						for (int faceDirection : {0, 1})
 						{
-							Vec2i adjacentFace = nodeToFace(Vec2i(node), gradientAxis, faceDirection);
+							Vec2i adjacentFace = nodeToFace(node, gradientAxis, faceDirection);
 
-							unsigned faceAxis = (gradientAxis + 1) % 2;
+							int faceAxis = (gradientAxis + 1) % 2;
 
 							Real faceSign = (faceDirection == 0) ? -1. : 1.;
 
@@ -133,22 +132,22 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 								faceDirection == 1 && adjacentFace[gradientAxis] >= size[gradientAxis])
 							{
 								Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(adjacentFace), faceAxis);
-								solver.addToRhs(row, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
+								solver.addToRhs(velocityIndex, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
 							}
 							// Check for on the bounds
 							else if (nodeDirection == 0 && adjacentFace[faceAxis] == 0 ||
-								nodeDirection == 1 &&
-									adjacentFace[faceAxis] == myVelocityIndex.size(faceAxis)[faceAxis] - 1)
+										nodeDirection == 1 &&
+										adjacentFace[faceAxis] == myVelocityIndex.size(faceAxis)[faceAxis] - 1)
 							{
 								Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(adjacentFace), faceAxis);
-								solver.addToRhs(row, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
+								solver.addToRhs(velocityIndex, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
 							}
 							else
 							{
-								int adjacentRow = myVelocityIndex(Vec2ui(adjacentFace), faceAxis);
+								int adjacentRow = myVelocityIndex(adjacentFace, faceAxis);
 								assert(adjacentRow >= 0);
 
-								solver.addToElement(row, adjacentRow, -nodeSign * faceSign * nodeCoeff);
+								solver.addToElement(velocityIndex, adjacentRow, -nodeSign * faceSign * nodeCoeff);
 							}
 						}
 				}
@@ -160,18 +159,18 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 	Real error = 0;
 
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = myVelocityIndex.size(axis);
+		Vec2i size = myVelocityIndex.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
 		{
-			int row = myVelocityIndex(face, axis);
+			int velocityIndex = myVelocityIndex(face, axis);
 
-			if (row >= 0)
+			if (velocityIndex >= 0)
 			{
 				Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(face), axis);
-				Real localError = fabs(solver.solution(row) - solutionFunction(facePosition, axis));
+				Real localError = fabs(solver.solution(velocityIndex) - solutionFunction(facePosition, axis));
 
 				if (error < localError) error = localError;
 			}
