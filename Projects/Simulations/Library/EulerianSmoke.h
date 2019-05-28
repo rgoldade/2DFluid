@@ -37,6 +37,8 @@ public:
 
 		mySmokeDensity = ScalarGrid<Real>(myXform, size, 0);
 		mySmokeTemperature = ScalarGrid<Real>(myXform, size, myAmbientTemperature);
+
+		myOldPressure = ScalarGrid<Real>(myXform, size, 0);
 	}
 
 	void setSolidSurface(const LevelSet2D& solidSurface);
@@ -46,11 +48,12 @@ public:
 
 	void setSmokeSource(const ScalarGrid<Real>& density, const ScalarGrid<Real>& temperature);
 
-	void advectFluidDensity(Real dt, const InterpolationOrder& order);
-	void advectFluidVelocity(Real dt, const InterpolationOrder& order);
+	void advectFluidMaterial(const Real dt, const InterpolationOrder order);
+	void advectFluidVelocity(const Real dt, const InterpolationOrder order);
+	void advectOldPressure(const Real dt, const InterpolationOrder order);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
-	void runTimestep(Real dt, Renderer& renderer);
+	void runTimestep(const Real dt, Renderer& renderer);
 
 	// Useful for CFL
 	Real maxVelocityMagnitude() { return myFluidVelocity.maxMagnitude(); }
@@ -73,6 +76,8 @@ private:
 	Real myAmbientTemperature;
 
 	Transform myXform;
+
+	ScalarGrid<Real> myOldPressure;
 };
 
 #endif

@@ -35,8 +35,8 @@ public:
 
 		for (unsigned material = 1; material < myMaterialsCount; ++material)
 		{
-			assert(mySurfaceList[material - 1].isMatched(mySurfaceList[material]));
-			assert(myVelocityList[material - 1].isMatched(myVelocityList[material]));
+			assert(mySurfaceList[material - 1].isGridMatched(mySurfaceList[material]));
+			assert(myVelocityList[material - 1].isGridMatched(myVelocityList[material]));
 		}
 
 		// Since every surface and every velocity field is matched, we only need to compare
@@ -47,7 +47,7 @@ public:
 				myVelocityList[0].size(1)[0] == mySurfaceList[0].size()[0] &&
 				myVelocityList[0].size(1)[1] - 1 == mySurfaceList[0].size()[1]);
 
-		assert(mySurfaceList[0].isMatched(mySolidSurface));
+		assert(mySurfaceList[0].isGridMatched(mySolidSurface));
 
 		myPressure = ScalarGrid<Real>(mySolidSurface.xform(), mySolidSurface.size(), 0);
 		myValid = VectorGrid<Real>(mySolidSurface.xform(), mySolidSurface.size(), 0, VectorGridSettings::SampleType::STAGGERED);

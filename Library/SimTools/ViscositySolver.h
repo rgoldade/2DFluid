@@ -36,7 +36,7 @@ public:
 		{
 			// For efficiency sake, this should only take in velocity on a staggered grid
 			// that matches the center sampled surface and collision
-			assert(mySurface.isMatched(mySolidSurface));
+			assert(mySurface.isGridMatched(mySolidSurface));
 
 			// For efficiency sake, this should only take in velocity on a staggered grid
 			// that matches the center sampled surface and collision

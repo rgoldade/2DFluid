@@ -35,7 +35,7 @@ void EulerianSmoke::drawSolidVelocity(Renderer& renderer, Real length) const
 // Incoming solid surface must already be inverted
 void EulerianSmoke::setSolidSurface(const LevelSet2D& solidSurface)
 {
-	assert(solidSurface.isMatched(mySolidSurface));
+	assert(solidSurface.isGridMatched(mySolidSurface));
 
 	assert(solidSurface.inverted());
 
@@ -47,7 +47,7 @@ void EulerianSmoke::setSolidSurface(const LevelSet2D& solidSurface)
 
 void EulerianSmoke::setSolidVelocity(const VectorGrid<Real>& solidVelocity)
 {
-	assert(solidVelocity.isMatched(mySolidVelocity));
+	assert(solidVelocity.isGridMatched(mySolidVelocity));
 	for (auto axis : { 0,1 })
 	{
 		Vec2ui size = mySolidVelocity.size(axis);
@@ -62,7 +62,7 @@ void EulerianSmoke::setSolidVelocity(const VectorGrid<Real>& solidVelocity)
 
 void EulerianSmoke::setFluidVelocity(const VectorGrid<Real>& velocity)
 {
-	assert(velocity.isMatched(myFluidVelocity));
+	assert(velocity.isGridMatched(myFluidVelocity));
 
 	for (auto axis : { 0,1 })
 	{
@@ -78,8 +78,8 @@ void EulerianSmoke::setFluidVelocity(const VectorGrid<Real>& velocity)
 
 void EulerianSmoke::setSmokeSource(const ScalarGrid<Real>& density, const ScalarGrid<Real>& temperature)
 {
-	assert(density.isMatched(mySmokeDensity));
-	assert(temperature.isMatched(mySmokeTemperature));
+	assert(density.isGridMatched(mySmokeDensity));
+	assert(temperature.isGridMatched(mySmokeTemperature));
 
 	Vec2ui size = mySmokeDensity.size();
 
@@ -93,7 +93,22 @@ void EulerianSmoke::setSmokeSource(const ScalarGrid<Real>& density, const Scalar
 	});
 }
 
-void EulerianSmoke::advectFluidDensity(Real dt, const InterpolationOrder& order)
+void EulerianSmoke::advectOldPressure(const Real dt, const InterpolationOrder order)
+{
+	auto velocityFunc = [&](Real, const Vec2R& pos) { return myFluidVelocity.interp(pos); };
+
+	{
+		AdvectField<ScalarGrid<Real>> pressureAdvector(myOldPressure);
+
+		ScalarGrid<Real> tempPressure(myOldPressure.xform(), myOldPressure.size());
+
+		pressureAdvector.advectField(dt, tempPressure, velocityFunc, IntegrationOrder::RK3, order);
+
+		std::swap(myOldPressure, tempPressure);
+	}
+}
+
+void EulerianSmoke::advectFluidMaterial(const Real dt, const InterpolationOrder order)
 {
 	auto velocityFunc = [&](Real, const Vec2R& pos) { return myFluidVelocity.interp(pos); };
 
@@ -118,7 +133,7 @@ void EulerianSmoke::advectFluidDensity(Real dt, const InterpolationOrder& order)
 	}
 }
 
-void EulerianSmoke::advectFluidVelocity(Real dt, const InterpolationOrder& order)
+void EulerianSmoke::advectFluidVelocity(const Real dt, const InterpolationOrder order)
 {
 	auto velocityFunc = [&](Real, const Vec2R& pos) { return myFluidVelocity.interp(pos);  };
 	
@@ -182,24 +197,27 @@ void EulerianSmoke::runTimestep(Real dt, Renderer& renderer)
 	//
 
 	// Initialize and call pressure projection
-	PressureProjection projectdivergence(dummySurface, myFluidVelocity, mySolidSurface, mySolidVelocity);
-	
+	PressureProjection projectDivergence(dummySurface, myFluidVelocity, mySolidSurface, mySolidVelocity);
+
+	projectDivergence.setInitialGuess(myOldPressure);
 	// TODO: handle moving boundaries.
-	projectdivergence.project(ghostFluidWeights, cutCellWeights);
+	projectDivergence.project(ghostFluidWeights, cutCellWeights);
 
 	// Update velocity field
-	projectdivergence.applySolution(myFluidVelocity, ghostFluidWeights);
+	projectDivergence.applySolution(myFluidVelocity, ghostFluidWeights);
 	
+	myOldPressure = projectDivergence.getPressureGrid();
+
 	std::cout << "Pressure projection: " << simTimer.stop() << "s" << std::endl;
 
 	simTimer.reset();
-
 
 	//
 	// Advect fluid state
 	//
 
-	advectFluidDensity(dt, InterpolationOrder::CUBIC);
+	advectOldPressure(dt, InterpolationOrder::LINEAR);
+	advectFluidMaterial(dt, InterpolationOrder::CUBIC);
 	advectFluidVelocity(dt, InterpolationOrder::LINEAR);
 
 	std::cout << "Advection: " << simTimer.stop() << "s" << std::endl;

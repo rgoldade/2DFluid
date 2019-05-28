@@ -96,7 +96,7 @@ public:
 	// positioned at the same spot, have the same grid
 	// spacing and the same sampling sceme
 	template<typename S>
-	bool isMatched(const ScalarGrid<S>& grid) const
+	bool isGridMatched(const ScalarGrid<S>& grid) const
 	{
 		if (this->mySize != grid.size()) return false;
 		if (myXform != grid.xform()) return false;

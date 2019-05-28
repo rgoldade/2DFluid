@@ -23,12 +23,6 @@ namespace Util
 	constexpr double PI = 3.1415926535897932384626433832795;
 
 	template<typename T>
-	bool isEqual(const T& value0, const T& value1, const T tol = 1E-5)
-	{
-		return fabs(value0 - value1) < tol;
-	}
-
-	template<typename T>
 	T sqr(T x)
 	{
 		return x * x;

@@ -56,14 +56,14 @@ public:
 		init(tempMesh, false);
 	}
 
-	bool isMatched(const LevelSet2D& grid) const
+	bool isGridMatched(const LevelSet2D& grid) const
 	{
 		if (size() != grid.size()) return false;
 		if (xform() != grid.xform()) return false;
 		return true;
 	}
 
-	bool isMatched(const ScalarGrid<Real>& grid) const
+	bool isGridMatched(const ScalarGrid<Real>& grid) const
 	{
 		if (size() != grid.size()) return false;
 		if (xform() != grid.xform()) return false;

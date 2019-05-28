@@ -82,8 +82,8 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 			{
 				Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(face), axis);
 
-				solver.addRhs(row, initialFunction(facePosition, axis));
-				solver.addElement(row, row, 1.);
+				solver.addToRhs(row, initialFunction(facePosition, axis));
+				solver.addToElement(row, row, 1.);
 
 				// Build cell-centered stresses.
 				for (auto cellDirection : { 0,1 })
@@ -103,7 +103,7 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 						int faceRow = myVelocityIndex(adjacentFace, axis);
 						if (faceRow >= 0)
-							solver.addElement(row, faceRow, -cellSign * faceSign * cellCoeff);
+							solver.addToElement(row, faceRow, -cellSign * faceSign * cellCoeff);
 						// No solid boundary to deal with since faces on the boundary
 						// are not included.
 					}
@@ -133,7 +133,7 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 								faceDirection == 1 && adjacentFace[gradientAxis] >= size[gradientAxis])
 							{
 								Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(adjacentFace), faceAxis);
-								solver.addRhs(row, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
+								solver.addToRhs(row, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
 							}
 							// Check for on the bounds
 							else if (nodeDirection == 0 && adjacentFace[faceAxis] == 0 ||
@@ -141,14 +141,14 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 									adjacentFace[faceAxis] == myVelocityIndex.size(faceAxis)[faceAxis] - 1)
 							{
 								Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(adjacentFace), faceAxis);
-								solver.addRhs(row, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
+								solver.addToRhs(row, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
 							}
 							else
 							{
 								int adjacentRow = myVelocityIndex(Vec2ui(adjacentFace), faceAxis);
 								assert(adjacentRow >= 0);
 
-								solver.addElement(row, adjacentRow, -nodeSign * faceSign * nodeCoeff);
+								solver.addToElement(row, adjacentRow, -nodeSign * faceSign * nodeCoeff);
 							}
 						}
 				}

@@ -66,7 +66,7 @@ void display()
 			// Store accumulated substep times
 			frameTime += localDt;
 		}
-
+		std::cout << "\n\nEnd of frame: " << frameCount << "\n" << std::endl;
 		++frameCount;
 		runSingleStep = false;
 		isDisplayDirty = true;

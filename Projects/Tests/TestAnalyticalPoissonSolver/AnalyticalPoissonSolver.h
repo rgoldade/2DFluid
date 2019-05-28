@@ -59,7 +59,7 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 		// Build RHS
 		Vec2R gridPoint = myPoissonGrid.indexToWorld(Vec2R(cell));
 
-		solver.addRhs(row, coeff * rhsFuction(gridPoint));
+		solver.addToRhs(row, coeff * rhsFuction(gridPoint));
 
 		for (auto axis : { 0, 1 })
 			for (auto direction : { 0,1 })
@@ -71,7 +71,7 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 					(direction == 1 && adjacentCell[axis] >= gridSize[axis]))
 				{
 					Vec2R adjacentPoint = myPoissonGrid.indexToWorld(Vec2R(adjacentCell));
-					solver.addRhs(row, -solutionFunction(adjacentPoint));
+					solver.addToRhs(row, -solutionFunction(adjacentPoint));
 				}
 				else
 				{
@@ -79,11 +79,11 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 					int adjacentRow = solvableCells(Vec2ui(adjacentCell));
 					assert(adjacentRow >= 0);
 
-					solver.addElement(row, adjacentRow, 1.);
+					solver.addToElement(row, adjacentRow, 1.);
 				}
 			}
 
-		solver.addElement(row, row, -4.);
+		solver.addToElement(row, row, -4.);
 	});
 
 	bool solved = solver.solveDirect();

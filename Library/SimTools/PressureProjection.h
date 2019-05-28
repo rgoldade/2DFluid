@@ -28,10 +28,12 @@ public:
 			    const LevelSet2D& solidSurface, const VectorGrid<Real>& solidVelocity)
 		: myFluidSurface(surface)
 		, myFluidVelocity(liquidVelocity)
-		, myCollision(solidSurface)
+		, mySolidSurface(solidSurface)
 		, mySolidVelocity(solidVelocity)
+		, myUseInitialGuess(false)
+		, myInitialGuess(nullptr)
 	{
-		assert(surface.isMatched(solidSurface));
+		assert(surface.isGridMatched(solidSurface));
 
 		// For efficiency sake, this should only take in velocity on a staggered grid
 		// that matches the center sampled liquid and solid surfaces.
@@ -57,6 +59,18 @@ public:
 	// In both cases, 0 means "empty" and 1 means "full".
 	void project(const VectorGrid<Real>& ghostFluidWeights, const VectorGrid<Real>& cutCellWeights);
 
+	void setInitialGuess(const ScalarGrid<Real>& initialGuessPressure)
+	{
+		assert(myFluidSurface.isGridMatched(initialGuessPressure));
+		myUseInitialGuess = true;
+		myInitialGuess = &initialGuessPressure;
+	}
+
+	ScalarGrid<Real> getPressureGrid()
+	{
+		return myPressure;
+	}
+
 	// Apply solution to a velocity field at solvable faces
 	void applySolution(VectorGrid<Real>& velocity, const VectorGrid<Real>& ghostFluidWeights);
 	void applyValid(VectorGrid<MarkedCells> &valid);
@@ -69,10 +83,13 @@ private:
 
 	VectorGrid<MarkedCells> myValid; // Store solved faces
 
-	const LevelSet2D &myFluidSurface, &myCollision;
+	const LevelSet2D &myFluidSurface, &mySolidSurface;
 	
 	ScalarGrid<Real> myPressure;
 	UniformGrid<int> myFluidCellIndex;
+
+	const ScalarGrid<Real> *myInitialGuess;
+	bool myUseInitialGuess;
 };
 
 #endif

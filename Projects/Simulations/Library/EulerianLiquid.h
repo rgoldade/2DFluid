@@ -37,6 +37,8 @@ public:
 
 		myLiquidSurface = LevelSet2D(myXform, size, myCFL);
 		mySolidSurface = LevelSet2D(myXform, size, myCFL);
+
+		myOldPressure = ScalarGrid<Real>(myXform, size, 0);
 	}
 
 	void setSolidSurface(const LevelSet2D& solidSurface);
@@ -46,7 +48,7 @@ public:
 
 	void setViscosity(const ScalarGrid<Real>& viscosityGrid)
 	{
-		assert(myLiquidSurface.isMatched(viscosityGrid));
+		assert(myLiquidSurface.isGridMatched(viscosityGrid));
 		myViscosity = viscosityGrid;
 		myDoSolveViscosity = true;
 	}
@@ -64,6 +66,7 @@ public:
 	
 	void addForce(Real dt, const Vec2R& force);
 
+	void advectOldPressure(const Real dt, const InterpolationOrder order);
 	void advectLiquidSurface(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
 	void advectViscosity(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
 	void advectLiquidVelocity(Real dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
@@ -94,6 +97,8 @@ private:
 
 	bool myDoSolveViscosity;
 	Real mySurfaceTensionScale, myCFL;
+
+	ScalarGrid<Real> myOldPressure;
 };
 
 #endif

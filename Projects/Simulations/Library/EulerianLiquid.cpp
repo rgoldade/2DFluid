@@ -114,6 +114,21 @@ void EulerianLiquid::addForce(Real dt, const Vec2R& force)
 	addForce(dt, [&](Vec2R, unsigned axis) {return force[axis]; });
 }
 
+void EulerianLiquid::advectOldPressure(const Real dt, const InterpolationOrder order)
+{
+	auto velocityFunc = [&](Real, const Vec2R& pos) { return myLiquidVelocity.interp(pos); };
+
+	{
+		AdvectField<ScalarGrid<Real>> pressureAdvector(myOldPressure);
+
+		ScalarGrid<Real> tempPressure(myOldPressure.xform(), myOldPressure.size());
+
+		pressureAdvector.advectField(dt, tempPressure, velocityFunc, IntegrationOrder::RK3, order);
+
+		std::swap(myOldPressure, tempPressure);
+	}
+}
+
 void EulerianLiquid::advectLiquidSurface(Real dt, IntegrationOrder integrator)
 {
 	auto velocityFunc = [&](Real, const Vec2R& pos) { return myLiquidVelocity.interp(pos);  };
@@ -187,12 +202,14 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	simTimer.reset();
 
 	// Initialize and call pressure projection
-	PressureProjection projectdivergence(extrapolatedSurface, myLiquidVelocity, mySolidSurface, mySolidVelocity);
+	PressureProjection projectDivergence(extrapolatedSurface, myLiquidVelocity, mySolidSurface, mySolidVelocity);
 
-	projectdivergence.project(ghostFluidWeights, cutCellWeights);
-	
+	projectDivergence.setInitialGuess(myOldPressure);
+	projectDivergence.project(ghostFluidWeights, cutCellWeights);
+	myOldPressure = projectDivergence.getPressureGrid();
+
 	// Update velocity field
-	projectdivergence.applySolution(myLiquidVelocity, ghostFluidWeights);
+	projectDivergence.applySolution(myLiquidVelocity, ghostFluidWeights);
 
 	VectorGrid<MarkedCells> valid(extrapolatedSurface.xform(), extrapolatedSurface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
 	
@@ -223,14 +240,14 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 		simTimer.reset();
 
 		// Initialize and call pressure projection		
-		PressureProjection projectdivergence2(extrapolatedSurface, myLiquidVelocity, mySolidSurface, mySolidVelocity);
+		PressureProjection projectDivergence2(extrapolatedSurface, myLiquidVelocity, mySolidSurface, mySolidVelocity);
 
-		projectdivergence2.project(ghostFluidWeights, cutCellWeights);
+		projectDivergence2.project(ghostFluidWeights, cutCellWeights);
 
 		// Update velocity field
-		projectdivergence2.applySolution(myLiquidVelocity, ghostFluidWeights);
+		projectDivergence2.applySolution(myLiquidVelocity, ghostFluidWeights);
 
-		projectdivergence2.applyValid(valid);
+		projectDivergence2.applyValid(valid);
 
 		std::cout << "  Solve for pressure after viscosity: " << simTimer.stop() << "s" << std::endl;
 		
@@ -239,7 +256,7 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	else
 	{
 	    // Label solved faces
-	    projectdivergence.applyValid(valid);
+	    projectDivergence.applyValid(valid);
 
 	    std::cout << "  Solve for pressure: " << simTimer.stop() << "s" << std::endl;
 	    simTimer.reset();
@@ -255,6 +272,7 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	std::cout << "  Extrapolate velocity: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();
 
+	advectOldPressure(dt, InterpolationOrder::LINEAR);
 	advectLiquidSurface(dt, IntegrationOrder::RK3);
 	advectLiquidVelocity(dt, IntegrationOrder::RK3);
 

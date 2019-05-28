@@ -71,7 +71,7 @@ public:
 	{
 	    assert(material < myMaterialCount);
 
-	    assert(surface.isMatched(myFluidSurfaces[material]));
+	    assert(surface.isGridMatched(myFluidSurfaces[material]));
 	    myFluidSurfaces[material] = surface;
 	    myFluidDensities[material] = density;
 	}
@@ -81,10 +81,10 @@ public:
 	{
 	    assert(material < myMaterialCount);
 
-	    assert(surface.isMatched(myFluidSurfaces[material]));
+	    assert(surface.isGridMatched(myFluidSurfaces[material]));
 	    myFluidSurfaces[material] = surface;
 
-	    assert(velocity.isMatched(myFluidVelocities[material]));
+	    assert(velocity.isGridMatched(myFluidVelocities[material]));
 	    myFluidVelocities[material] = velocity;
 
 	    myFluidDensities[material] = density;

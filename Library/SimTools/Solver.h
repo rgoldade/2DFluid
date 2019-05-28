@@ -35,13 +35,13 @@ public:
 	}
 
 	// Insert element item into sparse vector. Duplicates are allowed and will be summed together
-	void addElement(unsigned row, unsigned col, SolverReal val)
+	void addToElement(unsigned row, unsigned col, SolverReal val)
 	{
 		myMatrix.push_back(Eigen::Triplet<SolverReal>(row, col, val));
 	}
 
 	// Adds value to RHS. It's safe to assume that it is initialized to zeros
-	void addRhs(unsigned row, SolverReal val)
+	void addToRhs(unsigned row, SolverReal val)
 	{
 		myRhs(row) += val;
 	}
@@ -62,7 +62,7 @@ public:
 		return mySolution(row);
 	}
 
-	inline void addGuess(unsigned row, SolverReal val)
+	inline void addToGuess(unsigned row, SolverReal val)
 	{
 		myGuess(row) += val;
 	}
@@ -128,9 +128,11 @@ public:
 			return false;
 		}
 
+		std::cout << "Solver iterations: " << solver.iterations() << std::endl;
+		std::cout << "Solve error: " << solver.error() << std::endl;
+
 		return true;
 	}
-
 
 	bool isSymmetric()
 	{
@@ -141,7 +143,7 @@ public:
 		for (int k = 0; k < sparseMatrix.outerSize(); ++k)
 			for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
 			{
-				if (!Util::isEqual(sparseMatrix.coeff(it.row(), it.col()), sparseMatrix.coeff(it.col(), it.row())))
+				if (fabs(sparseMatrix.coeff(it.row(), it.col()) - sparseMatrix.coeff(it.col(), it.row())) < 1E-7)
 				{
 					std::cout << "Value at row " << it.row() << ", col " << it.col() << " is " << sparseMatrix.coeff(it.row(), it.col()) << std::endl;
 					std::cout << "Value at row " << it.col() << ", col " << it.row() << " is " << sparseMatrix.coeff(it.col(), it.row()) << std::endl;

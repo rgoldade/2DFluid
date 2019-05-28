@@ -13,7 +13,7 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 {
     assert(materialCutCellWeights.size() == mySurfaceList.size());
 	for (unsigned material = 0; material < myMaterialsCount; ++material)
-		assert(materialCutCellWeights[material].isMatched(myVelocityList[material]));
+		assert(materialCutCellWeights[material].isGridMatched(myVelocityList[material]));
 
     const Vec2ui gridSize = mySurfaceList[0].size();
 
@@ -119,7 +119,7 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 				}
 
 			assert(std::isfinite(divergence));
-			solver.addRhs(row, divergence);
+			solver.addToRhs(row, divergence);
 
 			// Build A matrix row
 			double diagonal = 0;
@@ -177,17 +177,17 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 							density = (1. - theta) * myDensityList[adjacentMaterial] + theta * myDensityList[material];
 
 						assert(std::isfinite(density));
-						assert(!Util::isEqual(density, 0.));
+						assert(density > 0);
 				
 					}
 					else density = myDensityList[material];
 
 					weight /= density;
 
-					solver.addElement(row, adjacentRow, -weight);
+					solver.addToElement(row, adjacentRow, -weight);
 					diagonal += weight;
 				}
-			solver.addElement(row, row, diagonal);
+			solver.addToElement(row, row, diagonal);
 		}
     });
 
@@ -199,7 +199,7 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 	avgRHS /= double(liquidDOFCount);
 
 	for (int row = 0; row < liquidDOFCount; ++row)
-		solver.addRhs(row, -avgRHS);
+		solver.addToRhs(row, -avgRHS);
 
 	assert(solver.isSymmetric());
 	assert(solver.isFinite());
@@ -245,7 +245,7 @@ void MultiMaterialPressureProjection::applySolution(std::vector<VectorGrid<Real>
 													const std::vector<VectorGrid<Real>> &materialCutCellWeights) const
 {
     for (unsigned material = 0; material < myMaterialsCount; ++material)
-		assert(myVelocityList[material].isMatched(velocity[material]));
+		assert(myVelocityList[material].isGridMatched(velocity[material]));
 
     for (unsigned axis = 0; axis < 2; ++axis)
     {

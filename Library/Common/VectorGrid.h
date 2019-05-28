@@ -69,7 +69,7 @@ public:
 	// positioned at the same spot, have the same grid
 	// spacing and the same sampling sceme
 	template<typename S>
-	bool isMatched(const VectorGrid<S>& grid) const
+	bool isGridMatched(const VectorGrid<S>& grid) const
 	{
 		if (size(0) != grid.size(0)) return false;
 		if (size(1) != grid.size(1)) return false;

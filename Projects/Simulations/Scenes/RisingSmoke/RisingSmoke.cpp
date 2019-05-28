@@ -42,7 +42,7 @@ void display()
 
 			if (speed > 1E-6)
 			{
-				Real cflDt = 3. * smokeDensity.dx() / speed;
+				Real cflDt = 5. * smokeDensity.dx() / speed;
 				if (localDt > cflDt)
 				{
 					localDt = cflDt;

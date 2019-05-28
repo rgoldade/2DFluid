@@ -47,7 +47,7 @@ void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, u
 	// Run a BFS flood outwards from masked cells and average the values of the neighbouring "finished" cells
 	// It could be made more accurate if we used the value of the "closer" cell (smaller SDF value)
 	// It could be made more efficient if we truncated the BFS after a large enough distance (max SDF value)
-	assert(myField.isMatched(mask));
+	assert(myField.isGridMatched(mask));
 
 	// Make local copy of mask
 	UniformGrid<MarkedCells> markedCells(myField.size(), MarkedCells::UNVISITED);

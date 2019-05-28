@@ -12,9 +12,9 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 							const ScalarGrid<Real>& solidNodeVolumes)
 {
 	// Debug check that grids are the same
-	assert(myVelocity.isMatched(faceVolumes));
-	assert(mySurface.isMatched(centerVolumes));
-	assert(mySurface.isMatched(solidCenterVolumes));
+	assert(myVelocity.isGridMatched(faceVolumes));
+	assert(mySurface.isGridMatched(centerVolumes));
+	assert(mySurface.isGridMatched(solidCenterVolumes));
 	assert(mySurface.size() + Vec2ui(1) == solidNodeVolumes.size());
 	assert(mySurface.size() + Vec2ui(1) == nodeVolumes.size());
 
@@ -95,11 +95,11 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 				Real volume = faceVolumes(face, axis);
 
 				// Build RHS with weight velocities
-				solver.addRhs(index, myVelocity(face, axis) * volume);
-				solver.addGuess(index, myVelocity(face, axis));
+				solver.addToRhs(index, myVelocity(face, axis) * volume);
+				solver.addToGuess(index, myVelocity(face, axis));
 
 				// Add control volume weight on the diagonal.
-				solver.addElement(index, index, volume);
+				solver.addToElement(index, index, volume);
 
 				// Build cell-centered stresses.
 				for (unsigned cellDirection : {0, 1})
@@ -122,9 +122,9 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 
 						int faceIndex = liquidFaces(adjacentFace, axis);
 						if (faceIndex >= 0)
-							solver.addElement(index, faceIndex, -centerSign * faceSign * coeff);
+							solver.addToElement(index, faceIndex, -centerSign * faceSign * coeff);
 						else if (faceIndex == SOLIDBOUNDARY)
-							solver.addRhs(index, centerSign * faceSign * coeff * mySolidVelocity(adjacentFace, axis));
+							solver.addToRhs(index, centerSign * faceSign * coeff * mySolidVelocity(adjacentFace, axis));
 					}
 				}
 
@@ -150,9 +150,9 @@ void ViscositySolver::solve(const VectorGrid<Real>& faceVolumes,
 								int faceIndex = liquidFaces(Vec2ui(adjacentFace), faceAxis);
 
 								if (faceIndex >= 0)
-									solver.addElement(index, faceIndex, -nodeSign * faceSign * coeff);
+									solver.addToElement(index, faceIndex, -nodeSign * faceSign * coeff);
 								else if (faceIndex == SOLIDBOUNDARY)
-									solver.addRhs(index, nodeSign * faceSign * coeff * mySolidVelocity(Vec2ui(adjacentFace), faceAxis));
+									solver.addToRhs(index, nodeSign * faceSign * coeff * mySolidVelocity(Vec2ui(adjacentFace), faceAxis));
 							}
 						}
 				}

@@ -200,7 +200,7 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer)
 			for (unsigned material = 0; material < myMaterialCount; ++material)
 				totalWeight += materialCutCellWeights[material](face, axis);
 
-			if (!Util::isEqual(totalWeight, 1.))
+			if (totalWeight < 1.)
 			{
 				// If there is a zero total weight it is likely due to a fluid-fluid boundary
 				// falling exactly across a grid face. There should never be a zero weight
