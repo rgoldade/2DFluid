@@ -1,11 +1,11 @@
 #include <memory>
 
 #include "Common.h"
+#include "EdgeMesh.h"
 #include "EulerianSmoke.h"
 #include "InitialConditions.h"
 #include "Integrator.h"
 #include "LevelSet.h"
-#include "EdgeMesh.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 

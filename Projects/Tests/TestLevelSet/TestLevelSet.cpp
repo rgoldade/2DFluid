@@ -1,11 +1,9 @@
 #include <memory>
 
 #include "Common.h"
-
+#include "EdgeMesh.h"
 #include "InitialConditions.h"
 #include "LevelSet.h"
-#include "EdgeMesh.h"
-
 #include "Renderer.h"
 #include "TestVelocityFields.h"
 #include "Transform.h"

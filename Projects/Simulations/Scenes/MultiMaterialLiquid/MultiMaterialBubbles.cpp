@@ -1,10 +1,10 @@
 #include <memory>
 
 #include "Common.h"
+#include "EdgeMesh.h"
 #include "InitialConditions.h"
 #include "Integrator.h"
 #include "LevelSet.h"
-#include "EdgeMesh.h"
 #include "MultiMaterialLiquid.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"

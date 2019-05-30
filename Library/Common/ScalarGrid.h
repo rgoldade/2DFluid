@@ -510,7 +510,7 @@ void ScalarGrid<T>::printAsCSV(std::string filename) const
 template<typename T>
 void ScalarGrid<T>::printAsOBJ(std::string filename) const
 {
-	std::ofstream writer(filename);
+	std::ofstream writer(filename + std::string(".obj"));
 
 	// Print the grid as a heightfield in the y-axis.
 	if (writer)

@@ -3,10 +3,8 @@
 
 #include "AdvectField.h"
 #include "Common.h"
-
-#include "Integrator.h"
-
 #include "EdgeMesh.h"
+#include "Integrator.h"
 #include "Predicates.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
