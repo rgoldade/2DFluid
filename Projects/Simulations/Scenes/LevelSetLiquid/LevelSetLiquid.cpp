@@ -1,11 +1,11 @@
 #include <memory>
 
 #include "Common.h"
+#include "EdgeMesh.h"
 #include "EulerianLiquid.h"
 #include "InitialConditions.h"
 #include "Integrator.h"
-#include "LevelSet2D.h"
-#include "Mesh2D.h"
+#include "LevelSet.h"
 #include "Renderer.h"
 
 static std::unique_ptr<Renderer> renderer;
@@ -18,7 +18,7 @@ static constexpr Real dt = 1./30.;
 static Real seedTime = 0;
 
 static Transform xform;
-static Vec2ui gridSize;
+static Vec2i gridSize;
 static int frameCount = 0;
 
 void display()
@@ -49,10 +49,10 @@ void display()
 			if (seedTime > 2.)
 			{
 				Vec2R center = xform.offset() + Vec2R(xform.dx()) * Vec2R(gridSize / 2) + Vec2R(.8);
-				Mesh2D seedMesh = squareMesh(center, Vec2R(.5));
+				EdgeMesh seedMesh = squareMesh(center, Vec2R(.5));
 
-				LevelSet2D seedSurface = LevelSet2D(xform, gridSize, 5);
-				seedSurface.init(seedMesh, false);
+				LevelSet seedSurface = LevelSet(xform, gridSize, 5);
+				seedSurface.initFromMesh(seedMesh, false);
 				simulator->unionLiquidSurface(seedSurface);
 				seedTime = 0.;
 			}
@@ -66,7 +66,7 @@ void display()
 			// Store accumulated substep times
 			frameTime += localDt;
 		}
-
+		std::cout << "\n\nEnd of frame: " << frameCount << "\n" << std::endl;
 		++frameCount;
 		runSingleStep = false;
 		isDisplayDirty = true;
@@ -77,6 +77,7 @@ void display()
 
 		simulator->drawLiquidSurface(*renderer);
 		simulator->drawSolidSurface(*renderer);
+		simulator->drawLiquidVelocity(*renderer, .5);
 
 		isDisplayDirty = false;
 
@@ -98,26 +99,26 @@ int main(int argc, char** argv)
 	Real dx = .025;
 	Vec2R topRightCorner(2.5);
 	Vec2R bottomLeftCorner(-2.5);
-	gridSize = Vec2ui((topRightCorner - bottomLeftCorner) / dx);
+	gridSize = Vec2i((topRightCorner - bottomLeftCorner) / dx);
 	xform = Transform(dx, bottomLeftCorner);
 	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
 
-	renderer = std::make_unique<Renderer>("Levelset Liquid Simulator", Vec2ui(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Levelset Liquid Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	Mesh2D liquidMesh = circleMesh(center - Vec2R(0,.65), 1, 40);
+	EdgeMesh liquidMesh = circleMesh(center - Vec2R(0,.65), 1, 100);
 	
 	assert(liquidMesh.unitTest());
 
-	Mesh2D solidMesh = circleMesh(center, 2, 40);
+	EdgeMesh solidMesh = circleMesh(center, 2, 100);
 	solidMesh.reverse();
 	assert(solidMesh.unitTest());
 	
-	LevelSet2D liquidSurface = LevelSet2D(xform, gridSize, 10);
-	liquidSurface.init(liquidMesh, false);
+	LevelSet liquidSurface = LevelSet(xform, gridSize, 10);
+	liquidSurface.initFromMesh(liquidMesh, false);
 
-	LevelSet2D solidSurface = LevelSet2D(xform, gridSize, 10);
-	solidSurface.setInverted();
-	solidSurface.init(solidMesh, false);
+	LevelSet solidSurface = LevelSet(xform, gridSize, 10);
+	solidSurface.setBoundaryNegative();
+	solidSurface.initFromMesh(solidMesh, false);
 	
 	// Set up simulation
 	simulator = std::unique_ptr<EulerianLiquid>(new EulerianLiquid(xform, gridSize, 10));

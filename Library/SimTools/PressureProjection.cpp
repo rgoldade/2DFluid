@@ -1,6 +1,5 @@
-#include <iostream>
-
 #include "PressureProjection.h"
+
 #include "Solver.h"
 
 void PressureProjection::drawPressure(Renderer& renderer) const
@@ -8,100 +7,109 @@ void PressureProjection::drawPressure(Renderer& renderer) const
 	myPressure.drawSupersampledValues(renderer, .25, 1, 2);
 }
 
-void PressureProjection::project(const VectorGrid<Real>& ghostFluidWeights, const VectorGrid<Real>& cutCellWeights)
+void PressureProjection::project(VectorGrid<Real>& velocity)
 {
-	assert(ghostFluidWeights.isMatched(cutCellWeights) && ghostFluidWeights.isMatched(myFluidVelocity));
+	// For efficiency sake, this should only take in velocity on a staggered grid
+	// that matches the center sampled liquid and solid surfaces.
+	assert(velocity.size(0)[0] - 1 == mySurface.size()[0] &&
+			velocity.size(0)[1] == mySurface.size()[1] &&
+			velocity.size(1)[0] == mySurface.size()[0] &&
+			velocity.size(1)[1] - 1 == mySurface.size()[1]);
 
-	// This loop is dumb in serial but it's here as a placeholder for parallel later
-	Real dx = myFluidSurface.dx();
 	int liquidDOFCount = 0;
-	forEachVoxelRange(Vec2ui(0), myFluidCellIndex.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myFluidCellIndex.size(), [&](const Vec2i& cell)
 	{
-		if (myFluidSurface(cell) <= 0)
+		if (mySurface(cell) <= 0)
 		{
-			for (auto axis : { 0,1 })
-				for (unsigned direction : {0, 1})
+			bool isFluid = false;
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2ui face = cellToFace(cell, axis, direction);
+					Vec2i face = cellToFace(cell, axis, direction);
 
-					if (cutCellWeights(face, axis) > 0)
+					if (myCutCellWeights(face, axis) > 0)
 					{
 						myFluidCellIndex(cell) = liquidDOFCount++;
 						return;
 					}
 				}
-		}
+		}	
 	});
 
-	Solver<true> solver(liquidDOFCount, liquidDOFCount * 5);
+	Solver<false> solver(liquidDOFCount, liquidDOFCount * 5);
 
 	// Build linear system
-	forEachVoxelRange(Vec2ui(0), myFluidCellIndex.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myFluidCellIndex.size(), [&](const Vec2i& cell)
 	{
-		int row = myFluidCellIndex(cell);
-		if (row >= 0)
+		int fluidIndex = myFluidCellIndex(cell);
+		if (fluidIndex >= 0)
 		{
 			// Build RHS divergence
 			double divergence = 0;
-			for (unsigned axis : {0, 1})
-				for (unsigned direction : {0, 1})
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2ui face = cellToFace(cell, axis, direction);
+					Vec2i face = cellToFace(cell, axis, direction);
 
-					Real weight = cutCellWeights(face, axis);
+					Real weight = myCutCellWeights(face, axis);
 
 					double sign = (direction == 0) ? 1 : -1;
 
 					if (weight > 0)
-						divergence += sign * myFluidVelocity(face, axis) * weight;
+						divergence += sign * velocity(face, axis) * weight;
 					if (weight < 1.)
 						divergence += sign * mySolidVelocity(face, axis) * (1. - weight);
 				}
 
-			solver.addRhs(row, divergence);
+			solver.addToRhs(fluidIndex, divergence);
 
 			// Build row
 			double diagonal = 0.;
 
-			for (unsigned axis : {0, 1})
-				for (unsigned direction : {0, 1})
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+					Vec2i adjacentCell = cellToCell(cell, axis, direction);
 			
 					// Bounds check. If out-of-bounds, treat like a stationary grid-aligned solid.
-					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= myFluidSurface.size()[axis]) continue;
+					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= mySurface.size()[axis])
+						continue;
 
-					Vec2ui face = cellToFace(cell, axis, direction);
+					Vec2i face = cellToFace(cell, axis, direction);
 				
-					double weight = cutCellWeights(face, axis);
+					double weight = myCutCellWeights(face, axis);
 
 					if (weight > 0)
 					{
 						// If neighbouring cell is solvable, it should have an entry in the system
-						int adjacentRow = myFluidCellIndex(Vec2ui(adjacentCell));
-						if (adjacentRow >= 0)
+						int adjacentFluidIndex = myFluidCellIndex(adjacentCell);
+						if (adjacentFluidIndex >= 0)
 						{
-							solver.addElement(row, adjacentRow, -weight);
+							solver.addToElement(fluidIndex, adjacentFluidIndex, -weight);
 							diagonal += weight;
 						}
 						else
 						{
-							Real theta = ghostFluidWeights(face, axis);
+							Real theta = myGhostFluidWeights(face, axis);
 
 							theta = Util::clamp(theta, MINTHETA, Real(1.));
 							diagonal += weight / theta;
-
-							// TODO: add surface tension
 						}
 					}
 				}
 			assert(diagonal > 0);
-			solver.addElement(row, row, diagonal);
+			solver.addToElement(fluidIndex, fluidIndex, diagonal);
+
+			// Add initial guess
+			if (myUseInitialGuess)
+			{
+				assert(myInitialGuess != nullptr);
+				solver.addToGuess(fluidIndex, (*myInitialGuess)(cell));
+			}
 		}
 	});
-
 	
-	bool result = solver.solveIterative();
+	bool result = solver.solveIterative(1E-5);
 
 	if (!result)
 	{
@@ -110,76 +118,66 @@ void PressureProjection::project(const VectorGrid<Real>& ghostFluidWeights, cons
 	}
 
 	// Load solution into pressure grid
-	forEachVoxelRange(Vec2ui(0), myFluidCellIndex.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myFluidCellIndex.size(), [&](const Vec2i& cell)
 	{
-		int row = myFluidCellIndex(cell);
-		if (row >= 0)
-			myPressure(cell) = solver.solution(row);
+		int fluidIndex = myFluidCellIndex(cell);
+		if (fluidIndex >= 0)
+			myPressure(cell) = solver.solution(fluidIndex);
 		else
 			myPressure(cell) = 0;
 	});
 
 	// Set valid faces
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = myFluidVelocity.size(axis);
+		Vec2i size = velocity.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
 		{
-			Vec2i backwardCell = faceToCell(Vec2i(face), axis, 0);
-			Vec2i forwardCell = faceToCell(Vec2i(face), axis, 1);
+			Vec2i backwardCell = faceToCell(face, axis, 0);
+			Vec2i forwardCell = faceToCell(face, axis, 1);
 
-			if (!(backwardCell[axis] < 0 || forwardCell[axis] >= myFluidSurface.size()[axis]))
+			if (!(backwardCell[axis] < 0 || forwardCell[axis] >= mySurface.size()[axis]))
 			{
-				if ((myFluidCellIndex(Vec2ui(backwardCell)) >= 0 || myFluidCellIndex(Vec2ui(forwardCell)) >= 0) &&
-					cutCellWeights(face, axis) > 0)
-					myValid(face, axis) = MarkedCells::FINISHED;
-				else myValid(face, axis) = MarkedCells::UNVISITED;
+				if ((myFluidCellIndex(backwardCell) >= 0 || myFluidCellIndex(forwardCell) >= 0) &&
+					myCutCellWeights(face, axis) > 0)
+					myValidFaces(face, axis) = MarkedCells::FINISHED;
+				else myValidFaces(face, axis) = MarkedCells::UNVISITED;
 			}
-			else myValid(face, axis) = MarkedCells::UNVISITED;
+			else myValidFaces(face, axis) = MarkedCells::UNVISITED;
 		});
 	}
-}
 
-void PressureProjection::applySolution(VectorGrid<Real>& velocity, const VectorGrid<Real>& liquidWeights)
-{
-	assert(liquidWeights.isMatched(myFluidVelocity));
-	
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
-		Vec2ui size = velocity.size(axis);
+		Vec2i size = velocity.size(axis);
 
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
 		{
 			Real localVelocity = 0;
-			if (myValid(face, axis) == MarkedCells::FINISHED)
+			if (myValidFaces(face, axis) == MarkedCells::FINISHED)
 			{
-				Real theta = liquidWeights(face, axis);
+				Real theta = myGhostFluidWeights(face, axis);
 				theta = Util::clamp(theta, MINTHETA, Real(1.));
 
-				Vec2i backwardCell = faceToCell(Vec2i(face), axis, 0);
-				Vec2i forwardCell = faceToCell(Vec2i(face), axis, 1);
+				Vec2i backwardCell = faceToCell(face, axis, 0);
+				Vec2i forwardCell = faceToCell(face, axis, 1);
 
-				if (!(backwardCell[axis] < 0 || forwardCell[axis] >= myFluidSurface.size()[axis]))
+				if (!(backwardCell[axis] < 0 || forwardCell[axis] >= mySurface.size()[axis]))
 				{
 					Real gradient = 0;
 
-					if (myFluidCellIndex(Vec2ui(backwardCell)) >= 0)
-						gradient -= myPressure(Vec2ui(backwardCell));
+					if (myFluidCellIndex(Vec2i(backwardCell)) >= 0)
+						gradient -= myPressure(Vec2i(backwardCell));
 
-					if (myFluidCellIndex(Vec2ui(forwardCell)) >= 0)
-						gradient += myPressure(Vec2ui(forwardCell));
+					if (myFluidCellIndex(Vec2i(forwardCell)) >= 0)
+						gradient += myPressure(Vec2i(forwardCell));
 
-					localVelocity = myFluidVelocity(face, axis) - gradient / theta;
+					localVelocity = velocity(face, axis) - gradient / theta;
 				}
 			}
 
 			velocity(face, axis) = localVelocity;
 		});
 	}
-}
-
-void PressureProjection::applyValid(VectorGrid<MarkedCells> &valid)
-{
-	valid = myValid;
 }

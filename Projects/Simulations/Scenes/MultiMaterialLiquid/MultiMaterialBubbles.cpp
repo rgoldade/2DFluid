@@ -1,10 +1,10 @@
 #include <memory>
 
 #include "Common.h"
+#include "EdgeMesh.h"
 #include "InitialConditions.h"
 #include "Integrator.h"
-#include "LevelSet2D.h"
-#include "Mesh2D.h"
+#include "LevelSet.h"
 #include "MultiMaterialLiquid.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
@@ -21,7 +21,7 @@ static unsigned liquidMaterialCount;
 static unsigned currentMaterial = 0;
 
 static Transform xform;
-static Vec2ui gridSize;
+static Vec2i gridSize;
 
 static int frameCount = 0;
 static const Real bubbleDensity = 10000;
@@ -54,7 +54,7 @@ void display()
 			for (int material = 0; material < liquidMaterialCount; ++material)
 				multiMaterialSimulator->addForce(localDt, material, Vec2R(0., -9.8));
 
-			multiMaterialSimulator->runTimestep(localDt, *renderer);
+			multiMaterialSimulator->runTimestep(localDt, *renderer, frameCount);
 
 			// Store accumulated substep times
 			frameTime += localDt;
@@ -104,49 +104,45 @@ int main(int argc, char** argv)
 	bottomLeftCorner -= dx * boundaryPadding;
 
 	Vec2R simulationSize = topRightCorner - bottomLeftCorner;
-	gridSize = Vec2ui(simulationSize / dx);
+	gridSize = Vec2i(simulationSize / dx);
 
 	xform = Transform(dx, bottomLeftCorner);
 	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
 
 	unsigned pixelHeight = 1080;
 	unsigned pixelWidth = pixelHeight * (topRightCorner[0] - bottomLeftCorner[0]) / (topRightCorner[1] - bottomLeftCorner[1]);
-	renderer = std::make_unique<Renderer>("Multimaterial Liquid Simulator", Vec2ui(pixelWidth, pixelHeight), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Multimaterial Liquid Simulator", Vec2i(pixelWidth, pixelHeight), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
 	// Build outer boundary grid.
-	Mesh2D solidMesh = squareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
+	EdgeMesh solidMesh = squareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
 	solidMesh.reverse();
 	assert(solidMesh.unitTest());
 
-	LevelSet2D solidSurface = LevelSet2D(xform, gridSize, 10);
-	solidSurface.setInverted();
-	solidSurface.init(solidMesh, false);
+	LevelSet solidSurface = LevelSet(xform, gridSize, 10);
+	solidSurface.setBoundaryNegative();
+	solidSurface.initFromMesh(solidMesh, false);
 
 	// Build two-material level set.
 	// Circle centered in the grid.
 
 	Vec2R bubbleOffset(0, 1.);
-	Mesh2D bubbleMesh = circleMesh(center - bubbleOffset, .75, 40);
+	EdgeMesh bubbleMesh = circleMesh(center - bubbleOffset, .75, 40);
 
 	Real surfaceHeight = 1.;
 	Vec2R surfaceCenter(center[0], topRightCorner[1] - .5 * surfaceHeight - boundaryPadding * dx);
-	Mesh2D surfaceMesh = squareMesh(surfaceCenter, Vec2R(.5 * simulationSize[0] - boundaryPadding * dx, .5*surfaceHeight));
+	EdgeMesh surfaceMesh = squareMesh(surfaceCenter, Vec2R(.5 * simulationSize[0] - boundaryPadding * dx, .5*surfaceHeight));
 	bubbleMesh.insertMesh(surfaceMesh);
 
-	LevelSet2D bubbleSurface = LevelSet2D(xform, gridSize, 10);
-	bubbleSurface.init(bubbleMesh, false);
+	LevelSet bubbleSurface = LevelSet(xform, gridSize, 10);
+	bubbleSurface.initFromMesh(bubbleMesh, false);
 	bubbleMesh.reverse();
 
-	/*Vec2R liquidSurfaceOffset(0., .5);
-	Mesh2D liquidMesh = squareMesh(center - liquidSurfaceOffset, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()) - liquidSurfaceOffset);
-    liquidMesh.insertMesh(bubbleMesh);*/
-
-	Mesh2D liquidMesh = solidMesh;
+	EdgeMesh liquidMesh = solidMesh;
 
 	liquidMesh.reverse();
 	liquidMesh.insertMesh(bubbleMesh);
-	LevelSet2D liquidSurface = LevelSet2D(xform, gridSize, 10);
-	liquidSurface.init(liquidMesh, false);
+	LevelSet liquidSurface = LevelSet(xform, gridSize, 10);
+	liquidSurface.initFromMesh(liquidMesh, false);
 
 	multiMaterialSimulator = std::make_unique<MultiMaterialLiquid>(xform, gridSize, 2, 5);
 
@@ -163,7 +159,7 @@ int main(int argc, char** argv)
 	std::function<void(unsigned char, int, int)> keyboardFunc = keyboard;
 	renderer->setUserKeyboard(keyboardFunc);
 
-	forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
 	{
 		if (liquidSurface(cell) > 0 && solidSurface(cell) > 0 && bubbleSurface(cell) > 0)
 			renderer->addPoint(liquidSurface.indexToWorld(Vec2R(cell)), Vec3f(0,1,0), 4);

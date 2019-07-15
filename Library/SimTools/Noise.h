@@ -3,6 +3,13 @@
 
 #include "Common.h"
 
+///////////////////////////////////
+//
+// Borrowed and modified from Robert Bridson's
+// public code.
+//
+///////////////////////////////////
+
 struct Noise3
 {
 	Noise3(unsigned seed = 171717);

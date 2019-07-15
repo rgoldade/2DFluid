@@ -8,31 +8,40 @@ void MultiMaterialPressureProjection::drawPressure(Renderer &renderer) const
 	myPressure.drawSupersampledValues(renderer, .5, 3, 1);
 }
 
-void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>> &materialCutCellWeights,
-												const VectorGrid<Real> &collisionCutCellWeights)
+void MultiMaterialPressureProjection::project(std::vector<VectorGrid<Real>> &velocityList)
 {
-    assert(materialCutCellWeights.size() == mySurfaceList.size());
-	for (unsigned material = 0; material < myMaterialsCount; ++material)
-		assert(materialCutCellWeights[material].isMatched(myVelocityList[material]));
+	assert(velocityList.size() == mySurfaceList.size());
+	for (int material = 1; material < myMaterialsCount; ++material)
+		assert(velocityList[material - 1].isGridMatched(velocityList[material]));
 
-    const Vec2ui gridSize = mySurfaceList[0].size();
+	for (int material = 0; material < myMaterialsCount; ++material)
+		assert(velocityList[material].isGridMatched(myMaterialCutCellWeightsList[material]));
 
-    myMaterialLabels = UniformGrid<int>(mySolidSurface.size(), UNSOLVED);
-    mySolverIndex = UniformGrid<int>(mySolidSurface.size(), UNSOLVED);
+	// Since every surface and every velocity field is matched, we only need to compare
+	// on pair of fields to make sure the two sets are matched.
+	assert(velocityList[0].size(0)[0] - 1 == mySurfaceList[0].size()[0] &&
+			velocityList[0].size(0)[1] == mySurfaceList[0].size()[1] &&
+			velocityList[0].size(1)[0] == mySurfaceList[0].size()[0] &&
+			velocityList[0].size(1)[1] - 1 == mySurfaceList[0].size()[1]);
+
+	Vec2i gridSize = mySurfaceList[0].size();
+
+    myMaterialLabels = UniformGrid<int>(mySolidSurface.size(), PressureCellLabels::UNSOLVED_CELL);
+    mySolverIndex = UniformGrid<int>(mySolidSurface.size(), PressureCellLabels::UNSOLVED_CELL);
 
     // Determine which material a voxel falls into
     int liquidDOFCount = 0;
-    forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui &cell)
+    forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i &cell)
     {
 		// Check if the cell has as solid cut-cell weight that is less than unity.
 		bool isLiquidCell = false;
 
-		for (auto axis : { 0,1 })
-			for (auto direction : { 0,1 })
+		for (int axis : {0, 1})
+			for (int direction : {0, 1})
 			{
-				Vec2ui face = cellToFace(cell, axis, direction);
+				Vec2i face = cellToFace(cell, axis, direction);
 
-				if (collisionCutCellWeights(face, axis) < 1.)
+				if (mySolidCutCellWeights(face, axis) < 1.)
 				{
 					isLiquidCell = true;
 					break;
@@ -44,18 +53,18 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 			Real minDistance = std::numeric_limits<Real>::max();
 			int minMaterial = -1;
 
-			for (unsigned material = 0; material < myMaterialsCount; ++material)
+			for (int material = 0; material < myMaterialsCount; ++material)
 			{
 				bool validMaterial = false;
 
 				// Check if the cell has a non-zero material fraction on one
 				// of the faces.
-				for (auto axis : { 0,1 })
-					for (auto direction : { 0,1 })
+				for (int axis : {0, 1})
+					for (int direction : {0, 1})
 					{
-						Vec2ui face = cellToFace(cell, axis, direction);
+						Vec2i face = cellToFace(cell, axis, direction);
 
-						if (materialCutCellWeights[material](face, axis) > 0.)
+						if (myMaterialCutCellWeightsList[material](face, axis) > 0.)
 						{
 							validMaterial = true;
 							break;
@@ -90,7 +99,7 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 
     Solver<true> solver(liquidDOFCount, liquidDOFCount * 5);
 
-    forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
+    forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
     {
 		int row = mySolverIndex(cell);
 
@@ -99,27 +108,27 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 			// Build RHS divergence contribution per material.
 			double divergence = 0;
 
-			for (auto axis : { 0,1 })
-				for (auto direction : { 0,1 })
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2ui face = cellToFace(cell, axis, direction);
+					Vec2i face = cellToFace(cell, axis, direction);
 
-					for (unsigned material = 0; material < myMaterialsCount; ++material)
+					for (int material = 0; material < myMaterialsCount; ++material)
 					{
-						double weight = materialCutCellWeights[material](face, axis);
+						double weight = myMaterialCutCellWeightsList[material](face, axis);
 
 						if (weight > 0.)
 						{
 							// We have a negative sign in the forward direction because
 							// we're actually solving with a -1 leading ceofficient.
 							double sign = (direction == 0) ? 1 : -1;
-							divergence += sign * weight * myVelocityList[material](face, axis);
+							divergence += sign * weight * velocityList[material](face, axis);
 						}
 					}
 				}
 
 			assert(std::isfinite(divergence));
-			solver.addRhs(row, divergence);
+			solver.addToRhs(row, divergence);
 
 			// Build A matrix row
 			double diagonal = 0;
@@ -128,19 +137,19 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 			assert(material >= 0 && material < myMaterialsCount);
 
 			double phi = mySurfaceList[material](cell);
-			for (auto axis : { 0,1 })
-				for (auto direction : { 0,1 })
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+					Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 					// Bounds check. If out-of-bounds, treat like a stationary grid-aligned solid.
 					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= gridSize[axis]) continue;
 
-					Vec2ui face = cellToFace(cell, axis, direction);
+					Vec2i face = cellToFace(cell, axis, direction);
 
-					int adjacentRow = mySolverIndex(Vec2ui(adjacentCell));
+					int adjacentRow = mySolverIndex(adjacentCell);
 
-					double collisionWeight = collisionCutCellWeights(face, axis);
+					double collisionWeight = mySolidCutCellWeights(face, axis);
 
 					if (collisionWeight == 1.)
 						continue;
@@ -153,14 +162,14 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 
 					double weight = 1. - collisionWeight;
 
-					int adjacentMaterial = myMaterialLabels(Vec2ui(adjacentCell));
+					int adjacentMaterial = myMaterialLabels(adjacentCell);
 
 					assert(adjacentMaterial >= 0 && adjacentMaterial < myMaterialsCount);
 
 					double density;
 					if (adjacentMaterial != material)
 					{
-						double adjacentPhi = mySurfaceList[adjacentMaterial](Vec2ui(adjacentCell));
+						double adjacentPhi = mySurfaceList[adjacentMaterial](adjacentCell);
 
 						double theta;
 						if (direction == 0)
@@ -177,17 +186,17 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 							density = (1. - theta) * myDensityList[adjacentMaterial] + theta * myDensityList[material];
 
 						assert(std::isfinite(density));
-						assert(!Util::isEqual(density, 0.));
+						assert(density > 0);
 				
 					}
 					else density = myDensityList[material];
 
 					weight /= density;
 
-					solver.addElement(row, adjacentRow, -weight);
+					solver.addToElement(row, adjacentRow, -weight);
 					diagonal += weight;
 				}
-			solver.addElement(row, row, diagonal);
+			solver.addToElement(row, row, diagonal);
 		}
     });
 
@@ -199,7 +208,7 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
 	avgRHS /= double(liquidDOFCount);
 
 	for (int row = 0; row < liquidDOFCount; ++row)
-		solver.addRhs(row, -avgRHS);
+		solver.addToRhs(row, -avgRHS);
 
 	assert(solver.isSymmetric());
 	assert(solver.isFinite());
@@ -213,7 +222,7 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
     }
 
     // Load solution into pressure grid
-    forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& cell)
+    forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
     {
 		int row = mySolverIndex(cell);
 		if (row >= 0)
@@ -221,39 +230,32 @@ void MultiMaterialPressureProjection::project(const std::vector<VectorGrid<Real>
     });
 
     // Set valid faces
-	for (auto axis : { 0,1 })
+	for (int axis : {0, 1})
     {
-		forEachVoxelRange(Vec2ui(0), gridSize, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& face)
 		{
-			Vec2i backward_cell = faceToCell(Vec2i(face), axis, 0);
-			Vec2i forward_cell = faceToCell(Vec2i(face), axis, 1);
+			Vec2i backwardCell = faceToCell(Vec2i(face), axis, 0);
+			Vec2i forwardCell = faceToCell(Vec2i(face), axis, 1);
 
-			if (backward_cell[axis] < 0 || forward_cell[axis] >= gridSize[axis])
+			if (backwardCell[axis] < 0 || forwardCell[axis] >= gridSize[axis])
 				return;
 
-			if ((collisionCutCellWeights(face, axis) < 1.) &&
-				(mySolverIndex(Vec2ui(backward_cell)) >= 0 || mySolverIndex(Vec2ui(forward_cell)) >= 0))
+			if ((mySolidCutCellWeights(face, axis) < 1.) &&
+				(mySolverIndex(backwardCell) >= 0 || mySolverIndex(forwardCell) >= 0))
 			{
-				assert(mySolverIndex(Vec2ui(backward_cell)) >= 0 && mySolverIndex(Vec2ui(forward_cell)) >= 0);
-				myValid(face, axis) = 1;
+				assert(mySolverIndex(backwardCell) >= 0 && mySolverIndex(forwardCell) >= 0);
+				myValidFaces(face, axis) = MarkedCells::FINISHED;
 			}
 		});
     }
-}
 
-void MultiMaterialPressureProjection::applySolution(std::vector<VectorGrid<Real>> &velocity,
-													const std::vector<VectorGrid<Real>> &materialCutCellWeights) const
-{
-    for (unsigned material = 0; material < myMaterialsCount; ++material)
-		assert(myVelocityList[material].isMatched(velocity[material]));
-
-    for (unsigned axis = 0; axis < 2; ++axis)
+	for (int axis : {0, 1})
     {
-		Vec2ui velSize = velocity[0].size(axis);
+		Vec2i velSize = velocityList[0].size(axis);
 
-		forEachVoxelRange(Vec2ui(0), velSize, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), velSize, [&](const Vec2i& face)
 		{
-			if (myValid(face, axis) > 0)
+			if (myValidFaces(face, axis) == MarkedCells::FINISHED)
 			{
 				Real theta = 0;
 				Real phi = 0;
@@ -261,21 +263,22 @@ void MultiMaterialPressureProjection::applySolution(std::vector<VectorGrid<Real>
 				int materials[2];
 
 				Real gradient = 0;
-				for (auto direction : { 0,1 })
+				for (int direction : {0, 1})
 				{
-					Vec2i cell = faceToCell(Vec2i(face), axis, direction);
-					int material = myMaterialLabels(Vec2ui(cell));
+					Vec2i cell = faceToCell(face, axis, direction);
+					int material = myMaterialLabels(cell);
+					
 					materials[direction] = material;
-					assert(mySolverIndex(Vec2ui(cell)) >= 0);
+					assert(mySolverIndex(cell) >= 0);
 
-					phi += fabs(mySurfaceList[material](Vec2ui(cell)));
+					phi += fabs(mySurfaceList[material](cell));
 
 					if (direction == 0) theta = phi;
 
 					sampleDensity[direction] = myDensityList[material];
 
 					Real sign = (direction == 0) ? -1 : 1;
-					gradient += sign * myPressure(Vec2ui(cell));
+					gradient += sign * myPressure(cell);
 				}
 
 				Real density;
@@ -296,18 +299,21 @@ void MultiMaterialPressureProjection::applySolution(std::vector<VectorGrid<Real>
 				gradient /= density;
 
 				// Update every material's velocity with a non-zero face weight.
-				for (unsigned material = 0; material < myMaterialsCount; ++material)
+				for (int material = 0; material < myMaterialsCount; ++material)
 				{
-					if (materialCutCellWeights[material](face, axis) > 0.)
-						velocity[material](face, axis) -= gradient;
+					if (myMaterialCutCellWeightsList[material](face, axis) > 0.)
+					{
+						myValidMaterialFacesList[material](face, axis) = MarkedCells::FINISHED;
+						velocityList[material](face, axis) -= gradient;
+					}
 					else
-						velocity[material](face, axis) = 0;
+						velocityList[material](face, axis) = 0;
 				}
 			}
 			else
 			{
-				for (unsigned material = 0; material < myMaterialsCount; ++material)
-					velocity[material](face, axis) = 0;
+				for (int material = 0; material < myMaterialsCount; ++material)
+					velocityList[material](face, axis) = 0;
 			}
 		});
     }

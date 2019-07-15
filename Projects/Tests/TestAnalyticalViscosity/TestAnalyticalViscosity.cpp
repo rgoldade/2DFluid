@@ -32,7 +32,7 @@ int main(int argc, char** argv)
 	{
 		Real dx = Util::PI / Real(baseGrid);
 		Vec2R origin(0);
-		Vec2ui size(round(Util::PI / dx));
+		Vec2i size(round(Util::PI / dx));
 		Transform xform(dx, origin);
 
 		AnalyticalViscositySolver solver(xform, size);

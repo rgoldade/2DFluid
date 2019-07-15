@@ -1,7 +1,4 @@
-#include "LevelSet2D.h"
-
-#include <limits>
-#include <utility>
+#include "LevelSet.h"
 
 #include "tbb/tbb.h"
 
@@ -10,36 +7,36 @@
 
 #include "VectorGrid.h"
 
-void LevelSet2D::drawGrid(Renderer& renderer) const
+void LevelSet::drawGrid(Renderer& renderer) const
 {
 	myPhiGrid.drawGrid(renderer);
 }
 
-void LevelSet2D::drawMeshGrid(Renderer& renderer) const
+void LevelSet::drawMeshGrid(Renderer& renderer) const
 {
 	Transform xform(myPhiGrid.dx(), myPhiGrid.offset() + Vec2R(0.5) * myPhiGrid.dx());
 	ScalarGrid<int> tempGrid(xform, myPhiGrid.size());
 	tempGrid.drawGrid(renderer);
 }
 
-void LevelSet2D::drawSupersampledValues(Renderer& renderer, Real radius, unsigned samples, unsigned size) const
+void LevelSet::drawSupersampledValues(Renderer& renderer, Real radius, int samples, Real sampleSize) const
 {
-	myPhiGrid.drawSupersampledValues(renderer, radius, samples, size);
+	myPhiGrid.drawSupersampledValues(renderer, radius, samples, sampleSize);
 }
-void LevelSet2D::drawNormals(Renderer& renderer, const Vec3f& colour, Real length) const
+void LevelSet::drawNormals(Renderer& renderer, const Vec3f& colour, Real length) const
 {
 	myPhiGrid.drawSampleGradients(renderer, colour, length);
 }
 
-void LevelSet2D::drawSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth)
+void LevelSet::drawSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth)
 {
-	Mesh2D surface = buildMSMesh();
+	EdgeMesh surface = buildMSMesh();
 	surface.drawMesh(renderer, colour, lineWidth);
 }
 
-void LevelSet2D::drawDCSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth)
+void LevelSet::drawDCSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth)
 {
-	Mesh2D surface = buildDCMesh();
+	EdgeMesh surface = buildDCMesh();
 	surface.drawMesh(renderer, colour, lineWidth);
 }
 
@@ -47,13 +44,16 @@ void LevelSet2D::drawDCSurface(Renderer& renderer, const Vec3f& colour, const Re
 // If the position falls outside of the narrow band, there isn't a defined gradient
 // to use. In this case, the original position will be returned.
 
-Vec2R LevelSet2D::findSurface(const Vec2R& worldPoint, unsigned iterationLimit) const
+Vec2R LevelSet::findSurface(const Vec2R& worldPoint, int iterationLimit) const
 {
+	assert(iterationLimit >= 0);
+
 	Real phi = myPhiGrid.interp(worldPoint);
-	unsigned iterationCount = 0;
+
 	Real epsilon = 1E-2 * dx();
 	Vec2R tempPoint = worldPoint;
 
+	int iterationCount = 0;
 	if (fabs(phi) < myNarrowBand)
 	{
 		while (fabs(phi) > epsilon && iterationCount < iterationLimit)
@@ -67,68 +67,68 @@ Vec2R LevelSet2D::findSurface(const Vec2R& worldPoint, unsigned iterationLimit) 
 	return tempPoint;
 }
 
-Vec2R LevelSet2D::findSurfaceIndex(const Vec2R& indexPoint, unsigned iterationLimit) const
+Vec2R LevelSet::findSurfaceIndex(const Vec2R& indexPoint, int iterationLimit) const
 {
 	Vec2R worldPoint = indexToWorld(indexPoint);
 	worldPoint = findSurface(worldPoint, iterationLimit);
 	return worldToIndex(worldPoint);
 }
 
-auto vecCompare = [](const Vec2ui &a, const Vec2ui &b) -> bool
+auto vecCompare = [](const Vec2i &a, const Vec2i &b) -> bool
 {
 	if (a[0] < b[0]) return true;
 	else if (a[0] == b[0] && a[1] < b[1]) return true;
 	return false;
 };
 
-void LevelSet2D::reinitFIM()
+void LevelSet::reinitFIM()
 {
 	UniformGrid<MarkedCells> reinitializedCells(size(), MarkedCells::UNVISITED);
 	
 	// Find the zero crossings, update their distances and flag as source cells
 	ScalarGrid<Real> tempPhiGrid = myPhiGrid;
 
-	unsigned totalVoxels = size()[0] * size()[1];
+	int totalVoxels = size()[0] * size()[1];
 
-	tbb::parallel_for(tbb::blocked_range<unsigned>(0, totalVoxels), [&](const tbb::blocked_range<unsigned> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels), [&](const tbb::blocked_range<int> &range)
 	{
-		for (unsigned r = range.begin(); r != range.end(); ++r)
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
-			Vec2ui cell = reinitializedCells.unflatten(r);
+			Vec2i cell = reinitializedCells.unflatten(flatIndex);
 
 			// Check for a zero crossing
-			for (unsigned axis : {0, 1})
-				for (unsigned direction : {0, 1})
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+					Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
 
-					if (myPhiGrid(cell) * myPhiGrid(Vec2ui(adjacentCell)) <= 0.)
+					if (myPhiGrid(cell) * myPhiGrid(adjacentCell) <= 0.)
 					{
 						// Update distance
 						Vec2R worldPoint = indexToWorld(Vec2R(cell));
 						Vec2R interfacePoint = findSurface(worldPoint, 5);
 					
-						Real udf = dist(interfacePoint, worldPoint);
+						Real distance = dist(interfacePoint, worldPoint);
 
 						// If the cell has not be updated yet OR the update is lower than a previous
 						// update, assign the SDF to the cell
 						if (reinitializedCells(cell) != MarkedCells::FINISHED)
 						{
 							reinitializedCells(cell) = MarkedCells::FINISHED;
-							tempPhiGrid(cell) = udf;
+							tempPhiGrid(cell) = distance;
 						}
-						else if (tempPhiGrid(cell) > udf)
-							tempPhiGrid(cell) = udf;
+						else if (tempPhiGrid(cell) > distance)
+							tempPhiGrid(cell) = distance;
 					}
 				}
 
-			Real val = myNarrowBand;
+			Real newDistance = myNarrowBand;
 			if (reinitializedCells(cell) == MarkedCells::FINISHED)
-				val = tempPhiGrid(cell);
+				newDistance = tempPhiGrid(cell);
 
-			tempPhiGrid(cell) = myPhiGrid(cell) < 0. ? -val : val;
+			tempPhiGrid(cell) = myPhiGrid(cell) < 0. ? -newDistance : newDistance;
 		}
 	});
 
@@ -137,7 +137,7 @@ void LevelSet2D::reinitFIM()
 	reinitFastIterative(reinitializedCells);
 }
 
-void LevelSet2D::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCells)
+void LevelSet::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCells)
 {
 	assert(reinitializedCells.size() == size());
 
@@ -146,44 +146,44 @@ void LevelSet2D::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCell
 	// to reinitialize.
 	//
 
-	unsigned totalVoxels = size()[0] * size()[1];
+	int totalVoxels = size()[0] * size()[1];
 
-	tbb::enumerable_thread_specific<std::vector<Vec2ui>> parallelActiveCellList;
+	tbb::enumerable_thread_specific<std::vector<Vec2i>> parallelActiveCellList;
 
-	tbb::parallel_for(tbb::blocked_range<unsigned>(0, totalVoxels), [&](const tbb::blocked_range<unsigned> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels), [&](const tbb::blocked_range<int> &range)
 	{
-		std::vector<Vec2ui> &localActiveCellList = parallelActiveCellList.local();
+		std::vector<Vec2i> &localActiveCellList = parallelActiveCellList.local();
 
-		for (unsigned r = range.begin(); r != range.end(); ++r)
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
-			Vec2ui cell = reinitializedCells.unflatten(r);
+			Vec2i cell = reinitializedCells.unflatten(flatIndex);
 
 			if (reinitializedCells(cell) == MarkedCells::FINISHED)
 			{
 				// Add neighbours to the list
-				for (unsigned axis : {0, 1})
-					for (unsigned direction : {0, 1})
+				for (int axis : {0, 1})
+					for (int direction : {0, 1})
 					{
-						Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+						Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 						if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
 
-						if (reinitializedCells(Vec2ui(adjacentCell)) == MarkedCells::UNVISITED)
+						if (reinitializedCells(adjacentCell) == MarkedCells::UNVISITED)
 						{
-							localActiveCellList.push_back(Vec2ui(adjacentCell));
-							reinitializedCells(Vec2ui(adjacentCell)) = MarkedCells::VISITED;
+							localActiveCellList.push_back(adjacentCell);
+							reinitializedCells(adjacentCell) = MarkedCells::VISITED;
 						}
 					}
 			}
 		}
 	});
 
-	std::vector<Vec2ui> activeCellList;
+	std::vector<Vec2i> activeCellList;
 
-	for (const auto& localList : parallelActiveCellList)
+	parallelActiveCellList.combine_each([&activeCellList](const std::vector<Vec2i>& localList)
 	{
 		activeCellList.insert(activeCellList.end(), localList.begin(), localList.end());
-	}
+	});
 
 	parallelActiveCellList.clear();
 
@@ -237,28 +237,28 @@ void LevelSet2D::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCell
 	Real tolerance = dx * 1E-5;
 	bool stillActiveCells = true;
 
-	unsigned activeCellCount = activeCellList.size();
+	int activeCellCount = activeCellList.size();
 
-	unsigned iter = 0;
-	unsigned maxIters = 5 * myNarrowBand / dx;
+	int iteration = 0;
+	int maxIterations = 5 * myNarrowBand / dx;
 
-	while (activeCellCount > 0 && iter < maxIters)
+	while (activeCellCount > 0 && iteration < maxIterations)
 	{
-		tbb::parallel_for(tbb::blocked_range<unsigned>(0, activeCellCount), [&](const tbb::blocked_range<unsigned> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount), [&](const tbb::blocked_range<int> &range)
 		{
-			std::vector<Vec2ui> &localActiveCellList = parallelActiveCellList.local();
+			std::vector<Vec2i> &localActiveCellList = parallelActiveCellList.local();
 			
-			Vec2ui oldCell(myPhiGrid.size());
+			Vec2i oldCell(myPhiGrid.size());
 
-			for (unsigned r = range.begin(); r != range.end(); ++r)
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				Vec2ui newCell = activeCellList[r];
+				Vec2i newCell = activeCellList[flatIndex];
 
 				if (oldCell != newCell)
 				{
 					assert(reinitializedCells(newCell) == MarkedCells::VISITED);
 
-					Real newPhi = solveEikonal(Vec2i(newCell));
+					Real newPhi = solveEikonal(newCell);
 
 					// If we hit the narrow band, we don't need to make any changes
 					if (newPhi > myNarrowBand) continue;
@@ -271,27 +271,27 @@ void LevelSet2D::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCell
 					// If the cell is converged, load up the neighbours that aren't currently being VISITED
 					if (fabs(newPhi - fabs(oldPhi)) < tolerance)
 					{
-						for (unsigned axis : {0, 1})
-							for (unsigned direction : {0, 1})
+						for (int axis : {0, 1})
+							for (int direction : {0, 1})
 							{
-								Vec2i adjacentCell = cellToCell(Vec2i(newCell), axis, direction);
+								Vec2i adjacentCell = cellToCell(newCell, axis, direction);
 
 								if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
 
-								if (reinitializedCells(Vec2ui(adjacentCell)) == MarkedCells::UNVISITED)
+								if (reinitializedCells(adjacentCell) == MarkedCells::UNVISITED)
 								{
 									Real adjacentNewPhi = solveEikonal(adjacentCell);
 
 									if (adjacentNewPhi > myNarrowBand) continue;
 
 									// Check if new phi is less than the current value
-									Real adjacentOldPhi = fabs(myPhiGrid(Vec2ui(adjacentCell)));
+									Real adjacentOldPhi = fabs(myPhiGrid(adjacentCell));
 
 									if ((adjacentNewPhi < adjacentOldPhi) && (fabs(adjacentNewPhi - adjacentOldPhi) > tolerance))
 									{
-										tempPhiGrid(Vec2ui(adjacentCell)) = myPhiGrid(Vec2ui(adjacentCell)) < 0 ? -adjacentNewPhi : adjacentNewPhi;
+										tempPhiGrid(adjacentCell) = myPhiGrid(adjacentCell) < 0 ? -adjacentNewPhi : adjacentNewPhi;
 
-										localActiveCellList.push_back(Vec2ui(adjacentCell));
+										localActiveCellList.push_back(adjacentCell);
 									}
 								}
 
@@ -307,11 +307,11 @@ void LevelSet2D::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCell
 		});
 
 		// Turn off VISITED labels for current list
-		tbb::parallel_for(tbb::blocked_range<unsigned>(0, activeCellCount), [&](const tbb::blocked_range<unsigned> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount), [&](const tbb::blocked_range<int> &range)
 		{
-			for (unsigned r = range.begin(); r != range.end(); ++r)
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				Vec2ui cell = activeCellList[r];
+				Vec2i cell = activeCellList[flatIndex];
 				assert(reinitializedCells(cell) != MarkedCells::FINISHED);
 				reinitializedCells(cell) = MarkedCells::UNVISITED;
 			}
@@ -319,10 +319,10 @@ void LevelSet2D::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCell
 
 		activeCellList.clear();
 
-		for (auto i = parallelActiveCellList.begin(); i != parallelActiveCellList.end(); ++i)
+		parallelActiveCellList.combine_each([&activeCellList](const std::vector<Vec2i>& localList)
 		{
-			activeCellList.insert(activeCellList.end(), i->begin(), i->end());
-		}
+			activeCellList.insert(activeCellList.end(), localList.begin(), localList.end());
+		});
 
 		parallelActiveCellList.clear();
 
@@ -331,50 +331,50 @@ void LevelSet2D::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCell
 		activeCellCount = activeCellList.size();
 
 		// Turn on VISITED labels for new list
-		tbb::parallel_for(tbb::blocked_range<unsigned>(0, activeCellCount), [&](const tbb::blocked_range<unsigned> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount), [&](const tbb::blocked_range<int> &range)
 		{
-			for (unsigned r = range.begin(); r != range.end(); ++r)
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				Vec2ui idx = activeCellList[r];
-				assert(reinitializedCells(idx) != MarkedCells::FINISHED);
-				reinitializedCells(idx) = MarkedCells::VISITED;
+				Vec2i cell = activeCellList[flatIndex];
+				assert(reinitializedCells(cell) != MarkedCells::FINISHED);
+				reinitializedCells(cell) = MarkedCells::VISITED;
 			}
 		}); 
 		
 		std::swap(tempPhiGrid, myPhiGrid);
 
-		++iter;
+		++iteration;
 	}
 }
 
-void LevelSet2D::reinit()
+void LevelSet::reinit()
 {	
 	ScalarGrid<Real> tempPhiGrid = myPhiGrid;
 
 	UniformGrid<MarkedCells> reinitializedCells(size(), MarkedCells::UNVISITED);
 
 	// Find zero crossing
-	forEachVoxelRange(Vec2ui(0), myPhiGrid.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myPhiGrid.size(), [&](const Vec2i& cell)
 	{
-		for (unsigned axis : {0, 1})
-			for (unsigned direction : {0, 1})
+		for (int axis : {0, 1})
+			for (int direction : {0, 1})
 			{
-				Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+				Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 				if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
 
-				if (myPhiGrid(cell) * myPhiGrid(Vec2ui(adjacentCell)) <= 0.)
+				if (myPhiGrid(cell) * myPhiGrid(adjacentCell) <= 0.)
 				{
 					Vec2R worldPoint = indexToWorld(Vec2R(cell));
 					Vec2R interfacePoint = findSurface(worldPoint, 5);
 
-					Real udf = dist(worldPoint, interfacePoint);
+					Real distance = dist(worldPoint, interfacePoint);
 
 					// If the cell has not be updated yet OR the update is lower than a previous
 					// update, assign the SDF to the cell
-					if (reinitializedCells(cell) != MarkedCells::FINISHED || fabs(tempPhiGrid(cell)) > udf)
+					if (reinitializedCells(cell) != MarkedCells::FINISHED || fabs(tempPhiGrid(cell)) > distance)
 					{
-						tempPhiGrid(cell) = myPhiGrid(cell) < 0. ? -udf : udf;
+						tempPhiGrid(cell) = myPhiGrid(cell) < 0. ? -distance : distance;
 						reinitializedCells(cell) = MarkedCells::FINISHED;
 					}
 				}
@@ -392,16 +392,16 @@ void LevelSet2D::reinit()
 	reinitFastMarching(reinitializedCells);
 }
 
-void LevelSet2D::init(const Mesh2D& initMesh, bool resize)
+void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool resizeGrid)
 {
-	if (resize)
+	if (resizeGrid)
 	{
 		// Determine the bounding box of the mesh to build the underlying grids
 		Vec2R minBoundingBox(std::numeric_limits<Real>::max());
 		Vec2R maxBoundingBox(std::numeric_limits<Real>::lowest());
 
-		for (unsigned vertexIndex = 0; vertexIndex < initMesh.vertexListSize(); ++vertexIndex)
-			updateMinAndMax(minBoundingBox, maxBoundingBox, initMesh.vertex(vertexIndex).point());
+		for (int vertexIndex = 0; vertexIndex < initialMesh.vertexListSize(); ++vertexIndex)
+			updateMinAndMax(minBoundingBox, maxBoundingBox, initialMesh.vertex(vertexIndex).point());
 
 		// Just for nice whole numbers, let's clamp the bounding box to be an integer
 		// offset in index space then bring it back to world space
@@ -414,21 +414,23 @@ void LevelSet2D::init(const Mesh2D& initMesh, bool resize)
 		clear();
 		Transform xform(dx(), minBoundingBox);
 		// Since we know how big the mesh is, we know how big our grid needs to be (wrt to grid spacing)
-		myPhiGrid = ScalarGrid<Real>(xform, Vec2ui((maxBoundingBox - minBoundingBox) / dx()), myNarrowBand);
+		myPhiGrid = ScalarGrid<Real>(xform, Vec2i((maxBoundingBox - minBoundingBox) / dx()), myNarrowBand);
 	}
-	else myPhiGrid.resize(size(), myNarrowBand);
+	else
+	{
+		myPhiGrid.resize(size(), myNarrowBand);
+	}
 
 	// We want to track which cells in the level set contain valid distance information.
-	// The first pass will set cells close to the mesh as FINISHED. The following pass will do a 
-	// BFS to assign the remaining UNVISITED cells with the appropriate distances.
+	// The first pass will set cells close to the mesh as FINISHED.
 	UniformGrid<MarkedCells> reinitializedCells(size(), MarkedCells::UNVISITED);
 	UniformGrid<int> meshParityCells(size(), 0);
 
-	for (auto edge : initMesh.edges())
+	for (auto edge : initialMesh.edges())
 	{
 		// It's easier to work in our index space and just scale the distance later.
-		const Vec2R startPoint = worldToIndex(initMesh.vertex(edge.vertex(0)).point());
-		const Vec2R endPoint = worldToIndex(initMesh.vertex(edge.vertex(1)).point());
+		const Vec2R startPoint = worldToIndex(initialMesh.vertex(edge.vertex(0)).point());
+		const Vec2R endPoint = worldToIndex(initialMesh.vertex(edge.vertex(1)).point());
 
 		// Record mesh-grid intersections between cell nodes (i.e. on grid edges)
 		// Since we only cast rays *left-to-right* for inside/outside checking, we don't
@@ -458,8 +460,10 @@ void LevelSet2D::init(const Mesh2D& initMesh, bool resize)
 				{
 					if (startPoint[1] < endPoint[1])
 					{
-						// Decrement the parity and increment since the grid_node is
-						// "left" of the mesh-edge crossing the grid-edge
+						// Increment the parity since the grid_node is
+						// "left" of the mesh-edge crossing the grid-edge.
+						// This indicates a negative normal in the x-direction
+						// and means we're entering into the material.
 						++meshParityCells(i + 1, j);
 					}
 					else
@@ -473,12 +477,13 @@ void LevelSet2D::init(const Mesh2D& initMesh, bool resize)
 				{
 					// Technically speaking, the zero isocountour means we're inside
 					// the surface. So we should change the parity at the node that
-					// is intersected even though it's zero and therefore the sign
-					// is meaningless.
-					if (startPoint[1] < endPoint[1]) // grid_node is to the "left" of the edge
+					// is intersected even though it's zero and the sign is meaningless.
+					if (startPoint[1] < endPoint[1])
 					{
-						// Decrement the parity and increment since the grid_node is
-						// "left" of the mesh-edge crossing the grid-edge
+						// Increment the parity since the grid_node is
+						// "left" of the mesh-edge crossing the grid-edge.
+						// This indicates a negative normal in the x-direction
+						// and means we're entering into the material.
 						++meshParityCells(i, j);
 					}
 					else
@@ -496,40 +501,41 @@ void LevelSet2D::init(const Mesh2D& initMesh, bool resize)
 
 	// Now that all the x-axis edge crossings have been found, we can compile the parity changes
 	// and label grid nodes that are at the interface
-	for (unsigned j = 0; j < size()[1]; ++j)
+	for (int j = 0; j < size()[1]; ++j)
 	{
-		int parity = myIsInverted ? 1 : 0;
+		int parity = myIsBackgroundNegative ? 1 : 0;
 
 		// We loop x-major because that's how we've set up our edge intersection.
-		// This is definitely cache incoherent based on the UniformGrid structure..
-		// It's probably not a deal breaker in 2-D but it could suck in 3-D
-		for (unsigned i = 0; i < size()[0]; ++i) // TODO: double check that I've resized right
+		// This is definitely cache incoherent based on the UniformGrid structure.
+		for (int i = 0; i < size()[0]; ++i) // TODO: double check that I've resized right
 		{
 			// Update parity before changing sign since the parity values above used the convention
 			// of putting the change on the "far" node (i.e. after the mesh-grid intersection).
 
-			Vec2ui cell(i, j);
+			Vec2i cell(i, j);
 			parity += meshParityCells(cell);
 			meshParityCells(cell) = parity;
-			if (parity > 0) myPhiGrid(cell) = -myPhiGrid(cell);
+
+			// Set inside cells to negative
+			if (parity > 0) myPhiGrid(cell) = -fabs(myPhiGrid(cell));
 		}
 	}
 
-	// With the parity assigned, loop over the grid once more and label nodes that have a sign change
+	// With the parity assigned, loop over the grid once more and label nodes that have an implied sign change
 	// with neighbouring nodes (this means parity goes from -'ve (and zero) to +'ve or vice versa).
-	for (unsigned i = 1; i < (size()[0] - 1); ++i)
-		for (unsigned j = 1; j < (size()[1] - 1); ++j)
+	for (int i = 1; i < size()[0] - 1; ++i)
+		for (int j = 1; j < size()[1] - 1; ++j)
 		{
-			const Vec2ui cell(i, j);
+			const Vec2i cell(i, j);
 
 			bool isInside = meshParityCells(cell) > 0;
 
-			for (unsigned axis : {0, 1})
-				for (unsigned direction : {0, 1})
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+					Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
-					bool isAdjacentInside = meshParityCells(Vec2ui(adjacentCell)) > 0;
+					bool isAdjacentInside = meshParityCells(adjacentCell) > 0;
 
 					// Flag to indicate that this cell needs an exact distance based on the mesh
 					if (isInside != isAdjacentInside) reinitializedCells(cell) = MarkedCells::FINISHED;
@@ -539,13 +545,13 @@ void LevelSet2D::init(const Mesh2D& initMesh, bool resize)
 	// Loop over all the edges in the mesh. Level set grid cells labelled as VISITED will be
 	// updated with the distance to the surface if it happens to be shorter than the current
 	// distance to the surface.
-	for (auto edge : initMesh.edges())
+	for (auto edge : initialMesh.edges())
 	{
 		// Using the vertices of the edge, we can update distance values for cells
 		// within the bounding box of the mesh. It's easier to work in our index space
 		// and just scale the distance later.
-		const Vec2R startPoint = worldToIndex(initMesh.vertex(edge.vertex(0)).point());
-		const Vec2R endPoint = worldToIndex(initMesh.vertex(edge.vertex(1)).point());
+		const Vec2R startPoint = worldToIndex(initialMesh.vertex(edge.vertex(0)).point());
+		const Vec2R endPoint = worldToIndex(initialMesh.vertex(edge.vertex(1)).point());
 
 		// Build bounding box
 
@@ -558,10 +564,10 @@ void LevelSet2D::init(const Mesh2D& initMesh, bool resize)
 		// Update distances to the mesh at grid cells within the bounding box
 		assert(minBoundingBox[0] >= 0 && minBoundingBox[1] >= 0 && maxBoundingBox[0] < size()[0] && maxBoundingBox[1] < size()[1]);
 
-		for (unsigned i = minBoundingBox[0]; i <= maxBoundingBox[0]; ++i)
-			for (unsigned j = minBoundingBox[1]; j <= maxBoundingBox[1]; ++j)
+		for (int i = minBoundingBox[0]; i <= maxBoundingBox[0]; ++i)
+			for (int j = minBoundingBox[1]; j <= maxBoundingBox[1]; ++j)
 			{
-				Vec2ui cell(i, j);
+				Vec2i cell(i, j);
 				if (reinitializedCells(cell) != MarkedCells::UNVISITED)
 				{
 					Vec2R cellPoint(cell);
@@ -587,7 +593,7 @@ void LevelSet2D::init(const Mesh2D& initMesh, bool resize)
 	reinitFastMarching(reinitializedCells);
 }
 
-void LevelSet2D::reinitFastMarching(UniformGrid<MarkedCells>& reinitializedCells)
+void LevelSet::reinitFastMarching(UniformGrid<MarkedCells>& reinitializedCells)
 {
 	assert(reinitializedCells.size() == size());
 
@@ -616,31 +622,31 @@ void LevelSet2D::reinitFastMarching(UniformGrid<MarkedCells>& reinitializedCells
 	};
 
 	// Load up the BFS queue with the unvisited cells next to the finished ones
-	using Node = std::pair<Vec2ui, Real>;
+	using Node = std::pair<Vec2i, Real>;
 	auto cmp = [](const Node& a, const Node& b) -> bool { return fabs(a.second) > fabs(b.second); };
 	std::priority_queue<Node, std::vector<Node>, decltype(cmp)> phiCellQ(cmp);
 
-	forEachVoxelRange(Vec2ui(0), size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), size(), [&](const Vec2i& cell)
 	{
 		if (reinitializedCells(cell) == MarkedCells::FINISHED)
 		{
-			for (unsigned axis : {0, 1})
-				for (unsigned direction : {0, 1})
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+					Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
 
-					if (reinitializedCells(Vec2ui(adjacentCell)) == MarkedCells::UNVISITED)
+					if (reinitializedCells(adjacentCell) == MarkedCells::UNVISITED)
 					{
 						Real udf = solveEikonal(adjacentCell);
-						myPhiGrid(Vec2ui(adjacentCell)) = (myPhiGrid(Vec2ui(adjacentCell)) <= 0.) ? -udf : udf;
+						myPhiGrid(adjacentCell) = (myPhiGrid(adjacentCell) <= 0.) ? -udf : udf;
 
 						assert(udf >= 0);
-						Node node(Vec2ui(adjacentCell), udf);
+						Node node(adjacentCell, udf);
 
 						phiCellQ.push(node);
-						reinitializedCells(Vec2ui(adjacentCell)) = MarkedCells::VISITED;
+						reinitializedCells(adjacentCell) = MarkedCells::VISITED;
 					}
 				}
 		}
@@ -649,7 +655,7 @@ void LevelSet2D::reinitFastMarching(UniformGrid<MarkedCells>& reinitializedCells
 	while (!phiCellQ.empty())
 	{
 		Node localNode = phiCellQ.top();
-		Vec2ui localCell = localNode.first;
+		Vec2i localCell = localNode.first;
 		phiCellQ.pop();
 
 		// Since you can't just update parts of the priority queue,
@@ -671,14 +677,14 @@ void LevelSet2D::reinitFastMarching(UniformGrid<MarkedCells>& reinitializedCells
 
 			// Loop over the neighbouring cells and load the unvisited cells
 			// and update the visited cells
-			for (unsigned axis : {0, 1})
-				for (unsigned direction : {0, 1})
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2i adjacentCell = cellToCell(Vec2i(localCell), axis, direction);
+					Vec2i adjacentCell = cellToCell(localCell, axis, direction);
 
 					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
 
-					if (reinitializedCells(Vec2ui(adjacentCell)) == MarkedCells::FINISHED)
+					if (reinitializedCells(adjacentCell) == MarkedCells::FINISHED)
 						hasFinishedNeighbour = true;
 					else // If visited, then we'll update it
 					{
@@ -687,15 +693,15 @@ void LevelSet2D::reinitFastMarching(UniformGrid<MarkedCells>& reinitializedCells
 						if (udf > myNarrowBand) udf = myNarrowBand;
 
 						// If the computed distance is greater than the existing distance, we can skip it
-						if (reinitializedCells(Vec2ui(adjacentCell)) == MarkedCells::VISITED && udf > fabs(myPhiGrid(Vec2ui(adjacentCell))))
+						if (reinitializedCells(adjacentCell) == MarkedCells::VISITED && udf > fabs(myPhiGrid(adjacentCell)))
 							continue;
 
-						myPhiGrid(Vec2ui(adjacentCell)) = myPhiGrid(Vec2ui(adjacentCell)) < 0. ? -udf : udf;
+						myPhiGrid(adjacentCell) = myPhiGrid(adjacentCell) < 0. ? -udf : udf;
 
-						Node node(Vec2ui(adjacentCell), udf);
+						Node node(adjacentCell, udf);
 
 						phiCellQ.push(node);
-						reinitializedCells(Vec2ui(adjacentCell)) = MarkedCells::VISITED;
+						reinitializedCells(adjacentCell) = MarkedCells::VISITED;
 					}
 				}
 
@@ -716,43 +722,43 @@ void LevelSet2D::reinitFastMarching(UniformGrid<MarkedCells>& reinitializedCells
 // Extract a mesh representation of the interface. Useful for rendering but not much
 // else since there will be duplicate vertices per grid edge in the current implementation.
 
-Mesh2D LevelSet2D::buildMSMesh() const
+EdgeMesh LevelSet::buildMSMesh() const
 {
 	std::vector<Vec2R> verts;
-	std::vector<Vec2ui> edges;
+	std::vector<Vec2i> edges;
 		
 	// Run marching squares loop
-	forEachVoxelRange(Vec2ui(0), size() - Vec2ui(1), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), size() - Vec2i(1), [&](const Vec2i& cell)
 	{
-		unsigned mcKey = 0;
+		int mcKey = 0;
 
-		for (unsigned direction = 0; direction < 4; ++direction)
+		for (int direction = 0; direction < 4; ++direction)
 		{
-			Vec2ui node = cellToNode(cell, direction);
+			Vec2i node = cellToNodeCCW(cell, direction);
 
 			if (myPhiGrid(node) <= 0.) mcKey += (1 << direction);
 		}
 
 		// Connect edges using the marching squares template
-		for (unsigned edgeIndex = 0; edgeIndex < 4 && marchingSquaresTemplate[mcKey][edgeIndex] >= 0; edgeIndex += 2)
+		for (int edgeIndex = 0; edgeIndex < 4 && marchingSquaresTemplate[mcKey][edgeIndex] >= 0; edgeIndex += 2)
 		{
 			// Find first vertex
-			unsigned edge = marchingSquaresTemplate[mcKey][edgeIndex];
+			int edge = marchingSquaresTemplate[mcKey][edgeIndex];
 
-			Vec3ui faceMap = cellToFace(cell, edge);
+			Vec3i faceMap = cellToFaceCCW(cell, edge);
 			
-			Vec2ui face(faceMap[0], faceMap[1]);
-			unsigned axis = faceMap[2];
-			Vec2ui startNode = faceToNode(face, axis, 0);
-			Vec2ui endNode = faceToNode(face, axis, 1);
+			Vec2i face(faceMap[0], faceMap[1]);
+			int axis = faceMap[2];
+			Vec2i startNode = faceToNode(face, axis, 0);
+			Vec2i endNode = faceToNode(face, axis, 1);
 
 			Vec2R startPoint = interpolateInterface(startNode, endNode);
 
 			// Find second vertex
 			edge = marchingSquaresTemplate[mcKey][edgeIndex + 1];
-			faceMap = cellToFace(cell, edge);
+			faceMap = cellToFaceCCW(cell, edge);
 
-			face =  Vec2ui(faceMap[0], faceMap[1]);
+			face =  Vec2i(faceMap[0], faceMap[1]);
 			axis = faceMap[2];
 
 			startNode = faceToNode(face, axis, 0);
@@ -767,37 +773,37 @@ Mesh2D LevelSet2D::buildMSMesh() const
 			verts.push_back(worldStartPoint);
 			verts.push_back(worldEndPoint);
 
-			edges.push_back(Vec2ui(verts.size() - 2, verts.size() - 1));
+			edges.push_back(Vec2i(verts.size() - 2, verts.size() - 1));
 		}
 	});
 
-	return Mesh2D(edges, verts);
+	return EdgeMesh(edges, verts);
 }
 
 // Extract a mesh representation of the interface using dual contouring
-Mesh2D LevelSet2D::buildDCMesh() const
+EdgeMesh LevelSet::buildDCMesh() const
 {
 	std::vector<Vec2R> verts;
-	std::vector<Vec2ui> edges;
+	std::vector<Vec2i> edges;
 	
 	// Create grid to store index to dual contouring point. Note that phi is
 	// center sampled so the DC grid must be node sampled and one cell shorter
 	// in each dimension
-	UniformGrid<unsigned> dcPointIndex(size() - Vec2ui(1), -1);
+	UniformGrid<int> dcPointIndex(size() - Vec2i(1), -1);
 
 	// Run dual contouring loop
-	forEachVoxelRange(Vec2ui(0), dcPointIndex.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), dcPointIndex.size(), [&](const Vec2i& cell)
 	{
 		std::vector<Vec2R> qefPoints;
 		std::vector<Vec2R> qefNormals;
 
-		for (unsigned axis : {0, 1})
-			for (unsigned direction : {0, 1})
+		for (int axis : {0, 1})
+			for (int direction : {0, 1})
 			{
-				Vec2ui face = cellToFace(cell, axis, direction);
+				Vec2i face = cellToFace(cell, axis, direction);
 
-				Vec2ui backwardNode = faceToNode(face, axis, 0);
-				Vec2ui forwardNode = faceToNode(face, axis, 1);
+				Vec2i backwardNode = faceToNode(face, axis, 0);
+				Vec2i forwardNode = faceToNode(face, axis, 1);
 
 				if ((myPhiGrid(backwardNode) <= 0 && myPhiGrid(forwardNode) > 0) ||
 					(myPhiGrid(backwardNode) > 0 && myPhiGrid(forwardNode) <= 0))
@@ -820,7 +826,7 @@ Mesh2D LevelSet2D::buildDCMesh() const
 
 			assert(qefPoints.size() > 1);
 
-			for (unsigned pointIndex = 0; pointIndex < qefPoints.size(); ++pointIndex)
+			for (int pointIndex = 0; pointIndex < qefPoints.size(); ++pointIndex)
 			{
 				A(pointIndex, 0) = qefNormals[pointIndex][0];
 				A(pointIndex, 1) = qefNormals[pointIndex][1];
@@ -854,15 +860,15 @@ Mesh2D LevelSet2D::buildDCMesh() const
 		}
 	});
 	
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
-		Vec2ui start(0); ++start[axis];
-		Vec2ui end(dcPointIndex.size());
+		Vec2i start(0); ++start[axis];
+		Vec2i end(dcPointIndex.size());
 
-		forEachVoxelRange(start, end, [&](const Vec2ui& face)
+		forEachVoxelRange(start, end, [&](const Vec2i& face)
 		{
-			Vec2ui backwardNode = faceToNode(face, axis, 0);
-			Vec2ui forwardNode = faceToNode(face, axis, 1);
+			Vec2i backwardNode = faceToNode(face, axis, 0);
+			Vec2i forwardNode = faceToNode(face, axis, 1);
 
 			if ((myPhiGrid(backwardNode) <= 0 && myPhiGrid(forwardNode) > 0) ||
 				(myPhiGrid(backwardNode) > 0 && myPhiGrid(forwardNode) <= 0))
@@ -870,22 +876,22 @@ Mesh2D LevelSet2D::buildDCMesh() const
 				Vec2i backwardCell = faceToCell(Vec2i(face), axis, 0);
 				Vec2i forwardCell = faceToCell(Vec2i(face), axis, 1);
 
-				assert(dcPointIndex(Vec2ui(backwardCell)) >= 0 && dcPointIndex(Vec2ui(forwardCell)) >= 0);
+				assert(dcPointIndex(backwardCell) >= 0 && dcPointIndex(forwardCell) >= 0);
 
-				Vec2ui edge;
+				Vec2i edge;
 				if (myPhiGrid(backwardNode) <= 0.)
 				{
 					if (axis == 0)
-						edge = Vec2ui(dcPointIndex(Vec2ui(backwardCell)), dcPointIndex(Vec2ui(forwardCell)));
+						edge = Vec2i(dcPointIndex(backwardCell), dcPointIndex(forwardCell));
 					else
-						edge = Vec2ui(dcPointIndex(Vec2ui(forwardCell)), dcPointIndex(Vec2ui(backwardCell)));
+						edge = Vec2i(dcPointIndex(forwardCell), dcPointIndex(backwardCell));
 				}
 				else
 				{
 					if (axis == 0)
-						edge = Vec2ui(dcPointIndex(Vec2ui(forwardCell)), dcPointIndex(Vec2ui(backwardCell)));
+						edge = Vec2i(dcPointIndex(forwardCell), dcPointIndex(backwardCell));
 					else
-						edge = Vec2ui(dcPointIndex(Vec2ui(backwardCell)), dcPointIndex(Vec2ui(forwardCell)));
+						edge = Vec2i(dcPointIndex(backwardCell), dcPointIndex(forwardCell));
 				}
 
 				edges.push_back(edge);
@@ -893,10 +899,10 @@ Mesh2D LevelSet2D::buildDCMesh() const
 		});
 	}
 
-	return Mesh2D(edges, verts);
+	return EdgeMesh(edges, verts);
 }
 
-Vec2R LevelSet2D::interpolateInterface(const Vec2ui& startPoint, const Vec2ui& endPoint) const
+Vec2R LevelSet::interpolateInterface(const Vec2i& startPoint, const Vec2i& endPoint) const
 {
 	assert(myPhiGrid(startPoint[0], startPoint[1]) <= 0 && myPhiGrid(endPoint[0], endPoint[1]) > 0 ||
 			myPhiGrid(startPoint[0], startPoint[1]) > 0 && myPhiGrid(endPoint[0], endPoint[1]) <= 0);
@@ -911,9 +917,9 @@ Vec2R LevelSet2D::interpolateInterface(const Vec2ui& startPoint, const Vec2ui& e
 	return Vec2R(startPoint[0], startPoint[1]) + s*dx;
 }
 
-void LevelSet2D::unionSurface(const LevelSet2D& unionPhi)
+void LevelSet::unionSurface(const LevelSet& unionPhi)
 {
-	forEachVoxelRange(Vec2ui(0), size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), size(), [&](const Vec2i& cell)
 	{
 		myPhiGrid(cell) = std::min(myPhiGrid(cell), unionPhi.interp(indexToWorld(Vec2R(cell))));
 	});

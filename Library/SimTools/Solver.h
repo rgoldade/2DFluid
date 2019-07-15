@@ -24,47 +24,48 @@ class Solver
 	using Vector = typename std::conditional<useDoublePrecision, Eigen::VectorXd, Eigen::VectorXf>::type;
 
 public:
-	Solver(unsigned rowcount, unsigned nonzeros = 0)
+	Solver(int rowCount, int estimatedNonZeros = 0)
 	{
+		assert(rowCount >= 0 && estimatedNonZeros >= 0);
 		Eigen::initParallel();
 
-		myMatrix.reserve(nonzeros);
-		myRhs = Vector::Zero(rowcount);
-		mySolution = Vector::Zero(rowcount);
-		myGuess = Vector::Zero(rowcount);
+		myMatrix.reserve(estimatedNonZeros);
+		myRhs = Vector::Zero(rowCount);
+		mySolution = Vector::Zero(rowCount);
+		myGuess = Vector::Zero(rowCount);
 	}
 
 	// Insert element item into sparse vector. Duplicates are allowed and will be summed together
-	void addElement(unsigned row, unsigned col, SolverReal val)
+	void addToElement(int row, int col, SolverReal value)
 	{
-		myMatrix.push_back(Eigen::Triplet<SolverReal>(row, col, val));
+		assert(row >= 0 && col >= 0);
+		myMatrix.push_back(Eigen::Triplet<SolverReal>(row, col, value));
 	}
 
 	// Adds value to RHS. It's safe to assume that it is initialized to zeros
-	void addRhs(unsigned row, SolverReal val)
+	void addToRhs(int row, SolverReal value)
 	{
-		myRhs(row) += val;
+		assert(row >= 0);
+		myRhs(row) += value;
 	}
 	
-	SolverReal rhs(unsigned row)
+	SolverReal rhs(int row)
 	{
+		assert(row >= 0);
 		return myRhs(row);
 	}
 
-	void removeDOF(unsigned element)
-	{
-		myRemovedDOFs.push_back(element);
-	}
-
 	// Caller should make sure solution is up-to-date
-	SolverReal solution(unsigned row) const
-	{		
+	SolverReal solution(int row) const
+	{
+		assert(row >= 0);
 		return mySolution(row);
 	}
 
-	inline void addGuess(unsigned row, SolverReal val)
+	void addToGuess(int row, SolverReal value)
 	{
-		myGuess(row) += val;
+		assert(row >= 0);
+		myGuess(row) += value;
 	}
 
 	//Call to solve linear system
@@ -91,25 +92,7 @@ public:
 	{
 		Eigen::SparseMatrix<SolverReal> sparseMatrix(myRhs.rows(), myRhs.rows());
 		sparseMatrix.setFromTriplets(myMatrix.begin(), myMatrix.end());
-
-		for (auto removeElement : myRemovedDOFs)
-		{
-			for (int k = 0; k < sparseMatrix.outerSize(); ++k)
-				for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
-				{
-					if (it.row() == removeElement && it.col() == removeElement)
-						sparseMatrix.coeffRef(it.row(), it.col()) = 1.;
-
-					if (it.row() == removeElement && it.col() != removeElement)
-						sparseMatrix.coeffRef(it.row(), it.col()) = 0.;
-
-					if (it.row() != removeElement && it.col() == removeElement)
-						sparseMatrix.coeffRef(it.row(), it.col()) = 0.;
-				}
-
-			myRhs[removeElement] = 0.;
-		}
-
+		
 		Eigen::ConjugateGradient<Eigen::SparseMatrix<SolverReal>, Eigen::Upper | Eigen::Lower> solver;
 		solver.compute(sparseMatrix);
 
@@ -128,9 +111,11 @@ public:
 			return false;
 		}
 
+		std::cout << "Solver iterations: " << solver.iterations() << std::endl;
+		std::cout << "Solve error: " << solver.error() << std::endl;
+
 		return true;
 	}
-
 
 	bool isSymmetric()
 	{
@@ -141,7 +126,7 @@ public:
 		for (int k = 0; k < sparseMatrix.outerSize(); ++k)
 			for (typename Eigen::SparseMatrix<SolverReal>::InnerIterator it(sparseMatrix, k); it; ++it)
 			{
-				if (!Util::isEqual(sparseMatrix.coeff(it.row(), it.col()), sparseMatrix.coeff(it.col(), it.row())))
+				if (fabs(sparseMatrix.coeff(it.row(), it.col()) - sparseMatrix.coeff(it.col(), it.row())) > 1E-7)
 				{
 					std::cout << "Value at row " << it.row() << ", col " << it.col() << " is " << sparseMatrix.coeff(it.row(), it.col()) << std::endl;
 					std::cout << "Value at row " << it.col() << ", col " << it.row() << " is " << sparseMatrix.coeff(it.col(), it.row()) << std::endl;

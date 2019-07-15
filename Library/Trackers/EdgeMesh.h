@@ -1,5 +1,5 @@
-#ifndef LIBRARY_MESH2D_H
-#define LIBRARY_MESH2D_H
+#ifndef LIBRARY_EDGEMESH_H
+#define LIBRARY_EDGEMESH_H
 
 #include "Common.h"
 #include "Integrator.h"
@@ -8,7 +8,7 @@
 
 ///////////////////////////////////
 //
-// Mesh2d.h/cpp
+// EdgeMesh.h/cpp
 // Ryan Goldade 2016
 //
 // 2-d mesh container with edge and
@@ -19,13 +19,13 @@
 // Vertex class stores it's point, normal and adjacent edges
 // as well as accessors and modifiers
 
-class Vertex2D
+class Vertex
 {
 public:
-	Vertex2D() : myPoint(Vec2R(0))
+	Vertex() : myPoint(Vec2R(0))
 	{}
 
-	Vertex2D(const Vec2R& point) : myPoint(point)
+	Vertex(const Vec2R& point) : myPoint(point)
 	{}
 
 	const Vec2R& point() const
@@ -44,22 +44,23 @@ public:
 	}
 
 	// Get edge stored at the eidx position in the mEdges list
-	unsigned edge(unsigned index) const
+	int edge(int index) const
 	{
-		assert(index < myEdges.size());
 		return myEdges[index];
 	}
 
-	void addEdge(unsigned index)
+	void addEdge(int index)
 	{
+		assert(index >= 0);
 		myEdges.push_back(index);
 	}
 
 	// Search through the edge list for a matching edge
 	// index to old_eidx. If found, replace that edge
 	// index with new_eidx.
-	bool replaceEdge(unsigned oldIndex, unsigned newIndex)
+	bool replaceEdge(int oldIndex, int newIndex)
 	{
+		assert(oldIndex >= 0 && newIndex >= 0);
 		auto result = std::find(myEdges.begin(), myEdges.end(), oldIndex);
 
 		if (result == myEdges.end()) return false;
@@ -71,13 +72,13 @@ public:
 
 	// Search through the edge list and return true if 
 	// there is an edge index that matches eidx
-	bool findEdge(unsigned index) const
+	bool findEdge(int index) const
 	{
 		auto result = std::find(myEdges.begin(), myEdges.end(), index);
 		return result != myEdges.end();
 	}
 
-	unsigned valence() const
+	int valence() const
 	{
 		return myEdges.size();
 	}
@@ -97,175 +98,175 @@ public:
 private:
 
 	Vec2R myPoint;
-	std::vector<unsigned> myEdges;
+	std::vector<int> myEdges;
 };
 
-class Edge2D
+class Edge
 {
 public:
-	// Negative magic numbers mean unassigned. There should never be a negative
-	// vertex index or a negative material.
-	//Edge2D() : mVerts(Vec2i(-1))
-	//{}
 
-	Edge2D(const Vec2ui& vertices) : myVerts(vertices)
+	Edge(const Vec2i& vertices) : myVertices(vertices)
 	{}
 
-	Vec2ui vertices() const
+	Vec2i vertices() const
 	{
-		return myVerts;
+		return myVertices;
 	}
 
-	unsigned vertex(unsigned index) const
+	int vertex(int index) const
 	{
-		assert(index < 2);
-		return myVerts[index];
+		assert(index >= 0 && index < 2);
+		return myVertices[index];
 	}
 
 	// Given a vertex index, find the opposite vertex index
 	// on the edge. An assert fail will be thrown if there
 	// is no match as a debug warning.
-	unsigned adjacentVertex(unsigned index) const
+	int adjacentVertex(int index) const
 	{
-		if (myVerts[0] == index)
-			return myVerts[1];
-		else if (myVerts[1] == index)
-			return myVerts[0];
+		if (myVertices[0] == index)
+			return myVertices[1];
+		else if (myVertices[1] == index)
+			return myVertices[0];
 		
 		assert(false);
 		return 0;
 	}
 
-	void replaceVertex(unsigned oldIndex, unsigned newIndex)
+	void replaceVertex(int oldIndex, int newIndex)
 	{
-		if (myVerts[0] == oldIndex)
-			myVerts[0] = newIndex;
-		else if (myVerts[1] == oldIndex)
-			myVerts[1] = newIndex;
+		if (myVertices[0] == oldIndex)
+			myVertices[0] = newIndex;
+		else if (myVertices[1] == oldIndex)
+			myVertices[1] = newIndex;
 		else assert(false);
 	}
 
-	bool findVertex(unsigned index) const
+	bool findVertex(int index) const
 	{
-		if (myVerts[0] == index || myVerts[1] == index) return true;
+		if (myVertices[0] == index || myVertices[1] == index) return true;
 		return false;
 	}
 
 	void reverse()
 	{
-		std::swap(myVerts[0], myVerts[1]);
+		std::swap(myVertices[0], myVertices[1]);
 	}
 
 private:
 	// Each edge can be viewed as having a "tail" and a "head"
 	// vertex. The orientation is used in reference to "left" and
 	// "right" turns when talking about the materials on the edge.
-	Vec2ui myVerts;
+	Vec2i myVertices;
 };
 
-class Mesh2D
+class EdgeMesh
 {
 public:
 	// Vanilla constructor leaves initialization up to the caller
-	Mesh2D()
+	EdgeMesh()
 	{}
 
 	// Initialize mesh container with edges and the associated vertices.
 	// Input mesh should be water-tight with no dangling edges
 	// (i.e. no vertex has a valence less than 2).
-	Mesh2D(const std::vector<Vec2ui>& edges, const std::vector<Vec2R>& vertices)
+	EdgeMesh(const std::vector<Vec2i>& edges, const std::vector<Vec2R>& vertices)
 	{
 		myEdges.reserve(edges.size());
-		for (const auto& edge : edges) myEdges.push_back(Edge2D(edge));
+		for (const auto& edge : edges) myEdges.push_back(Edge(edge));
 
 		myVertices.reserve(vertices.size());
-		for (const auto& vert : vertices) myVertices.push_back(Vertex2D(vert));
+		for (const auto& vert : vertices) myVertices.push_back(Vertex(vert));
 
 		// Update vertices to store adjacent edges in their edge lists
-		for (unsigned edge = 0; edge < myEdges.size(); ++edge)
+		for (int edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
 		{
-			unsigned v0 = myEdges[edge].vertex(0);
-			myVertices[v0].addEdge(edge);
+			int vertIndex = myEdges[edgeIndex].vertex(0);
+			myVertices[vertIndex].addEdge(edgeIndex);
 
-			unsigned v1 = myEdges[edge].vertex(1);
-			myVertices[v1].addEdge(edge);
+			vertIndex = myEdges[edgeIndex].vertex(1);
+			myVertices[vertIndex].addEdge(edgeIndex);
 		}
 	}
 
-	void reinitialize(const std::vector<Vec2ui>& edges, const std::vector<Vec2R>& verts)
+	void reinitialize(const std::vector<Vec2i>& edges, const std::vector<Vec2R>& verts)
 	{
 		myEdges.clear();
 		myEdges.reserve(edges.size());
-		for (const auto& edge : edges) myEdges.push_back(Edge2D(edge));
+		for (const auto& edge : edges) myEdges.push_back(Edge(edge));
 
 		myVertices.clear();
 		myVertices.reserve(verts.size());
-		for (const auto& vert : verts) myVertices.push_back(Vertex2D(vert));
+		for (const auto& vert : verts) myVertices.push_back(Vertex(vert));
 
 		// Update vertices to store adjacent edges in their edge lists
-		for (unsigned e = 0; e < myEdges.size(); ++e)
+		for (int edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
 		{
-			unsigned v0 = myEdges[e].vertex(0);
-			myVertices[v0].addEdge(e);
+			int vertIndex = myEdges[edgeIndex].vertex(0);
+			myVertices[vertIndex].addEdge(edgeIndex);
 
-			unsigned v1 = myEdges[e].vertex(1);
-			myVertices[v1].addEdge(e);
+			vertIndex = myEdges[edgeIndex].vertex(1);
+			myVertices[vertIndex].addEdge(edgeIndex);
 		}
 	}
 	
 	// Add more mesh pieces to an already existing mesh (although the existing mesh could
-	// empty). The incoming mesh edges point to vertices (and vice versa) from 0 to ne-1 locally. They need
+	// empty). The incoming mesh edges point to vertices (and vice versa) from 0 to edge count - 1 locally. They need
 	// to be offset by the edge/vertex size in the existing mesh.
-	void insertMesh(const Mesh2D& mesh)
+	void insertMesh(const EdgeMesh& mesh)
 	{
-		unsigned edgeCount = myEdges.size();
-		unsigned vertexCount = myVertices.size();
+		int edgeCount = myEdges.size();
+		int vertexCount = myVertices.size();
 
 		myVertices.insert(myVertices.end(), mesh.myVertices.begin(), mesh.myVertices.end());
 		myEdges.insert(myEdges.end(), mesh.myEdges.begin(), mesh.myEdges.end());
 
 		// Update vertices to new edges
-		for (unsigned vertexIndex = vertexCount; vertexIndex < myVertices.size(); ++vertexIndex)
+		for (int vertexIndex = vertexCount; vertexIndex < myVertices.size(); ++vertexIndex)
 		{
-			for (unsigned neighbourEdgeIndex = 0; neighbourEdgeIndex < myVertices[vertexIndex].valence(); ++neighbourEdgeIndex)
+			for (int neighbourEdgeIndex = 0; neighbourEdgeIndex < myVertices[vertexIndex].valence(); ++neighbourEdgeIndex)
 			{
-				unsigned edgeIndex = myVertices[vertexIndex].edge(neighbourEdgeIndex);
+				int edgeIndex = myVertices[vertexIndex].edge(neighbourEdgeIndex);
+				assert(edgeIndex >= 0 && edgeIndex < mesh.edgeListSize());
+
 				myVertices[vertexIndex].replaceEdge(edgeIndex, edgeIndex + edgeCount);
 			}
 		}
-		for (unsigned edgeIndex = edgeCount; edgeIndex < myEdges.size(); ++edgeIndex)
+		for (int edgeIndex = edgeCount; edgeIndex < myEdges.size(); ++edgeIndex)
 		{
-			unsigned vertexIndex = myEdges[edgeIndex].vertex(0);
+			int vertexIndex = myEdges[edgeIndex].vertex(0);
+			assert(vertexIndex >= 0 && vertexIndex < mesh.vertexListSize());
 			myEdges[edgeIndex].replaceVertex(vertexIndex, vertexIndex + vertexCount);
 
 			vertexIndex = myEdges[edgeIndex].vertex(1);
+			assert(vertexIndex >= 0 && vertexIndex < mesh.vertexListSize());
 			myEdges[edgeIndex].replaceVertex(vertexIndex, vertexIndex + vertexCount);
 		}
 	}
 
-	const std::vector<Edge2D>& edges() const
+	const std::vector<Edge>& edges() const
 	{
 		return myEdges;
 	}
 
-	const Edge2D& edge(unsigned idx) const
+	const Edge& edge(unsigned idx) const
 	{
 		return myEdges[idx];
 	}
 
-	const std::vector<Vertex2D>& vertices() const
+	const std::vector<Vertex>& vertices() const
 	{
 		return myVertices;
 	}
 
-	Vertex2D vertex(unsigned idx) const
+	Vertex vertex(int index) const
 	{
-		return myVertices[idx];
+		return myVertices[index];
 	}
 
-	void setVertex(unsigned idx, const Vec2R& vert)
+	void setVertex(int index, const Vec2R& vertex)
 	{
-		myVertices[idx].setPoint(vert);
+		myVertices[index].setPoint(vertex);
 	}
 
 	void clear()
@@ -274,19 +275,19 @@ public:
 		myEdges.clear();
 	}
 
-	unsigned edgeListSize() const
+	int edgeListSize() const
 	{
 		return myEdges.size();
 	}
 
-	unsigned vertexListSize() const
+	int vertexListSize() const
 	{
 		return myVertices.size();
 	}
 
-	Vec2R unnormal(unsigned e) const
+	Vec2R scaledNormal(int edgeIndex) const
 	{
-		Edge2D edge = myEdges[e];
+		Edge edge = myEdges[edgeIndex];
 		Vec2R tangent = myVertices[edge.vertex(1)].point() - myVertices[edge.vertex(0)].point();
 		if (tangent == Vec2R(0.))
 			return Vec2R(0.); //Return nothing if degenerate edge
@@ -294,15 +295,15 @@ public:
 		return Vec2R(-tangent[1], tangent[0]);
 	}
 
-	Vec2R normal(unsigned e) const
+	Vec2R normal(int edgeIndex) const
 	{
-		return normalize(unnormal(e));
+		return normalize(scaledNormal(edgeIndex));
 	}
 
 	//Reverse winding order
 	void reverse()
 	{
-		for (auto& e : myEdges) e.reverse();
+		for (auto& edge : myEdges) edge.reverse();
 	}
 
 	void scale(Real s)
@@ -316,9 +317,9 @@ public:
 	}
 
 	// Test for degenerate edge (i.e. an edge with zero length)
-	bool isEdgeDegenerate(unsigned eidx) const
+	bool isEdgeDegenerate(int edgeIndex) const
 	{
-		const auto& edge = myEdges[eidx];
+		const auto& edge = myEdges[edgeIndex];
 		return myVertices[edge.vertex(0)].point() == myVertices[edge.vertex(1)].point();
 	}
 
@@ -332,20 +333,20 @@ public:
 		Vec3f vertColour = Vec3f(0));
 
 	template<typename VelocityField>
-	void advect(Real dt, const VelocityField& vel, const IntegrationOrder order);
+	void advect(Real dt, const VelocityField& velocity, const IntegrationOrder order);
 
 private:
 
-		std::vector<Edge2D> myEdges;
-		std::vector<Vertex2D> myVertices;
+		std::vector<Edge> myEdges;
+		std::vector<Vertex> myVertices;
 };
 
 template<typename VelocityField>
-void Mesh2D::advect(Real dt, const VelocityField& vel, const IntegrationOrder order)
+void EdgeMesh::advect(Real dt, const VelocityField& velocity, const IntegrationOrder order)
 {
-	for (auto& v : myVertices)
+	for (auto& vertex : myVertices)
 	{
-		v.setPoint(Integrator(dt, v.point(), vel, order));
+		vertex.setPoint(Integrator(dt, vertex.point(), velocity, order));
 	}
 }
 

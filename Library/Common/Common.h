@@ -20,91 +20,104 @@ using Vec3R = Vec<Real, 3>;
 
 static constexpr Real MINTHETA = 0.01;
 
-// Helper arrays to iterate over neighbouring cells or faces
-static const Vec2i cellToCellArray[] = { Vec2i(-1,0), Vec2i(1,0), Vec2i(0,-1), Vec2i(0,1) };
-static const Vec2ui cellToFaceArray[] = { Vec2ui(0,0), Vec2ui(1,0), Vec2ui(0,0), Vec2ui(0,1) };
-static const Vec2ui cellToNodeArray[] = { Vec2ui(0,0), Vec2ui(1,0), Vec2ui(0,1), Vec2ui(1,1) };
-static const Vec2i faceToCellArray[2][2] = { { Vec2i(-1,0), Vec2i(0,0) },{ Vec2i(0,-1), Vec2i(0,0) } };
-static const Vec2ui faceToNodeArray[2][2] = { { Vec2ui(0,0), Vec2ui(0,1) },
-											{ Vec2ui(0,0), Vec2ui(1,0) } };
-
-// First two indices are for offsets in the x,y direction. The third is that axis of the face and the fourth
-// is the axis of the gradient when using finite differencing.
-static const Vec4i nodeToFaceArray[4] = { Vec4i(-1,0,1,0), Vec4i(0,0,1,0), Vec4i(0,-1,0,1), Vec4i(0,0,0,1) };
-static const Vec2i nodeToCellArray[4] = { Vec2i(0,0), Vec2i(-1,0), Vec2i(-1,-1), Vec2i(0,-1) };
-
 // Helper fuctions to map between geometry components in the grid. It's preferrable to use these
 // compared to the offsets above because only the necessary pieces are modified and the concepts
 // are encapsulated better.
 
-inline Vec2i cellToCell(Vec2i cell, const unsigned axis, const unsigned direction)
+inline Vec2i cellToCell(const Vec2i& cell, int axis, int direction)
 {
-	assert(axis < 2 && direction < 2);
+	assert(axis >= 0 && axis < 2);
 
+	Vec2i adjacentCell(cell);
 	if (direction == 0)
-		--cell[axis];
+		--adjacentCell[axis];
 	else
-		++cell[axis];
+	{
+		assert(direction == 1);
+		++adjacentCell[axis];
+	}
 
-	return cell;
+	return adjacentCell;
 }
 
-inline Vec2ui cellToFace(Vec2ui cell, const unsigned axis, const unsigned direction)
+inline Vec2i cellToFace(const Vec2i& cell, int axis, int direction)
 {
-	assert(axis < 2 && direction < 2);
+	assert(axis >= 0 && axis < 2);
 
+	Vec2i face(cell);
 	if (direction == 1)
-		++cell[axis];
-	
-	return cell;
-}
-
-inline Vec2i faceToCell(Vec2i face, const unsigned axis, const unsigned direction)
-{
-	assert(axis < 2 && direction < 2);
-
-	if (direction == 0)
-		--face[axis];
+		++face[axis];
+	else assert(direction == 0);
 
 	return face;
+}
+
+inline Vec2i faceToCell(const Vec2i& face, int axis, int direction)
+{
+	assert(axis >= 0 && axis < 2);
+	
+	Vec2i cell(face);
+	if (direction == 0)
+		--cell[axis];
+	else assert(direction == 1);
+
+	return cell;
 }
 
 // An x-aligned face really means that the face normal is in the
 // x-direction so the face nodes must be y-direction offsets.
-inline Vec2ui faceToNode(Vec2ui face, const unsigned faceAxis, const unsigned direction)
+inline Vec2i faceToNode(const Vec2i& face, int faceAxis, int direction)
 {
-	assert(faceAxis < 2 && direction < 2);
+	assert(faceAxis >= 0 && faceAxis < 2);
 
+	Vec2i node(face);
 	if (direction == 1)
-		++face[(faceAxis + 1) % 2];
+		++node[(faceAxis + 1) % 2];
+	else assert(direction == 0);
 
-	return face;
+	return node;
 }
 
 // Map cell to nodes CCW from bottom-left
-inline Vec2ui cellToNode(Vec2ui cell, unsigned index)
+inline Vec2i cellToNode(const Vec2i& cell, int nodeIndex)
 {
-	assert(index < 4);
-	switch (index)
+	assert(nodeIndex >= 0 && nodeIndex < 4);
+
+	Vec2i node(cell);
+	for (int axis : {0, 1})
+	{
+		if (nodeIndex & (1 << axis))
+			++node[axis];
+	}
+
+	return node;
+}
+
+// Map cell to nodes CCW from bottom-left
+inline Vec2i cellToNodeCCW(const Vec2i& cell, int nodeIndex)
+{
+	Vec2i node(cell);
+	assert(nodeIndex >= 0 && nodeIndex < 4);
+	switch (nodeIndex)
 	{
 	case 1:
-		++cell[0];
+		++node[0];
 		break;
 	case 2:
-		cell += Vec2ui(1);
+		node += Vec2i(1);
 		break;
 	case 3:
-		++cell[1];
+		++node[1];
 		break;
 	}
 
-	return cell;
+	return node;
 }
 
-// Map cell to face using the same winding order as cellToNode
-inline Vec3ui cellToFace(const Vec2ui &cell, unsigned index)
+// Map cell to face using the same winding order as cellToNodeCCW
+inline Vec3i cellToFaceCCW(const Vec2i &cell, int index)
 {
-	Vec3ui face;
+	Vec3i face;
 	face[0] = cell[0]; face[1] = cell[1];
 	unsigned axis = index % 2 == 0 ? 1 : 0;
 	face[2] = axis;
@@ -117,24 +130,43 @@ inline Vec3ui cellToFace(const Vec2ui &cell, unsigned index)
 }
 
 // Offset node index in the axis direction.
-inline Vec2i nodeToFace(Vec2i node, const unsigned axis, const unsigned direction)
+inline Vec2i nodeToFace(const Vec2i& node, int faceAxis, int direction)
 {
-	assert(axis < 2 && direction < 2);
+	assert(faceAxis >= 0 && faceAxis < 2);
+
+	Vec2i face(node);
 
 	if (direction == 0)
-		--node[axis];
+		--face[faceAxis];
+	else assert(direction == 1);
 
-	return node;
+	return face;
 }
 
-inline Vec2i nodeToCell(Vec2i node, const unsigned cellIndex)
+inline Vec2i nodeToCellCCW(const Vec2i& node, int cellIndex)
 {
+	Vec2i cell(node);
+	assert(cellIndex >= 0 && cellIndex < 4);
 	if (cellIndex == 2 || cellIndex == 3)
-		--node[0];
+		--cell[0];
 	if (cellIndex == 1 || cellIndex == 2)
-		--node[1];
+		--cell[1];
 
-	return node;
+	return cell;
+}
+
+inline Vec2i nodeToCell(const Vec2i& node, int cellIndex)
+{
+	assert(cellIndex >= 0 && cellIndex < 4);
+
+	Vec2i cell(node);
+	for (int axis : {0, 1})
+	{
+		if (!(cellIndex & (1 << axis)))
+			--cell[axis];
+	}
+
+	return cell;
 }
 
 static const Vec3f colours[] = { Vec3f(1., 0., 0.),
@@ -164,9 +196,19 @@ inline Real lengthFraction(Real phi0, Real phi1)
 template<typename T, typename Function>
 void forEachVoxelRange(const Vec<T, 2>& start, const Vec<T, 2>& end, const Function& f)
 {
-	for (T i = start[0]; i < end[0]; ++i)
-		for (T j = start[1]; j < end[1]; ++j)
-			f(Vec<T, 2>(i, j));
+	Vec<T, 2> cell;
+	for (cell[0] = start[0]; cell[0] < end[0]; ++cell[0])
+		for (cell[1] = start[1]; cell[1] < end[1]; ++cell[1])
+			f(cell);
+}
+
+template<typename T, typename Function>
+void forEachVoxelRangeReverse(const Vec<T, 2>& start, const Vec<T, 2>& end, const Function& f)
+{
+	Vec<T, 2> cell;
+	for (cell[0] = end[0] - 1; cell[0] >= start[0]; --cell[0])
+		for (cell[1] = end[1] - 1; cell[1] >= start[1]; --cell[1])
+			f(cell);
 }
 
 // BFS markers

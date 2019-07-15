@@ -26,21 +26,21 @@ struct Vec
 	}
 
 	// TODO: Figure out a variadic method that actually works!
-	Vec<T, N>(T v0, T v1) : myVec({v0, v1})
+	constexpr Vec<T, N>(T v0, T v1) : myVec({v0, v1})
 	{
-		assert(N == 2);
+		static_assert(N == 2, "Vector dimensions must match!");
 	}
-	Vec<T, N>(T v0, T v1, T v2) : myVec({ v0, v1, v2 })
+	constexpr Vec<T, N>(T v0, T v1, T v2) : myVec({ v0, v1, v2 })
 	{
-		assert(N == 3);
+		static_assert(N == 3, "Vector dimensions must match!");
 	}
-	Vec<T, N>(T v0, T v1, T v2, T v3) : myVec({ v0, v1, v2, v3 })
+	constexpr Vec<T, N>(T v0, T v1, T v2, T v3) : myVec({ v0, v1, v2, v3 })
 	{
-		assert(N == 4);
+		static_assert(N == 4, "Vector dimensions must match!");
 	}
-	Vec<T, N>(T v0, T v1, T v2, T v3, T v4) : myVec({ v0, v1, v2, v3, v4 })
+	constexpr Vec<T, N>(T v0, T v1, T v2, T v3, T v4) : myVec({ v0, v1, v2, v3, v4 })
 	{
-		assert(N == 5);
+		static_assert(N == 5, "Vector dimensions must match!");
 	}
 
 	Vec<T, N>(const Vec<T, N>&) = default;

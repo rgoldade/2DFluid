@@ -1,5 +1,8 @@
 add_library(2DFluidSimTools
 				ComputeWeights.cpp
+				GeometricMGOperations.cpp
+				GeometricMGPoissonSolver.cpp
+				GeometricPressureProjection.cpp
 				PressureProjection.cpp
 				ViscositySolver.cpp
 				Noise.cpp)

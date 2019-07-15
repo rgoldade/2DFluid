@@ -7,7 +7,7 @@
 #include "Common.h"
 #include "ExtrapolateField.h"
 #include "Integrator.h"
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "VectorGrid.h"
@@ -27,33 +27,36 @@
 class EulerianSmoke
 {
 public:
-	EulerianSmoke(const Transform& xform, Vec2ui size, Real ambienttemp = 300)
+	EulerianSmoke(const Transform& xform, Vec2i size, Real ambienttemp = 300)
 		: myXform(xform), myAmbientTemperature(ambienttemp)
 	{
-		myFluidVelocity = VectorGrid<Real>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
+		myVelocity = VectorGrid<Real>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
 		mySolidVelocity = VectorGrid<Real>(myXform, size, 0., VectorGridSettings::SampleType::STAGGERED);
 
-		mySolidSurface = LevelSet2D(myXform, size, 5);
+		mySolidSurface = LevelSet(myXform, size, 5);
 
 		mySmokeDensity = ScalarGrid<Real>(myXform, size, 0);
 		mySmokeTemperature = ScalarGrid<Real>(myXform, size, myAmbientTemperature);
+
+		myOldPressure = ScalarGrid<Real>(myXform, size, 0);
 	}
 
-	void setSolidSurface(const LevelSet2D& solidSurface);
+	void setSolidSurface(const LevelSet& solidSurface);
 	void setSolidVelocity(const VectorGrid<Real>& solidVelocity);
 
 	void setFluidVelocity(const VectorGrid<Real>& vel);
 
 	void setSmokeSource(const ScalarGrid<Real>& density, const ScalarGrid<Real>& temperature);
 
-	void advectFluidDensity(Real dt, const InterpolationOrder& order);
-	void advectFluidVelocity(Real dt, const InterpolationOrder& order);
+	void advectFluidMaterial(const Real dt, const InterpolationOrder order);
+	void advectFluidVelocity(const Real dt, const InterpolationOrder order);
+	void advectOldPressure(const Real dt, const InterpolationOrder order);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
-	void runTimestep(Real dt, Renderer& renderer);
+	void runTimestep(const Real dt, Renderer& renderer);
 
 	// Useful for CFL
-	Real maxVelocityMagnitude() { return myFluidVelocity.maxMagnitude(); }
+	Real maxVelocityMagnitude() { return myVelocity.maxMagnitude(); }
 
 	// Rendering tools
 	void drawGrid(Renderer& renderer) const;
@@ -66,13 +69,15 @@ public:
 private:
 
 	// Simulation containers
-	VectorGrid<Real> myFluidVelocity, mySolidVelocity;
-	LevelSet2D mySolidSurface;
+	VectorGrid<Real> myVelocity, mySolidVelocity;
+	LevelSet mySolidSurface;
 	ScalarGrid<Real> mySmokeDensity, mySmokeTemperature;
 
 	Real myAmbientTemperature;
 
 	Transform myXform;
+
+	ScalarGrid<Real> myOldPressure;
 };
 
 #endif

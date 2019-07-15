@@ -53,7 +53,7 @@ private:
 
 Renderer* GlutHelper::myRender;
 
-Renderer::Renderer(const char *title, Vec2ui windowSize, Vec2R screenOrigin,
+Renderer::Renderer(const char *title, Vec2i windowSize, Vec2R screenOrigin,
 						Real screenHeight, int *argc, char **argv)
 	: myWindowSize(windowSize)
 	, myCurrentScreenOrigin(screenOrigin)
@@ -62,6 +62,7 @@ Renderer::Renderer(const char *title, Vec2ui windowSize, Vec2R screenOrigin,
 	, myDefaultScreenHeight(screenHeight)
 	, myMouseAction(MouseAction::INACTIVE)
 {
+	assert(windowSize[0] >= 0 && windowSize[1] >= 0);
 	glutInit(argc, argv);
 
 	//TODO: review if these flags are needed
@@ -97,7 +98,6 @@ void Renderer::display()
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// TODO: taken directly from gluvi.. might be able to clean some of this up
 	glViewport(0, 0, GLsizei(myWindowSize[0]), GLsizei(myWindowSize[1]));
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
@@ -115,8 +115,7 @@ void Renderer::display()
 
 void Renderer::mouse(int button, int state, int x, int y)
 {
-	// If the user provided a custom mouse handler,
-	// then use that
+	// If the user provided a custom mouse handler, then use that
 	if (myUserMouseClickFunction) myUserMouseClickFunction(button, state, x, y);
 	else
 	{
@@ -164,7 +163,7 @@ void Renderer::mouse(int button, int state, int x, int y)
 			}
 		}
 
-		myMouseMoved = false; // not really used at the moment
+		myMouseMoved = false; // Not currently used
 		myMousePosition = Vec2i(x, y);
 	}
 }
@@ -248,14 +247,14 @@ void Renderer::addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R
 	myLineSizes.push_back(width);
 }
 
-void Renderer::addTris(const std::vector<Vec2R>& verts, const std::vector<Vec3ui>& faces, const std::vector<Vec3f>& colour)
+void Renderer::addTris(const std::vector<Vec2R>& verts, const std::vector<Vec3i>& faces, const std::vector<Vec3f>& colour)
 {
 	myTriVerts.push_back(verts);
 	myTriFaces.push_back(faces);
 	myTriColours.push_back(colour);
 }
 
-void Renderer::addQuads(const std::vector<Vec2R>& verts, const std::vector<Vec4ui>& faces, const std::vector<Vec3f>& colours)
+void Renderer::addQuads(const std::vector<Vec2R>& verts, const std::vector<Vec4i>& faces, const std::vector<Vec3f>& colours)
 {
 	myQuadVerts.push_back(verts);
 	myQuadFaces.push_back(faces);
@@ -287,18 +286,21 @@ void Renderer::drawPrimitives() const
 	// Render quads
 	glBegin(GL_QUADS);
 
-	unsigned quadListSize = myQuadFaces.size();
-	for (unsigned quadListIndex = 0; quadListIndex < quadListSize; ++quadListIndex)
+	int quadListSize = myQuadFaces.size();
+	for (int quadListIndex = 0; quadListIndex < quadListSize; ++quadListIndex)
 	{
-		unsigned quadSublistSize = myQuadFaces[quadListIndex].size();
-		for (unsigned quadIndex = 0; quadIndex < quadSublistSize; ++quadIndex)
+		int quadSublistSize = myQuadFaces[quadListIndex].size();
+		for (int quadIndex = 0; quadIndex < quadSublistSize; ++quadIndex)
 		{
 			Vec3f quadColour = myQuadColours[quadListIndex][quadIndex];
 			glColor3f(quadColour[0], quadColour[1], quadColour[2]);
 			
-			for (unsigned quadVertexIndex = 0; quadVertexIndex < 4; ++quadVertexIndex)
+			for (int quadVertexIndex = 0; quadVertexIndex < 4; ++quadVertexIndex)
 			{
-				unsigned meshVertexIndex = myQuadFaces[quadListIndex][quadIndex][quadVertexIndex];
+				int meshVertexIndex = myQuadFaces[quadListIndex][quadIndex][quadVertexIndex];
+				
+				assert(meshVertexIndex >= 0 && meshVertexIndex < myQuadVerts[quadListIndex].size());
+
 				Vec2R vertex = myQuadVerts[quadListIndex][meshVertexIndex];
 				glVertex2d(vertex[0], vertex[1]);
 			}
@@ -310,18 +312,21 @@ void Renderer::drawPrimitives() const
 	// Render tris
 	glBegin(GL_TRIANGLES);
 
-	unsigned triListSize = myTriFaces.size();
-	for (unsigned triListIndex = 0; triListIndex < triListSize; ++triListIndex)
+	int triListSize = myTriFaces.size();
+	for (int triListIndex = 0; triListIndex < triListSize; ++triListIndex)
 	{
-		unsigned triSublistSize = myTriFaces[triListIndex].size();
-		for (unsigned triIndex = 0; triIndex < triSublistSize; ++triIndex)
+		int triSublistSize = myTriFaces[triListIndex].size();
+		for (int triIndex = 0; triIndex < triSublistSize; ++triIndex)
 		{
 			Vec3f triColour = myTriColours[triListIndex][triIndex];
 			glColor3f(triColour[0], triColour[1], triColour[2]);
 
-			for (unsigned triVertexIndex = 0; triVertexIndex < 3; ++triVertexIndex)
+			for (int triVertexIndex = 0; triVertexIndex < 3; ++triVertexIndex)
 			{
-				unsigned meshVertexIndex = myTriFaces[triListIndex][triIndex][triVertexIndex];
+				int meshVertexIndex = myTriFaces[triListIndex][triIndex][triVertexIndex];
+
+				assert(meshVertexIndex >= 0 && meshVertexIndex < myTriVerts[triListIndex].size());
+
 				Vec2R vertex = myTriVerts[triListIndex][meshVertexIndex];
 				glVertex2d(vertex[0], vertex[1]);
 			}
@@ -330,8 +335,8 @@ void Renderer::drawPrimitives() const
 
 	glEnd();
 
-	unsigned lineListSize = myStartLines.size();
-	for (unsigned lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
+	int lineListSize = myStartLines.size();
+	for (int lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
 	{
 		Vec3f lineColour = myLineColours[lineListIndex];
 		
@@ -340,8 +345,8 @@ void Renderer::drawPrimitives() const
 		
 		glBegin(GL_LINES);
 
-		unsigned lineSublistSize = myStartLines[lineListIndex].size();
-		for (unsigned lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
+		int lineSublistSize = myStartLines[lineListIndex].size();
+		for (int lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
 		{
 			Vec2R startPoint = myStartLines[lineListIndex][lineIndex];
 			Vec2R endPoint = myEndLines[lineListIndex][lineIndex];
@@ -353,8 +358,8 @@ void Renderer::drawPrimitives() const
 		glEnd();
 	}
 		
-	unsigned pointListSize = myPoints.size();
-	for (unsigned pointListIndex = 0; pointListIndex < pointListSize; ++pointListIndex)
+	int pointListSize = myPoints.size();
+	for (int pointListIndex = 0; pointListIndex < pointListSize; ++pointListIndex)
 	{
 		Vec3f pointColour = myPointColours[pointListIndex];
 		glColor3f(pointColour[0], pointColour[1], pointColour[2]);
@@ -362,8 +367,8 @@ void Renderer::drawPrimitives() const
 		
 		glBegin(GL_POINTS);
 
-		unsigned pointSublistSize = myPoints[pointListIndex].size();
-		for (unsigned pointIndex = 0; pointIndex < pointSublistSize; ++pointIndex)
+		int pointSublistSize = myPoints[pointListIndex].size();
+		for (int pointIndex = 0; pointIndex < pointSublistSize; ++pointIndex)
 		{
 			Vec2R point = myPoints[pointListIndex][pointIndex];
 			glVertex2d(point[0], point[1]);
@@ -394,20 +399,23 @@ void Renderer::printImage(const std::string &filename) const
 			scale, originOffset));
 	
 	// Draw rectangles
-	unsigned quadListSize = myQuadFaces.size();
-	for (unsigned quadListIndex = 0; quadListIndex < quadListSize; ++quadListIndex)
+	int quadListSize = myQuadFaces.size();
+	for (int quadListIndex = 0; quadListIndex < quadListSize; ++quadListIndex)
 	{
-		unsigned quadSublistSize = myQuadFaces[quadListIndex].size();
-		for (unsigned quadIndex = 0; quadIndex < quadSublistSize; ++quadIndex)
+		int quadSublistSize = myQuadFaces[quadListIndex].size();
+		for (int quadIndex = 0; quadIndex < quadSublistSize; ++quadIndex)
 		{
 			Vec3f quadColour = 255 * myQuadColours[quadListIndex][quadIndex];
 
 			Vec2R min(std::numeric_limits<Real>::max());
 			Vec2R max(std::numeric_limits<Real>::lowest());
 
-			for (unsigned quadVertexIndex = 0; quadVertexIndex < 4; ++quadVertexIndex)
+			for (int quadVertexIndex = 0; quadVertexIndex < 4; ++quadVertexIndex)
 			{
-				unsigned meshVertexIndex = myQuadFaces[quadListIndex][quadIndex][quadVertexIndex];
+				int meshVertexIndex = myQuadFaces[quadListIndex][quadIndex][quadVertexIndex];
+
+				assert(meshVertexIndex >= 0 && meshVertexIndex < myQuadVerts[quadListIndex].size());
+
 				Vec2R vertex = myQuadVerts[quadListIndex][meshVertexIndex];
 
 				updateMinAndMax(min, max, vertex);
@@ -420,18 +428,21 @@ void Renderer::printImage(const std::string &filename) const
 	}
 
 	// Draw triangles
-	unsigned triListSize = myTriFaces.size();
-	for (unsigned triListIndex = 0; triListIndex < triListSize; ++triListIndex)
+	int triListSize = myTriFaces.size();
+	for (int triListIndex = 0; triListIndex < triListSize; ++triListIndex)
 	{
-		unsigned triSublistSize = myTriFaces[triListIndex].size();
-		for (unsigned triIndex = 0; triIndex < triSublistSize; ++triIndex)
+		int triSublistSize = myTriFaces[triListIndex].size();
+		for (int triIndex = 0; triIndex < triSublistSize; ++triIndex)
 		{
 			Vec3f triColour = 255 * myTriColours[triListIndex][triIndex];
 			Vec2R points[3];
 
-			for (unsigned triVertexIndex = 0; triVertexIndex < 3; ++triVertexIndex)
+			for (int triVertexIndex = 0; triVertexIndex < 3; ++triVertexIndex)
 			{
-				unsigned meshVertexIndex = myTriFaces[triListIndex][triIndex][triVertexIndex];
+				int meshVertexIndex = myTriFaces[triListIndex][triIndex][triVertexIndex];
+
+				assert(meshVertexIndex >= 0 && meshVertexIndex < myTriVerts[triListIndex].size());
+
 				points[triVertexIndex] = myTriVerts[triListIndex][meshVertexIndex];
 			}
 
@@ -443,13 +454,13 @@ void Renderer::printImage(const std::string &filename) const
 	}
 
 	// Draw line segments
-	unsigned lineListSize = myStartLines.size();
-	for (unsigned lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
+	int lineListSize = myStartLines.size();
+	for (int lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
 	{
 		Vec3f lineColour = 255 * myLineColours[lineListIndex];
 
-		unsigned lineSublistSize = myStartLines[lineListIndex].size();
-		for (unsigned lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
+		int lineSublistSize = myStartLines[lineListIndex].size();
+		for (int lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
 		{
 			Vec2R startPoint = myStartLines[lineListIndex][lineIndex];
 			Vec2R endPoint = myEndLines[lineListIndex][lineIndex];
@@ -460,14 +471,14 @@ void Renderer::printImage(const std::string &filename) const
 		}
 	}
 
-	unsigned pointListSize = myPoints.size();
-	for (unsigned pointListIndex = 0; pointListIndex < pointListSize; ++pointListIndex)
+	int pointListSize = myPoints.size();
+	for (int pointListIndex = 0; pointListIndex < pointListSize; ++pointListIndex)
 	{
 		Vec3f pointColour = 255 * myPointColours[pointListIndex];
 		Real pointSize = myPointSize[pointListIndex] / scale;
 
-		unsigned pointSublistSize = myPoints[pointListIndex].size();
-		for (unsigned pointIndex = 0; pointIndex < pointSublistSize; ++pointIndex)
+		int pointSublistSize = myPoints[pointListIndex].size();
+		for (int pointIndex = 0; pointIndex < pointSublistSize; ++pointIndex)
 		{
 			Vec2R point = myPoints[pointListIndex][pointIndex];
 

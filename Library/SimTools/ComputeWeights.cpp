@@ -1,22 +1,22 @@
 #include "ComputeWeights.h"
 
-VectorGrid<Real> computeGhostFluidWeights(const LevelSet2D& surface)
+VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface)
 {
 	VectorGrid<Real> ghostFluidWeights(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 	
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2ui(0), ghostFluidWeights.size(axis), [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), ghostFluidWeights.size(axis), [&](const Vec2i& face)
 		{
-			Vec2i backwardCell = faceToCell(Vec2i(face), axis, 0);
-			Vec2i forwardCell = faceToCell(Vec2i(face), axis, 1);
+			Vec2i backwardCell = faceToCell(face, axis, 0);
+			Vec2i forwardCell = faceToCell(face, axis, 1);
 
 			if (backwardCell[axis] < 0 || forwardCell[axis] >= surface.size()[axis])
 				ghostFluidWeights.grid(axis)(face) = 0.;
 			else
 			{
-				Real phiBackward = surface(Vec2ui(backwardCell));
-				Real phiForward = surface(Vec2ui(forwardCell));
+				Real phiBackward = surface(backwardCell);
+				Real phiForward = surface(forwardCell);
 				
 				if (phiBackward < 0 && phiForward < 0)
 					ghostFluidWeights(face, axis) = 1;
@@ -30,15 +30,15 @@ VectorGrid<Real> computeGhostFluidWeights(const LevelSet2D& surface)
 	return ghostFluidWeights;
 }
 
-VectorGrid<Real> computeCutCellWeights(const LevelSet2D& surface, bool invert, Real minWeight)
+VectorGrid<Real> computeCutCellWeights(const LevelSet& surface, bool invert)
 {
 	VectorGrid<Real> cutCellWeights(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 
 	for (unsigned axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2ui(0), cutCellWeights.size(axis), [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), cutCellWeights.size(axis), [&](const Vec2i& face)
 		{
-			unsigned otherAxis = (axis + 1) % 2;
+			int otherAxis = (axis + 1) % 2;
 
 			Vec2R offset(0); offset[otherAxis] = .5;
 
@@ -52,10 +52,6 @@ VectorGrid<Real> computeCutCellWeights(const LevelSet2D& surface, bool invert, R
 			// Clamp below zero and above one.
 			weight = Util::clamp(weight, 0., 1.);
 
-			// Now clamp any non-zero weight below the minimum weight to the minimum weight
-			if (weight > 0 && weight < minWeight)
-				weight = minWeight;
-
 			cutCellWeights(face, axis) = weight;
 		});
 	}
@@ -67,17 +63,17 @@ VectorGrid<Real> computeCutCellWeights(const LevelSet2D& surface, bool invert, R
 // we're computing weights for centers, faces, nodes, etc. that each
 // have their internal index space cell offsets. We can't make any
 // easy general assumptions about indices between grids anymore.
-ScalarGrid<Real> computeSupersampledAreas(const LevelSet2D& surface, ScalarGridSettings::SampleType sampleType, unsigned samples)
+ScalarGrid<Real> computeSuperSampledAreas(const LevelSet& surface, ScalarGridSettings::SampleType sampleType, int samples)
 {
-	ScalarGrid<Real> volumes(surface.xform(), surface.size(), 0, sampleType);
+	ScalarGrid<Real> areas(surface.xform(), surface.size(), 0, sampleType);
 
 	Real dx = 1. / Real(samples);
 	Real sampleArea = Util::sqr(dx);
 
 	// Loop over each cell in the grid
-	forEachVoxelRange(Vec2ui(0), volumes.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), areas.size(), [&](const Vec2i& cell)
 	{
-		if (surface.interp(volumes.indexToWorld(Vec2R(cell))) > 2. * surface.dx())
+		if (surface.interp(areas.indexToWorld(Vec2R(cell))) > 2. * surface.dx())
 			return;
 
 		// Loop over super samples internally. i -.5 is the index space boundary of the sample. The 
@@ -91,31 +87,29 @@ ScalarGrid<Real> computeSupersampledAreas(const LevelSet2D& surface, ScalarGridS
 		for (sample[0] = start[0]; sample[0] < end[0]; sample[0] += dx)
 			for (sample[1] = start[1]; sample[1] < end[1]; sample[1] += dx)
 			{
-				Vec2R worldPosition = volumes.indexToWorld(sample);
+				Vec2R worldPosition = areas.indexToWorld(sample);
 				if (surface.interp(worldPosition) <= 0.) ++sampleCount;
 			}
 
-		volumes(cell) = Real(sampleCount * sampleArea);
+		areas(cell) = Real(sampleCount * sampleArea);
 	});
 
-	return volumes;
+	return areas;
 }
 
-VectorGrid<Real> computeSupersampledFaceAreas(const LevelSet2D& surface, unsigned samples)
+VectorGrid<Real> computeSuperSampledFaceAreas(const LevelSet& surface, int samples)
 {
-	VectorGrid<Real> volumes(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+	VectorGrid<Real> areas(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 
 	Real dx = 1. / Real(samples);
 	Real sampleArea = Util::sqr(dx);
 
 	for (auto axis : { 0,1 })
 	{
-		Vec2ui size = volumes.size(axis);
-
 		// Loop over each cell in the grid
-		forEachVoxelRange(Vec2ui(0), size, [&](const Vec2ui& face)
+		forEachVoxelRange(Vec2i(0), areas.size(axis), [&](const Vec2i& face)
 		{
-			if (surface.interp(volumes.indexToWorld(Vec2R(face), axis)) > 2. * surface.dx())
+			if (surface.interp(areas.indexToWorld(Vec2R(face), axis)) > 2. * surface.dx())
 				return;
 
 			// Loop over super samples internally. i -.5 is the index space boundary of the sample. The 
@@ -129,13 +123,13 @@ VectorGrid<Real> computeSupersampledFaceAreas(const LevelSet2D& surface, unsigne
 			for (sample[0] = start[0]; sample[0] < end[0]; sample[0] += dx)
 				for (sample[1] = start[1]; sample[1] < end[1]; sample[1] += dx)
 				{
-					Vec2R worldPosition = volumes.indexToWorld(sample, axis);
+					Vec2R worldPosition = areas.indexToWorld(sample, axis);
 					if (surface.interp(worldPosition) <= 0.) ++sampleCount;
 				}
 
-			volumes(face, axis) = Real(sampleCount * sampleArea);
+			areas(face, axis) = Real(sampleCount * sampleArea);
 		});
 	}
 
-	return volumes;
+	return areas;
 }

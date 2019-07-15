@@ -7,7 +7,7 @@
 #include "Common.h"
 #include "ExtrapolateField.h"
 #include "Integrator.h"
-#include "LevelSet2D.h"
+#include "LevelSet.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "VectorGrid.h"
@@ -27,7 +27,7 @@
 class EulerianLiquid
 {
 public:
-	EulerianLiquid(const Transform& xform, Vec2ui size, Real cfl = 5.)
+	EulerianLiquid(const Transform& xform, Vec2i size, Real cfl = 5.)
 		: myXform(xform)
 		, myDoSolveViscosity(false)
 		, myCFL(cfl)
@@ -35,18 +35,20 @@ public:
 		myLiquidVelocity = VectorGrid<Real>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
 		mySolidVelocity = VectorGrid<Real>(myXform, size, 0., VectorGridSettings::SampleType::STAGGERED);
 
-		myLiquidSurface = LevelSet2D(myXform, size, myCFL);
-		mySolidSurface = LevelSet2D(myXform, size, myCFL);
+		myLiquidSurface = LevelSet(myXform, size, myCFL);
+		mySolidSurface = LevelSet(myXform, size, myCFL);
+
+		myOldPressure = ScalarGrid<Real>(myXform, size, 0);
 	}
 
-	void setSolidSurface(const LevelSet2D& solidSurface);
+	void setSolidSurface(const LevelSet& solidSurface);
 	void setSolidVelocity(const VectorGrid<Real>& solidVelocity);
-	void setLiquidSurface(const LevelSet2D& liquidSurface);
+	void setLiquidSurface(const LevelSet& liquidSurface);
 	void setLiquidVelocity(const VectorGrid<Real>& liquidVelocity);
 
 	void setViscosity(const ScalarGrid<Real>& viscosityGrid)
 	{
-		assert(myLiquidSurface.isMatched(viscosityGrid));
+		assert(myLiquidSurface.isGridMatched(viscosityGrid));
 		myViscosity = viscosityGrid;
 		myDoSolveViscosity = true;
 	}
@@ -57,13 +59,14 @@ public:
 		myDoSolveViscosity = true;
 	}
 
-	void unionLiquidSurface(const LevelSet2D& addedLiquidSurface);
+	void unionLiquidSurface(const LevelSet& addedLiquidSurface);
 
 	template<typename ForceSampler>
 	void addForce(Real dt, const ForceSampler& force);
 	
 	void addForce(Real dt, const Vec2R& force);
 
+	void advectOldPressure(const Real dt, const InterpolationOrder order);
 	void advectLiquidSurface(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
 	void advectViscosity(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
 	void advectLiquidVelocity(Real dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
@@ -87,13 +90,15 @@ private:
 
 	// Simulation containers
 	VectorGrid<Real> myLiquidVelocity, mySolidVelocity;
-	LevelSet2D myLiquidSurface, mySolidSurface;
+	LevelSet myLiquidSurface, mySolidSurface;
 	ScalarGrid<Real> myViscosity;
 
 	Transform myXform;
 
 	bool myDoSolveViscosity;
 	Real mySurfaceTensionScale, myCFL;
+
+	ScalarGrid<Real> myOldPressure;
 };
 
 #endif

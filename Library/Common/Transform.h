@@ -24,12 +24,12 @@ public:
 		, myOffset(offset)
 		{}
 
-	Vec2R indexToWorld(Vec2R indexPoint) const
+	Vec2R indexToWorld(const Vec2R& indexPoint) const
 	{
 		return indexPoint * myDx + myOffset;
 	}
 
-	Vec2R worldToIndex(Vec2R worldPoint) const
+	Vec2R worldToIndex(const Vec2R& worldPoint) const
 	{
 		return (worldPoint - myOffset) / myDx;
 	}
@@ -37,14 +37,14 @@ public:
 	Real dx() const { return myDx; }
 	Vec2R offset() const { return myOffset; }
 
-	bool operator==(const Transform &rhs) const
+	bool operator==(const Transform& rhs) const
 	{
 		if (myDx != rhs.myDx) return false;
 		if (myOffset != rhs.myOffset) return false;
 		return true;
 	}
 
-	bool operator!=(const Transform &rhs) const
+	bool operator!=(const Transform& rhs) const
 	{
 		if (myDx == rhs.myDx) return false;
 		if (myOffset == rhs.myOffset) return false;

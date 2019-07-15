@@ -1,7 +1,6 @@
 #ifndef LIBRARY_EXTRAPOLATEFIELD_H
 #define LIBRARY_EXTRAPOLATEFIELD_H
 
-
 #include <queue>
 
 #include "Common.h"
@@ -32,45 +31,44 @@ public:
 		: myField(field)
 		{}
 
-	void extrapolate(const ScalarGrid<MarkedCells>& mask, unsigned bandwidth = std::numeric_limits<unsigned>::max());
+	void extrapolate(const ScalarGrid<MarkedCells>& mask, int bandwidth = std::numeric_limits<int>::max());
 
 private:
 	Field& myField;
 };
 
-//template<>
-//void ExtrapolateField<VectorGrid<Real>>::extrapolate(const VectorGrid<MarkedCells>& mask, unsigned bandwidth);
-
 template<typename Field>
-void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, unsigned bandwidth)
+void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, int bandwidth)
 {
+	assert(bandwidth >= 0);
+
 	// Run a BFS flood outwards from masked cells and average the values of the neighbouring "finished" cells
 	// It could be made more accurate if we used the value of the "closer" cell (smaller SDF value)
 	// It could be made more efficient if we truncated the BFS after a large enough distance (max SDF value)
-	assert(myField.isMatched(mask));
+	assert(myField.isGridMatched(mask));
 
 	// Make local copy of mask
 	UniformGrid<MarkedCells> markedCells(myField.size(), MarkedCells::UNVISITED);
 
-	forEachVoxelRange(Vec2ui(0), myField.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myField.size(), [&](const Vec2i& cell)
 	{
 		if (mask(cell) == MarkedCells::FINISHED) markedCells(cell) = MarkedCells::FINISHED;
 	});
 
-	using Voxel = std::pair<Vec2ui, unsigned>;
+	using Voxel = std::pair<Vec2i, int>;
 
 	// Initialize flood fill queue
 	std::queue<Voxel> markerQ;
 
 	// Load up neighbouring faces and push into queue
-	forEachVoxelRange(Vec2ui(0), myField.size(), [&](const Vec2ui& cell)
+	forEachVoxelRange(Vec2i(0), myField.size(), [&](const Vec2i& cell)
 	{
 		if (markedCells(cell) == MarkedCells::FINISHED)
 		{
-			for (unsigned axis : {0, 1})
-				for (unsigned direction : {0, 1})
+			for (int axis : {0, 1})
+				for (int direction : {0, 1})
 				{
-					Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+					Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 					// Boundary check
 					if (direction == 0 && adjacentCell[axis] < 0)
@@ -78,10 +76,10 @@ void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, u
 					else if (direction == 1 && adjacentCell[axis] >= markedCells.size()[axis])
 						continue;
 
-					if (markedCells(Vec2ui(adjacentCell)) == MarkedCells::UNVISITED)
+					if (markedCells(adjacentCell) == MarkedCells::UNVISITED)
 					{
-						markerQ.push(Voxel(Vec2ui(adjacentCell), 1));
-						markedCells(Vec2ui(adjacentCell)) = MarkedCells::VISITED;
+						markerQ.push(Voxel(adjacentCell, 1));
+						markedCells(adjacentCell) = MarkedCells::VISITED;
 					}
 				}
 		}
@@ -98,7 +96,7 @@ void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, u
 		while (!markerQ.empty())
 		{
 			Voxel voxel = markerQ.front();
-			Vec2ui cell = voxel.first;
+			Vec2i cell = voxel.first;
 			markerQ.pop();
 
 			assert(markedCells(cell) == MarkedCells::VISITED);
@@ -108,10 +106,10 @@ void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, u
 
 			if (voxel.second < bandwidth)
 			{
-				for (unsigned axis : {0, 1})
-					for (unsigned direction : {0, 1})
+				for (int axis : {0, 1})
+					for (int direction : {0, 1})
 					{
-						Vec2i adjacentCell = cellToCell(Vec2i(cell), axis, direction);
+						Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 						// Boundary check
 						if (direction == 0 && adjacentCell[axis] < 0)
@@ -119,15 +117,15 @@ void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, u
 						else if (direction == 1 && adjacentCell[axis] >= markedCells.size()[axis])
 							continue;
 
-						if (markedCells(Vec2ui(adjacentCell)) == MarkedCells::FINISHED)
+						if (markedCells(adjacentCell) == MarkedCells::FINISHED)
 						{
-							value += myField(Vec2ui(adjacentCell));
+							value += myField(adjacentCell);
 							++count;
 						}
-						else if (markedCells(Vec2ui(adjacentCell)) == MarkedCells::UNVISITED)
+						else if (markedCells(adjacentCell) == MarkedCells::UNVISITED)
 						{
-							newLayer.push(Voxel(Vec2ui(adjacentCell), voxel.second + 1));
-							markedCells(Vec2ui(adjacentCell)) = MarkedCells::VISITED;
+							newLayer.push(Voxel(adjacentCell, voxel.second + 1));
+							markedCells(adjacentCell) = MarkedCells::VISITED;
 						}
 					}
 
@@ -140,10 +138,10 @@ void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, u
 		while (!tempQ.empty())
 		{
 			Voxel voxel = tempQ.front();
-			Vec2ui idx = voxel.first;
+			Vec2i localCell = voxel.first;
 			tempQ.pop();
-			assert(markedCells(idx) == MarkedCells::VISITED);
-			markedCells(idx) = MarkedCells::FINISHED;
+			assert(markedCells(localCell) == MarkedCells::VISITED);
+			markedCells(localCell) = MarkedCells::FINISHED;
 		}
 
 		//Copy new queue
