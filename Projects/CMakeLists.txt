@@ -1,3 +1,2 @@
-add_subdirectory(2DConstraintBubbles)
 add_subdirectory(Simulations)
 add_subdirectory(Tests)

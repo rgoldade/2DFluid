@@ -20,7 +20,7 @@ void solveGeometricCGPoisson(UniformGrid<Real> &solutionGrid,
 								MatrixVectorMultiplyFunctor &matrixVectorMultiplyFunctor,
 								PreconditionerFunctor &preconditionerFunctor,
 								DotProductFunctor &dotProductFunctor,
-								L2NormFunctor &L2NormFunctor,
+								L2NormFunctor &l2NormFunctor,
 								AddScaledVectorFunctor &addScaledVectorFunctor,
 								const Real threshold,
 								bool doCheckEnergy = false,
@@ -28,7 +28,7 @@ void solveGeometricCGPoisson(UniformGrid<Real> &solutionGrid,
 								bool printResidual = true)
 {
 	// Compute norm
-	Real rhsNorm = L2NormFunctor(rhsGrid);
+	Real rhsNorm = l2NormFunctor(rhsGrid);
 	if (rhsNorm == 0) return;
 
 	Vec2i size = solutionGrid.size();
@@ -40,7 +40,7 @@ void solveGeometricCGPoisson(UniformGrid<Real> &solutionGrid,
 
 	addScaledVectorFunctor(residualGrid, rhsGrid, residualGrid, -1);
 
-	Real l2Error = L2NormFunctor(residualGrid);
+	Real l2Error = l2NormFunctor(residualGrid);
 	
 	if (useRelativeError)
 	{
@@ -75,7 +75,7 @@ void solveGeometricCGPoisson(UniformGrid<Real> &solutionGrid,
 		addScaledVectorFunctor(residualGrid, residualGrid, zGrid, -alpha);
 
 		// Compuate norm
-		l2Error = L2NormFunctor(residualGrid);
+		l2Error = l2NormFunctor(residualGrid);
 
 		// Check convergence
 		if (useRelativeError)
@@ -112,7 +112,6 @@ void solveGeometricCGPoisson(UniformGrid<Real> &solutionGrid,
 				<< ". L-2 norm: " << l2Error
 				<< ". Relative L-2: " << l2Error / rhsNorm << std::endl;
 
-			assert(energy < oldEnergy);
 			if (energy >= oldEnergy)
 				std::cout << "!!! ENERGY NOT MINIMIZED !!!" << std::endl;
 
