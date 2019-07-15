@@ -5,8 +5,8 @@
 #include <limits>
 
 #ifdef _MSC_VER
-//#undef min
-//#undef max
+	#undef min
+	#undef max
 	#define NOMINMAX
 #endif
 
