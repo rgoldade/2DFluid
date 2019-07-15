@@ -96,7 +96,6 @@ private:
 
 	const ScalarGrid<Real> *myInitialGuess;
 	bool myUseInitialGuess;
-
 	const VectorGrid<Real> myGhostFluidWeights, myCutCellWeights;
 };
 

@@ -98,6 +98,7 @@ inline Vec2i cellToNodeCCW(const Vec2i& cell, int nodeIndex)
 {
 	Vec2i node(cell);
 	assert(nodeIndex >= 0 && nodeIndex < 4);
+
 	switch (nodeIndex)
 	{
 	case 1:
@@ -146,6 +147,7 @@ inline Vec2i nodeToFace(const Vec2i& node, int faceAxis, int direction)
 inline Vec2i nodeToCellCCW(const Vec2i& node, int cellIndex)
 {
 	Vec2i cell(node);
+
 	assert(cellIndex >= 0 && cellIndex < 4);
 	if (cellIndex == 2 || cellIndex == 3)
 		--cell[0];

@@ -34,8 +34,8 @@ void display()
 		CurlNoise2D velocityField;
 
 		EdgeMesh surfaceMesh = surface->buildDCMesh();
+
 		surfaceMesh.advect(dt, velocityField, IntegrationOrder::FORWARDEULER);
-		
 		surface->initFromMesh(surfaceMesh, false);
 
 		surfaceMesh.drawMesh(*renderer, Vec3f(0, 0, 1), true);

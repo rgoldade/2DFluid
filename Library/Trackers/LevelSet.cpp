@@ -417,9 +417,7 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool resizeGrid)
 		myPhiGrid = ScalarGrid<Real>(xform, Vec2i((maxBoundingBox - minBoundingBox) / dx()), myNarrowBand);
 	}
 	else
-	{
-		myPhiGrid.resize(size(), myNarrowBand);
-	}
+		myPhiGrid.reset(myNarrowBand);
 
 	// We want to track which cells in the level set contain valid distance information.
 	// The first pass will set cells close to the mesh as FINISHED.
@@ -506,7 +504,6 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool resizeGrid)
 		int parity = myIsBackgroundNegative ? 1 : 0;
 
 		// We loop x-major because that's how we've set up our edge intersection.
-		// This is definitely cache incoherent based on the UniformGrid structure.
 		for (int i = 0; i < size()[0]; ++i) // TODO: double check that I've resized right
 		{
 			// Update parity before changing sign since the parity values above used the convention
@@ -523,8 +520,8 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool resizeGrid)
 
 	// With the parity assigned, loop over the grid once more and label nodes that have an implied sign change
 	// with neighbouring nodes (this means parity goes from -'ve (and zero) to +'ve or vice versa).
-	for (int i = 1; i < size()[0] - 1; ++i)
-		for (int j = 1; j < size()[1] - 1; ++j)
+	for (int i = 1; i < (size()[0] - 1); ++i)
+		for (int j = 1; j < (size()[1] - 1); ++j)
 		{
 			const Vec2i cell(i, j);
 
@@ -735,7 +732,6 @@ EdgeMesh LevelSet::buildMSMesh() const
 		for (int direction = 0; direction < 4; ++direction)
 		{
 			Vec2i node = cellToNodeCCW(cell, direction);
-
 			if (myPhiGrid(node) <= 0.) mcKey += (1 << direction);
 		}
 

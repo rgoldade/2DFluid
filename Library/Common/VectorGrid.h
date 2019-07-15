@@ -134,7 +134,6 @@ public:
 	// World space vs. index space converters need to be done at the 
 	// underlying scalar grid level because the alignment of the two 
 	// grids are different depending on the SampleType.
-
 	Vec2R indexToWorld(const Vec2R& indexPoint, int axis) const
 	{
 		assert(axis >= 0 && axis < 2);

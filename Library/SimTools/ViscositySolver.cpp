@@ -98,6 +98,7 @@ void ViscositySolver(const Real dt,
 	for (int axis : {0, 1})
 	{
 		Vec2i faceGridSize = velocity.size(axis);
+
 		forEachVoxelRange(Vec2i(0), faceGridSize, [&](const Vec2i& face)
 		{
 			int index = liquidFaces(face, axis);
@@ -118,7 +119,6 @@ void ViscositySolver(const Real dt,
 					Vec2i cell = faceToCell(face, axis, cellDirection);
 
 					Real coeff = 2. * centerAreas(cell);
-
 					Real centerSign = (cellDirection == 0) ? -1. : 1.;
 
 					for (int faceDirection : {0, 1})
@@ -145,7 +145,6 @@ void ViscositySolver(const Real dt,
 					Vec2i node = faceToNode(face, axis, nodeDirection);
 
 					Real nodeSign = (nodeDirection == 0) ? -1. : 1.;
-
 					Real coeff = nodeAreas(node);
 
 					for (int gradientAxis : {0, 1})
