@@ -128,16 +128,16 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 							Real faceSign = (faceDirection == 0) ? -1. : 1.;
 
 							// Check for out of bounds
-							if (faceDirection == 0 && adjacentFace[gradientAxis] < 0 ||
-								faceDirection == 1 && adjacentFace[gradientAxis] >= size[gradientAxis])
+							if ((faceDirection == 0 && adjacentFace[gradientAxis] < 0) ||
+								(faceDirection == 1 && adjacentFace[gradientAxis] >= size[gradientAxis]))
 							{
 								Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(adjacentFace), faceAxis);
 								solver.addToRhs(velocityIndex, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
 							}
 							// Check for on the bounds
-							else if (nodeDirection == 0 && adjacentFace[faceAxis] == 0 ||
-										nodeDirection == 1 &&
-										adjacentFace[faceAxis] == myVelocityIndex.size(faceAxis)[faceAxis] - 1)
+							else if ((nodeDirection == 0 && adjacentFace[faceAxis] == 0) ||
+										(nodeDirection == 1 &&
+										adjacentFace[faceAxis] == myVelocityIndex.size(faceAxis)[faceAxis] - 1))
 							{
 								Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(adjacentFace), faceAxis);
 								solver.addToRhs(velocityIndex, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));

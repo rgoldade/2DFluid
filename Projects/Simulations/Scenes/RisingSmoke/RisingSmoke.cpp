@@ -103,7 +103,7 @@ void setSmokeSource(const LevelSet &sourceVolume,
 	forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& cell)
 	{
 		// Super sample to determine 
-		if (fabs(sourceVolume.interp(sourceVolume.indexToWorld(Vec2R(cell))) < dx * 2.))
+		if (sourceVolume.interp(sourceVolume.indexToWorld(Vec2R(cell))) < dx * 2.)
 		{
 			// Loop over super samples internally. i -.5 is the index space boundary of the sample. The 
 			// first sample point is the .5 * sample_dx closer to (i,j).

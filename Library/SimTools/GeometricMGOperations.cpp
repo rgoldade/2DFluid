@@ -929,62 +929,73 @@ bool GeometricMGOperations::unitTestCoarsening(const UniformGrid<CellLabels> &co
 		fineCellLabels.size()[1] % 2 != 0)
 		return false;
 
-	forEachVoxelRange(Vec2i(0), fineCellLabels.size(), [&](const Vec2i &fineCell)
 	{
-		Vec2i coarseCell = fineCell / 2;
-
-		// If the fine cell is Dirichlet, it's coarse cell equivalent has to also be Dirichlet
-		if (fineCellLabels(fineCell) == CellLabels::DIRICHLET)
+		bool testPassed = true;
+		forEachVoxelRange(Vec2i(0), fineCellLabels.size(), [&](const Vec2i &fineCell)
 		{
-			if (coarseCellLabels(coarseCell) != CellLabels::DIRICHLET)
-				return false;
-		}
-		else if (fineCellLabels(fineCell) == CellLabels::INTERIOR)
-		{
-			// If the fine cell is interior, the coarse cell can be either
-			// interior or Dirichlet (if a sibling cell is Dirichlet).
-			if (coarseCellLabels(coarseCell) == CellLabels::EXTERIOR)
-				return false;
-		}
-	});
+			Vec2i coarseCell = fineCell / 2;
+			if (!testPassed) return;
+			// If the fine cell is Dirichlet, it's coarse cell equivalent has to also be Dirichlet
+			if (fineCellLabels(fineCell) == CellLabels::DIRICHLET)
+			{
+				if (coarseCellLabels(coarseCell) != CellLabels::DIRICHLET)
+					testPassed = false;
+			}
+			else if (fineCellLabels(fineCell) == CellLabels::INTERIOR)
+			{
+				// If the fine cell is interior, the coarse cell can be either
+				// interior or Dirichlet (if a sibling cell is Dirichlet).
+				if (coarseCellLabels(coarseCell) == CellLabels::EXTERIOR)
+					testPassed = false;
+			}
+		});
 
-	forEachVoxelRange(Vec2i(0), coarseCellLabels.size(), [&](const Vec2i &coarseCell)
+		if(!testPassed) return false;
+	}
 	{
-		bool foundDirichletChild = false;
-		bool foundInteriorChild = false;
-		bool foundExteriorChild = false;
-		for (int childIndex = 0; childIndex < 4; ++childIndex)
+		bool testPassed = true;
+		forEachVoxelRange(Vec2i(0), coarseCellLabels.size(), [&](const Vec2i &coarseCell)
 		{
-			Vec2i fineCell = getChildCell(coarseCell, childIndex);
+			if (!testPassed) return;
 
-			auto fineLabel = fineCellLabels(fineCell);
+			bool foundDirichletChild = false;
+			bool foundInteriorChild = false;
+			bool foundExteriorChild = false;
+			for (int childIndex = 0; childIndex < 4; ++childIndex)
+			{
+				Vec2i fineCell = getChildCell(coarseCell, childIndex);
 
-			if (fineLabel == CellLabels::DIRICHLET)
-				foundDirichletChild = true;
-			else if (fineLabel == CellLabels::INTERIOR)
-				foundInteriorChild = true;
-			else if (fineLabel == CellLabels::EXTERIOR)
-				foundExteriorChild = true;
-		}
+				auto fineLabel = fineCellLabels(fineCell);
 
-		auto coarseLabel = coarseCellLabels(coarseCell);
-		if (coarseLabel == CellLabels::DIRICHLET)
-		{
-			if (!foundDirichletChild)
-				return false;
-		}
-		else if (coarseLabel == CellLabels::INTERIOR)
-		{
-			if (foundDirichletChild || !foundInteriorChild)
-				return false;
-		}
-		else if (coarseLabel == CellLabels::EXTERIOR)
-		{
-			if (foundDirichletChild || foundInteriorChild ||
-				!foundExteriorChild)
-				return false;
-		}
-	});
+				if (fineLabel == CellLabels::DIRICHLET)
+					foundDirichletChild = true;
+				else if (fineLabel == CellLabels::INTERIOR)
+					foundInteriorChild = true;
+				else if (fineLabel == CellLabels::EXTERIOR)
+					foundExteriorChild = true;
+			}
+
+			auto coarseLabel = coarseCellLabels(coarseCell);
+			if (coarseLabel == CellLabels::DIRICHLET)
+			{
+				if (!foundDirichletChild)
+					testPassed = false;
+			}
+			else if (coarseLabel == CellLabels::INTERIOR)
+			{
+				if (foundDirichletChild || !foundInteriorChild)
+					testPassed = false;
+			}
+			else if (coarseLabel == CellLabels::EXTERIOR)
+			{
+				if (foundDirichletChild || foundInteriorChild ||
+					!foundExteriorChild)
+					testPassed = false;
+			}
+		});
+
+		if(!testPassed) return false;
+	}
 
 	return true;
 }
@@ -1067,7 +1078,7 @@ double GeometricMGOperations::lInfinityNorm(const UniformGrid<Real> &vectorGrid,
 {
 	using ParallelReal = enumerable_thread_specific<Real>;
 
-	ParallelReal parallelReal(0);
+	ParallelReal parallelReal(Real(0));
 
 	int totalVoxels = cellLabels.size()[0] * cellLabels.size()[1];
 

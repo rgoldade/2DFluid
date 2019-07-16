@@ -230,15 +230,21 @@ int main(int argc, char** argv)
 			sparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
 			sparseMatrix.makeCompressed();
 
-			//Eigen::SparseLU<Eigen::SparseMatrix<double>> solver;
-			//Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Upper | Eigen::Lower> solver;
-			Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<double>> solver;
+			Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> solver;
 			solver.compute(sparseMatrix);
 
-			if (solver.info() != Eigen::Success) return false;
+			if (solver.info() != Eigen::Success)
+			{
+			    std::cout << "Solver failed to pre-compute system" << std::endl;
+			    return 0;
+			}
 
 			Eigen::VectorXd solutionVector = solver.solve(rhsVector);
-			if (solver.info() != Eigen::Success) return false;
+			if (solver.info() != Eigen::Success)
+			{
+			    std::cout << "Solver failed" << std::endl;
+			    return 0;
+			}
 
 			// Apply solution
 			forEachVoxelRange(Vec2i(0), coarseResolution, [&](const Vec2i &cell)
