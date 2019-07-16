@@ -147,7 +147,7 @@ public:
 	}
 
 	Real dx() const { return myXform.dx(); }
-	Real offset() const { return myXform.offset(); }
+	Vec2R offset() const { return myXform.offset(); }
 	Transform xform() const { return myXform; }
 
 	Vec2i size(int axis) const
