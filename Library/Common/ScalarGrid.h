@@ -110,7 +110,7 @@ public:
 	// Global multiply operator
 	void operator*(const T& s)
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, this->myGrid.size(), 500), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, this->myGrid.size(), tbbGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int i = range.begin(); i != range.end(); ++i)
 				this->myGrid[i] *= s;
@@ -120,7 +120,7 @@ public:
 	// Global add operator
 	void operator+(T s)
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, this->myGrid.size(), 500), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, this->myGrid.size(), tbbGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int i = range.begin(); i != range.end(); ++i)
 				this->myGrid[i] += s;

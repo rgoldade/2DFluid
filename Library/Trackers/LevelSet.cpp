@@ -90,7 +90,7 @@ void LevelSet::reinitFIM()
 
 	int totalVoxels = size()[0] * size()[1];
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -150,7 +150,7 @@ void LevelSet::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCells)
 
 	tbb::enumerable_thread_specific<std::vector<Vec2i>> parallelActiveCellList;
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
 		std::vector<Vec2i> &localActiveCellList = parallelActiveCellList.local();
 
@@ -244,7 +244,7 @@ void LevelSet::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCells)
 
 	while (activeCellCount > 0 && iteration < maxIterations)
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount), [&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
 			std::vector<Vec2i> &localActiveCellList = parallelActiveCellList.local();
 			
@@ -307,7 +307,7 @@ void LevelSet::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCells)
 		});
 
 		// Turn off VISITED labels for current list
-		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount), [&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
 			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
@@ -331,7 +331,7 @@ void LevelSet::reinitFastIterative(UniformGrid<MarkedCells> &reinitializedCells)
 		activeCellCount = activeCellList.size();
 
 		// Turn on VISITED labels for new list
-		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount), [&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
 			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{

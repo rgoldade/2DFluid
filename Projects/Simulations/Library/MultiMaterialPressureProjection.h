@@ -63,7 +63,7 @@ public:
 			{
 				Real weight = 1;
 				weight -= mySolidCutCellWeights(face, axis);
-				weight = Util::clamp(weight, 0., weight);
+				weight = Util::clamp(weight, Real(0.), weight);
 
 				if (weight > 0)
 				{

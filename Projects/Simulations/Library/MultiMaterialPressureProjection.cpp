@@ -177,7 +177,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<Real>> &vel
 						else
 							theta = fabs(phi) / (fabs(phi) + fabs(adjacentPhi));
 
-						theta = Util::clamp(theta, MINTHETA, 1.);
+						theta = Util::clamp(theta, MINTHETA, Real(1.));
 
 						// Build interpolated density
 						if (direction == 0)
@@ -291,7 +291,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<Real>> &vel
 				else
 				{
 					theta /= phi;
-					theta = Util::clamp(theta, MINTHETA, 1.);
+					theta = Util::clamp(theta, MINTHETA, Real(1.));
 
 					density = theta * sampleDensity[0] + (1. - theta) * sampleDensity[1];
 				}

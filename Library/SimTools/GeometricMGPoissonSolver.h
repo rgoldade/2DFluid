@@ -161,7 +161,7 @@ public:
 			});
 
 			// Solve system
-			sparseMatrix = Eigen::SparseMatrix<Real>(interiorCellCount, interiorCellCount);
+			sparseMatrix = Eigen::SparseMatrix<double>(interiorCellCount, interiorCellCount);
 			sparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
 			sparseMatrix.makeCompressed();
 
@@ -209,7 +209,7 @@ private:
 	VectorGrid<Real> myFineGradientWeights;
 
 	Eigen::VectorXd myCoarseRHSVector;
-	Eigen::SparseMatrix<Real> sparseMatrix;
+	Eigen::SparseMatrix<double> sparseMatrix;
 	Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> myCoarseSolver;
 };
 

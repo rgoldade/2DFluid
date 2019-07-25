@@ -34,7 +34,7 @@ void GeometricMGOperations::dampedJacobiPoissonSmoother(UniformGrid<Real> &solut
 
 	int totalVoxels = solution.size()[0] * solution.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -86,7 +86,7 @@ void GeometricMGOperations::dampedJacobiWeightedPoissonSmoother(UniformGrid<Real
 
 	int totalVoxels = solution.size()[0] * solution.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -138,7 +138,7 @@ void GeometricMGOperations::dampedJacobiPoissonSmoother(UniformGrid<Real> &solut
 
 	std::vector<Real> tempSolution(boundaryCells.size(), 0);
 
-	parallel_for(blocked_range<int>(0, boundaryCells.size(), 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, boundaryCells.size(), tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -173,7 +173,7 @@ void GeometricMGOperations::dampedJacobiPoissonSmoother(UniformGrid<Real> &solut
 		}
 	});
 
-	parallel_for(blocked_range<int>(0, boundaryCells.size(), 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, boundaryCells.size(), tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -197,7 +197,7 @@ void GeometricMGOperations::dampedJacobiWeightedPoissonSmoother(UniformGrid<Real
 
 	std::vector<Real> tempSolution(boundaryCells.size(), 0);
 
-	parallel_for(blocked_range<int>(0, boundaryCells.size(), 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, boundaryCells.size(), tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -234,7 +234,7 @@ void GeometricMGOperations::dampedJacobiWeightedPoissonSmoother(UniformGrid<Real
 		}
 	});
 
-	parallel_for(blocked_range<int>(0, boundaryCells.size(), 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, boundaryCells.size(), tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -256,7 +256,7 @@ void GeometricMGOperations::applyPoissonMatrix(UniformGrid<Real> &destination,
 
 	int totalVoxels = destination.size()[0] * destination.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -309,7 +309,7 @@ void GeometricMGOperations::applyWeightedPoissonMatrix(UniformGrid<Real> &destin
 
 	int totalVoxels = destination.size()[0] * destination.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -359,7 +359,7 @@ void GeometricMGOperations::computePoissonResidual(UniformGrid<Real> &residual,
 
 	int totalVoxels = residual.size()[0] * residual.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -414,7 +414,7 @@ void GeometricMGOperations::computeWeightedPoissonResidual(UniformGrid<Real> &re
 
 	int totalVoxels = residual.size()[0] * residual.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -472,7 +472,7 @@ void GeometricMGOperations::downsample(UniformGrid<Real> &destinationGrid,
 
 	int totalVoxels = destinationCellLabels.size()[0] * destinationCellLabels.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -518,7 +518,7 @@ void GeometricMGOperations::upsample(UniformGrid<Real> &destinationGrid,
 
 	int totalVoxels = destinationCellLabels.size()[0] * destinationCellLabels.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -564,7 +564,7 @@ void GeometricMGOperations::upsampleAndAdd(UniformGrid<Real> &destinationGrid,
 
 	int totalVoxels = destinationCellLabels.size()[0] * destinationCellLabels.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -602,7 +602,7 @@ UniformGrid<GeometricMGOperations::CellLabels> GeometricMGOperations::buildCoars
 
 	int totalVoxels = destinationCellLabels.size()[0] * destinationCellLabels.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -650,7 +650,7 @@ UniformGrid<GeometricMGOperations::CellLabels> GeometricMGOperations::buildBound
 
 	int totalVoxels = sourceCellLabels.size()[0] * sourceCellLabels.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -676,7 +676,7 @@ UniformGrid<GeometricMGOperations::CellLabels> GeometricMGOperations::buildBound
 
 	for (int layer = 1; layer < boundaryWidth; ++layer)
 	{
-		parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+		parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 		{
 			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
@@ -687,7 +687,7 @@ UniformGrid<GeometricMGOperations::CellLabels> GeometricMGOperations::buildBound
 			}
 		});
 
-		parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+		parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 		{
 			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
@@ -731,7 +731,7 @@ std::vector<Vec2i> GeometricMGOperations::buildBoundaryCells(const UniformGrid<C
 	int totalVoxels = sourceCellLabels.size()[0] * sourceCellLabels.size()[1];
 
 	// Build initial layer
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		auto &localBoundaryCellList = parallelBoundaryCellList.local();
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
@@ -797,7 +797,7 @@ std::vector<Vec2i> GeometricMGOperations::buildBoundaryCells(const UniformGrid<C
 	{
 		// Set cells to visited
 		int localCellCount = perLayerboundaryCells[layer - 1].size();
-		parallel_for(blocked_range<int>(0, localCellCount, 1000), [&](const blocked_range<int> &range)
+		parallel_for(blocked_range<int>(0, localCellCount, tbbGrainSize), [&](const blocked_range<int> &range)
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
@@ -809,7 +809,7 @@ std::vector<Vec2i> GeometricMGOperations::buildBoundaryCells(const UniformGrid<C
 
 		parallelBoundaryCellList.clear();
 
-		parallel_for(blocked_range<int>(0, localCellCount, 1000), [&](const blocked_range<int> &range)
+		parallel_for(blocked_range<int>(0, localCellCount, tbbGrainSize), [&](const blocked_range<int> &range)
 		{
 			auto &localBoundaryCellList = parallelBoundaryCellList.local();
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -852,7 +852,7 @@ std::vector<Vec2i> GeometricMGOperations::buildBoundaryCells(const UniformGrid<C
 		parallel_sort(preSortedTempList.begin(), preSortedTempList.end(), vecCompare);
 
 		parallelBoundaryCellList.clear();
-		parallel_for(blocked_range<int>(0, preSortedTempList.size(), 1000), [&](const blocked_range<int> &range)
+		parallel_for(blocked_range<int>(0, preSortedTempList.size(), tbbGrainSize), [&](const blocked_range<int> &range)
 		{
 			auto &localBoundaryCellList = parallelBoundaryCellList.local();
 
@@ -1024,7 +1024,7 @@ void GeometricMGOperations::addToVector(UniformGrid<Real> &destination,
 
 	int totalVoxels = destination.size()[0] * destination.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -1048,7 +1048,7 @@ void GeometricMGOperations::addToVector(UniformGrid<Real> &destination,
 
 	int totalVoxels = destination.size()[0] * destination.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
@@ -1082,7 +1082,7 @@ double GeometricMGOperations::lInfinityNorm(const UniformGrid<Real> &vectorGrid,
 
 	int totalVoxels = cellLabels.size()[0] * cellLabels.size()[1];
 
-	parallel_for(blocked_range<int>(0, totalVoxels, 1000), [&](const blocked_range<int> &range)
+	parallel_for(blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const blocked_range<int> &range)
 	{
 		Real &localMaxError = parallelReal.local();
 

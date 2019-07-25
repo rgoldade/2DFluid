@@ -14,11 +14,12 @@
 //
 ////////////////////////////////////
 
-using Real = double;
+using Real = float;
 using Vec2R = Vec<Real, 2>;
 using Vec3R = Vec<Real, 3>;
 
-static constexpr Real MINTHETA = 0.01;
+constexpr int tbbGrainSize = 500;
+constexpr Real MINTHETA = 0.01;
 
 // Helper fuctions to map between geometry components in the grid. It's preferrable to use these
 // compared to the offsets above because only the necessary pieces are modified and the concepts
@@ -26,8 +27,6 @@ static constexpr Real MINTHETA = 0.01;
 
 inline Vec2i cellToCell(const Vec2i& cell, int axis, int direction)
 {
-	assert(axis >= 0 && axis < 2);
-
 	Vec2i adjacentCell(cell);
 	if (direction == 0)
 		--adjacentCell[axis];
@@ -42,8 +41,6 @@ inline Vec2i cellToCell(const Vec2i& cell, int axis, int direction)
 
 inline Vec2i cellToFace(const Vec2i& cell, int axis, int direction)
 {
-	assert(axis >= 0 && axis < 2);
-
 	Vec2i face(cell);
 	if (direction == 1)
 		++face[axis];
@@ -54,8 +51,6 @@ inline Vec2i cellToFace(const Vec2i& cell, int axis, int direction)
 
 inline Vec2i faceToCell(const Vec2i& face, int axis, int direction)
 {
-	assert(axis >= 0 && axis < 2);
-	
 	Vec2i cell(face);
 	if (direction == 0)
 		--cell[axis];
@@ -118,10 +113,9 @@ inline Vec2i cellToNodeCCW(const Vec2i& cell, int nodeIndex)
 // Map cell to face using the same winding order as cellToNodeCCW
 inline Vec3i cellToFaceCCW(const Vec2i &cell, int index)
 {
-	Vec3i face;
-	face[0] = cell[0]; face[1] = cell[1];
-	unsigned axis = index % 2 == 0 ? 1 : 0;
-	face[2] = axis;
+	int axis = index % 2 == 0 ? 1 : 0;
+	Vec3i face(cell[0], cell[1], axis);
+
 	assert(index < 4);
 	
 	if (index == 1 || index == 2)
@@ -133,8 +127,6 @@ inline Vec3i cellToFaceCCW(const Vec2i &cell, int index)
 // Offset node index in the axis direction.
 inline Vec2i nodeToFace(const Vec2i& node, int faceAxis, int direction)
 {
-	assert(faceAxis >= 0 && faceAxis < 2);
-
 	Vec2i face(node);
 
 	if (direction == 0)
