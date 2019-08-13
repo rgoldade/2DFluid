@@ -1091,7 +1091,7 @@ double GeometricMGOperations::lInfinityNorm(const UniformGrid<Real> &vectorGrid,
 			Vec2i cell = cellLabels.unflatten(flatIndex);
 
 			if (cellLabels(cell) == CellLabels::INTERIOR)
-				localMaxError += std::max(fabs(vectorGrid(cell)), localMaxError);
+				localMaxError += std::max((Real)fabs(vectorGrid(cell)), localMaxError);
 		}
 	});
 
