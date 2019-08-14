@@ -90,7 +90,7 @@ int main(int argc, char** argv)
 		{
 			if (domainCellLabels(cell) == CellLabels::INTERIOR)
 			{
-				LInfinityError = std::max(LInfinityError, fabs(residualGrid(cell)));
+				LInfinityError = std::max(LInfinityError, (Real)fabs(residualGrid(cell)));
 				L2Error += Util::sqr(residualGrid(cell));
 			}
 		});

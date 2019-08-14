@@ -215,7 +215,7 @@ int main(int argc, char** argv)
 	{
 		// Test direct solve symmetry
 		Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> myCoarseSolver;
-		Eigen::SparseMatrix<Real> sparseMatrix;
+		Eigen::SparseMatrix<double> sparseMatrix;
 
 		// Pre-build matrix at the coarsest level
 		int interiorCellCount = 0;
@@ -261,7 +261,7 @@ int main(int argc, char** argv)
 			});
 
 			// Solve system
-			sparseMatrix = Eigen::SparseMatrix<Real>(interiorCellCount, interiorCellCount);
+			sparseMatrix = Eigen::SparseMatrix<double>(interiorCellCount, interiorCellCount);
 			sparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
 			sparseMatrix.makeCompressed();
 
@@ -371,7 +371,7 @@ int main(int argc, char** argv)
 		Vec2i coarseResolution = coarseDomainLabels.size();
 
 		Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> myCoarseSolver;
-		Eigen::SparseMatrix<Real> sparseMatrix;
+		Eigen::SparseMatrix<double> sparseMatrix;
 
 		// Pre-build matrix at the coarsest level
 		int interiorCellCount = 0;
@@ -416,7 +416,7 @@ int main(int argc, char** argv)
 				}
 			});
 
-			sparseMatrix = Eigen::SparseMatrix<Real>(interiorCellCount, interiorCellCount);
+			sparseMatrix = Eigen::SparseMatrix<double>(interiorCellCount, interiorCellCount);
 			sparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
 			sparseMatrix.makeCompressed();
 
