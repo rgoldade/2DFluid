@@ -16,6 +16,8 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 			velocity.size(1)[0] == mySurface.size()[0] &&
 			velocity.size(1)[1] - 1 == mySurface.size()[1]);
 
+	assert(velocity.isGridMatched(myCutCellWeights));
+
 	int liquidDOFCount = 0;
 	forEachVoxelRange(Vec2i(0), myFluidCellIndex.size(), [&](const Vec2i& cell)
 	{

@@ -30,22 +30,25 @@ class PressureProjection
 public:
 	// For variational solve, surface should be extrapolated into the solid boundary
 	PressureProjection(const LevelSet& surface,
-						const LevelSet& solidSurface,
+						const VectorGrid<Real>& cutCellWeights,
+						const VectorGrid<Real>& ghostFluidWeights,
 						const VectorGrid<Real>& solidVelocity)
 		: mySurface(surface)
-		, mySolidSurface(solidSurface)
 		, mySolidVelocity(solidVelocity)
-		, myGhostFluidWeights(computeGhostFluidWeights(surface))
-		, myCutCellWeights(computeCutCellWeights(solidSurface, true))
+		, myCutCellWeights(cutCellWeights)
+		, myGhostFluidWeights(ghostFluidWeights)
 		, myUseInitialGuess(false)
 		, myInitialGuess(nullptr)
 	{
-		assert(surface.isGridMatched(solidSurface));
-
 		assert(solidVelocity.size(0)[0] - 1 == surface.size()[0] &&
-			solidVelocity.size(0)[1] == surface.size()[1] &&
-			solidVelocity.size(1)[0] == surface.size()[0] &&
-			solidVelocity.size(1)[1] - 1 == surface.size()[1]);
+				solidVelocity.size(0)[1] == surface.size()[1] &&
+				solidVelocity.size(1)[0] == surface.size()[0] &&
+				solidVelocity.size(1)[1] - 1 == surface.size()[1]);
+
+		assert(solidVelocity.sampleType() == VectorGridSettings::SampleType::STAGGERED);
+
+		assert(solidVelocity.isGridMatched(cutCellWeights) &&
+			solidVelocity.isGridMatched(ghostFluidWeights));
 
 		myPressure = ScalarGrid<Real>(surface.xform(), surface.size(), 0);
 		myValidFaces = VectorGrid<MarkedCells>(surface.xform(), surface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
@@ -89,7 +92,7 @@ private:
 
 	VectorGrid<MarkedCells> myValidFaces; // Store solved faces
 
-	const LevelSet &mySurface, &mySolidSurface;
+	const LevelSet &mySurface;
 	
 	ScalarGrid<Real> myPressure;
 	UniformGrid<int> myFluidCellIndex;

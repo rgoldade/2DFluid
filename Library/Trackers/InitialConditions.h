@@ -70,6 +70,28 @@ EdgeMesh squareMesh(const Vec2R& center = Vec2R(0), const Vec2R& scale = Vec2R(1
 	return mesh;
 }
 
+EdgeMesh diamondMesh(const Vec2R& center = Vec2R(0), const Vec2R& scale = Vec2R(1.))
+{
+	std::vector<Vec2R> verts;
+	std::vector<Vec2i> edges;
+
+	verts.push_back(Vec2R(1.0 * scale[0], 0));
+	verts.push_back(Vec2R(0, -1.0 * scale[1]));
+	verts.push_back(Vec2R(-1.0 * scale[0], 0));
+	verts.push_back(Vec2R(0, 1.0 * scale[1]));
+
+	edges.push_back(Vec2i(0, 1));
+	edges.push_back(Vec2i(1, 2));
+	edges.push_back(Vec2i(2, 3));
+	edges.push_back(Vec2i(3, 0));
+
+	EdgeMesh mesh = EdgeMesh(edges, verts);
+
+	mesh.translate(center);
+
+	return mesh;
+}
+
 // Initial conditions for testing level set methods.
 
 EdgeMesh notchedDiskMesh()
