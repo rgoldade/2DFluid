@@ -197,6 +197,9 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	VectorGrid<Real> cutCellWeights = computeCutCellWeights(mySolidSurface, true);
 	VectorGrid<Real> ghostFluidWeights = computeGhostFluidWeights(extrapolatedSurface);
 
+	std::cout << "  Compute weights: " << simTimer.stop() << "s" << std::endl;
+	simTimer.reset();
+
 	// Initialize and call pressure projection
 	PressureProjection projectDivergence(extrapolatedSurface,
 											cutCellWeights,
