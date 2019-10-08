@@ -5,7 +5,7 @@
 
 void MultiMaterialPressureProjection::drawPressure(Renderer &renderer) const
 {
-	myPressure.drawSupersampledValues(renderer, .5, 3, 1);
+	myPressure.drawSuperSampledValues(renderer, .5, 3, 1);
 }
 
 void MultiMaterialPressureProjection::project(std::vector<VectorGrid<Real>> &velocityList)

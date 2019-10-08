@@ -57,7 +57,7 @@ void EdgeMesh::drawMesh(Renderer& renderer,
 	}
 }
 
-bool EdgeMesh::unitTest() const
+bool EdgeMesh::unitTestMesh() const
 {
 	// Verify vertex has two or more adjacent edges. Meaning no dangling edge.
 	for (int vertexIndex = 0; vertexIndex < myVertices.size(); ++vertexIndex)

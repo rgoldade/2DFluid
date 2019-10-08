@@ -130,7 +130,7 @@ public:
 	T maxValue() const
 	{
 		using namespace tbb;
-		return parallel_reduce(blocked_range<int>(0, this->myGrid.size(), 500), std::numeric_limits<T>::lowest(),
+		return parallel_reduce(blocked_range<int>(0, this->myGrid.size(), tbbGrainSize), std::numeric_limits<T>::lowest(),
 								[&](const blocked_range<int>& range, T value) -> T
 								{
 									T localMax = value;
@@ -147,7 +147,7 @@ public:
 	T minValue() const
 	{
 		using namespace tbb;
-		return parallel_reduce(blocked_range<int>(0, this->myGrid.size(), 500), std::numeric_limits<T>::max(),
+		return parallel_reduce(blocked_range<int>(0, this->myGrid.size(), tbbGrainSize), std::numeric_limits<T>::max(),
 								[&](const blocked_range<int>& range, T value) -> T
 								{
 									T localMin = value;
@@ -155,34 +155,34 @@ public:
 										localMin = std::min(localMin, this->myGrid[i]);
 									return localMin;
 								},
-									[](T x, T y) -> T
+								[](T x, T y) -> T
 								{
 									return std::min(x, y);
 								});
 	}
 
-	void minAndMaxValue(T& min, T& max) const
+	std::pair<T, T> minAndMaxValue() const
 	{
 		using MinMaxPair = std::pair<T, T>;
 		using namespace tbb;
-		MinMaxPair result = parallel_reduce(blocked_range<int>(0, this->myGrid.size(), 500), MinMaxPair(std::numeric_limits<T>::max(), std::numeric_limits<T>::lowest()),
-			[&](const blocked_range<int>& range, MinMaxPair valuePair) -> MinMaxPair
-		{
-			T localMin = valuePair.first;
-			T localMax = valuePair.second;
-			for (int i = range.begin(); i != range.end(); ++i)
-			{
-				localMin = std::min(localMin, this->myGrid[i]);
-				localMax = std::max(localMax, this->myGrid[i]);
-			}
-			return MinMaxPair(localMin, localMax);
-		},
-			[](MinMaxPair x, MinMaxPair y) -> MinMaxPair
-		{
-			return MinMaxPair(std::min(x.first, y.first), std::max(x.second, y.second));
-		});
+		MinMaxPair result = parallel_reduce(blocked_range<int>(0, this->myGrid.size(), tbbGrainSize), MinMaxPair(std::numeric_limits<T>::max(), std::numeric_limits<T>::lowest()),
+												[&](const blocked_range<int>& range, MinMaxPair valuePair) -> MinMaxPair
+												{
+													T localMin = valuePair.first;
+													T localMax = valuePair.second;
+													for (int i = range.begin(); i != range.end(); ++i)
+													{
+														localMin = std::min(localMin, this->myGrid[i]);
+														localMax = std::max(localMax, this->myGrid[i]);
+													}
+													return MinMaxPair(localMin, localMax);
+												},
+												[](MinMaxPair x, MinMaxPair y) -> MinMaxPair
+												{
+													return MinMaxPair(std::min(x.first, y.first), std::max(x.second, y.second));
+												});
 		
-		min = result.first; max = result.second;
+		return std::pair<T, T>(result.first, result.second);
 	}
 
 	T interp(Real x, Real y, bool isIndexSpace = false) const { return interp(Vec2R(x, y), isIndexSpace); }
@@ -225,7 +225,7 @@ public:
 	void drawGridCell(Renderer& renderer, const Vec2i& coord, const Vec3f& colour = Vec3f(0)) const;
 
 	void drawSamplePoints(Renderer& renderer, const Vec3f& colour = Vec3f(1,0,0), Real size = 1.) const;
-	void drawSupersampledValues(Renderer& renderer, Real radius = .5, int samples = 5, Real sampleSize = 1.) const;
+	void drawSuperSampledValues(Renderer& renderer, Real radius = .5, int samples = 5, Real sampleSize = 1.) const;
 	void drawSampleGradients(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
 	void drawVolumetric(Renderer& renderer, const Vec3f& minColour, const Vec3f& maxColour, T minVal, T maxVal) const;
 
@@ -432,13 +432,14 @@ void ScalarGrid<T>::drawSamplePoints(Renderer& renderer, const Vec3f& colour, Re
 
 // Warning: there is no protection here for ASSERT border types
 template<typename T>
-void ScalarGrid<T>::drawSupersampledValues(Renderer& renderer, Real radius, int samples, Real sampleSize) const
+void ScalarGrid<T>::drawSuperSampledValues(Renderer& renderer, Real radius, int samples, Real sampleSize) const
 {
 	assert(radius >= 0 && samples >= 0 && sampleSize >= 0);
 	std::vector<Vec2R> samplePoints;
 
-	T minSample, maxSample;
-	minAndMaxValue(minSample, maxSample);
+	std::pair<T, T> minMaxPair = minAndMaxValue();
+	T minSample = minMaxPair.first;
+	T maxSample = minMaxPair.second;
 
 	Vec2i gridSize = this->mySize;
 
@@ -599,6 +600,8 @@ void ScalarGrid<T>::printAsOBJ(std::string filename) const
 			writer << "\n";
 
 		});
+
+		writer.close();
 	}
 	else
 		std::cerr << "Failed to write to file: " << filename << std::endl;

@@ -3,7 +3,7 @@
 #include "Common.h"
 #include "EdgeMesh.h"
 #include "EulerianSmoke.h"
-#include "InitialConditions.h"
+#include "InitialGeometry.h"
 #include "Integrator.h"
 #include "LevelSet.h"
 #include "Renderer.h"
@@ -144,19 +144,19 @@ int main(int argc, char** argv)
 
 	renderer = std::make_unique<Renderer>("Smoke Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	EdgeMesh solidMesh = squareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
+	EdgeMesh solidMesh = InitialGeometry::makeSquareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
 	solidMesh.reverse();
-	assert(solidMesh.unitTest());
+	assert(solidMesh.unitTestMesh());
 
 	LevelSet solid = LevelSet(xform, gridSize, 10);
-	solid.setBoundaryNegative();
+	solid.setBackgroundNegative();
 	solid.initFromMesh(solidMesh, false);
 
 	simulator = std::make_unique<EulerianSmoke>(xform, gridSize, 300);
 	simulator->setSolidSurface(solid);
 
 	// Set up source for smoke density and smoke temperature
-	EdgeMesh sourceMesh = circleMesh(center - Vec2R(0, 2.), .25, 40);
+	EdgeMesh sourceMesh = InitialGeometry::makeCircleMesh(center - Vec2R(0, 2.), .25, 40);
 	LevelSet sourceVolume = LevelSet(xform, gridSize, 10);
 	sourceVolume.initFromMesh(sourceMesh, false);
 	

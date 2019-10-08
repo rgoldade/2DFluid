@@ -3,7 +3,7 @@
 #include "Common.h"
 #include "EdgeMesh.h"
 #include "EulerianLiquid.h"
-#include "InitialConditions.h"
+#include "InitialGeometry.h"
 #include "Integrator.h"
 #include "LevelSet.h"
 #include "Renderer.h"
@@ -49,7 +49,7 @@ void display()
 			if (seedTime > 2.)
 			{
 				Vec2R center = xform.offset() + Vec2R(xform.dx()) * Vec2R(gridSize / 2) + Vec2R(.8);
-				EdgeMesh seedMesh = squareMesh(center, Vec2R(.5));
+				EdgeMesh seedMesh = InitialGeometry::makeSquareMesh(center, Vec2R(.5));
 
 				LevelSet seedSurface = LevelSet(xform, gridSize, 5);
 				seedSurface.initFromMesh(seedMesh, false);
@@ -105,19 +105,19 @@ int main(int argc, char** argv)
 
 	renderer = std::make_unique<Renderer>("Levelset Liquid Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	EdgeMesh liquidMesh = circleMesh(center - Vec2R(0,.65), 1, 100);
+	EdgeMesh liquidMesh = InitialGeometry::makeCircleMesh(center - Vec2R(0,.65), 1, 100);
 	
-	assert(liquidMesh.unitTest());
+	assert(liquidMesh.unitTestMesh());
 
-	EdgeMesh solidMesh = circleMesh(center, 2, 100);
+	EdgeMesh solidMesh = InitialGeometry::makeCircleMesh(center, 2, 100);
 	solidMesh.reverse();
-	assert(solidMesh.unitTest());
+	assert(solidMesh.unitTestMesh());
 	
 	LevelSet liquidSurface = LevelSet(xform, gridSize, 10);
 	liquidSurface.initFromMesh(liquidMesh, false);
 
 	LevelSet solidSurface = LevelSet(xform, gridSize, 10);
-	solidSurface.setBoundaryNegative();
+	solidSurface.setBackgroundNegative();
 	solidSurface.initFromMesh(solidMesh, false);
 	
 	// Set up simulation

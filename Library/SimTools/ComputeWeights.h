@@ -2,9 +2,10 @@
 #define LIBRARY_COMPUTEWEIGHTS_H
 
 #include "Common.h"
-#include "LevelSet.h"
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
+
+class LevelSet;
 
 ///////////////////////////////////
 //

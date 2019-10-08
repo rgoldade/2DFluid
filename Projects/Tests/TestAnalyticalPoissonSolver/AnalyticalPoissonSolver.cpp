@@ -8,5 +8,5 @@ void AnalyticalPoissonSolver::drawGrid(Renderer &renderer) const
 
 void AnalyticalPoissonSolver::drawValues(Renderer &renderer) const
 {
-	myPoissonGrid.drawSupersampledValues(renderer);
+	myPoissonGrid.drawSuperSampledValues(renderer);
 }

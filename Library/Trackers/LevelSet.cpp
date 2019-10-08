@@ -21,7 +21,7 @@ void LevelSet::drawMeshGrid(Renderer& renderer) const
 
 void LevelSet::drawSupersampledValues(Renderer& renderer, Real radius, int samples, Real sampleSize) const
 {
-	myPhiGrid.drawSupersampledValues(renderer, radius, samples, sampleSize);
+	myPhiGrid.drawSuperSampledValues(renderer, radius, samples, sampleSize);
 }
 void LevelSet::drawNormals(Renderer& renderer, const Vec3f& colour, Real length) const
 {
@@ -436,9 +436,9 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool resizeGrid)
 		Vec2R vmin, vmax;
 		minAndMax(vmin, vmax, startPoint, endPoint);
 
-		Vec2R edgeCeilMin = ceil(vmin);
-		Vec2R edgeFloorMin = floor(vmin) - Vec2R(1);
-		Vec2R edgeFloorMax = floor(vmax);
+		Vec2i edgeCeilMin = Vec2i(ceil(vmin));
+		Vec2i edgeFloorMin = Vec2i(floor(vmin)) - Vec2i(1);
+		Vec2i edgeFloorMax = Vec2i(floor(vmax));
 
 		for (int j = edgeCeilMin[1]; j <= edgeFloorMax[1]; ++j)
 			for (int i = edgeFloorMax[0]; i >= edgeFloorMin[0]; --i)
@@ -904,13 +904,13 @@ Vec2R LevelSet::interpolateInterface(const Vec2i& startPoint, const Vec2i& endPo
 			myPhiGrid(startPoint[0], startPoint[1]) > 0 && myPhiGrid(endPoint[0], endPoint[1]) <= 0);
 
 	//Find weight to zero isosurface
-	Real s = myPhiGrid(startPoint[0], startPoint[1]) / (myPhiGrid(startPoint[0], startPoint[1]) - myPhiGrid(endPoint[0], endPoint[1]));
+	Real s = myPhiGrid(startPoint) / (myPhiGrid(startPoint) - myPhiGrid(endPoint));
 
 	if (s < 0.0) s = 0.0;
 	else if (s > 1.0) s = 1.0;
 
 	Vec2R dx = Vec2R(endPoint) - Vec2R(startPoint);
-	return Vec2R(startPoint[0], startPoint[1]) + s*dx;
+	return Vec2R(startPoint) + s*dx;
 }
 
 void LevelSet::unionSurface(const LevelSet& unionPhi)

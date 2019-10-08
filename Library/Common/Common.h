@@ -163,12 +163,12 @@ inline Vec2i nodeToCell(const Vec2i& node, int cellIndex)
 	return cell;
 }
 
-static const Vec3f colours[] = { Vec3f(1., 0., 0.),
-									Vec3f(0., 1., 0.),
-									Vec3f(0., 0., 1.),
-									Vec3f(1., 1., 0.),
-									Vec3f(1., 0., 1.),
-									Vec3f(0., 1., 1.) };
+const Vec3f colours[] = { Vec3f(1., 0., 0.),
+							Vec3f(0., 1., 0.),
+							Vec3f(0., 0., 1.),
+							Vec3f(1., 1., 0.),
+							Vec3f(1., 0., 1.),
+							Vec3f(0., 1., 1.) };
 
 inline Real lengthFraction(Real phi0, Real phi1)
 {

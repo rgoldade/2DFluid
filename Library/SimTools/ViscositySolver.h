@@ -2,10 +2,10 @@
 #define LIBRARY_VISCOSITYSOLVER_H
 
 #include "Common.h"
-#include "LevelSet.h"
-#include "Renderer.h"
 #include "ScalarGrid.h"
 #include "VectorGrid.h"
+
+class LevelSet;
 
 ///////////////////////////////////
 //

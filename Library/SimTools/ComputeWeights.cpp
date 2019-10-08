@@ -1,5 +1,7 @@
 #include "ComputeWeights.h"
 
+#include "LevelSet.h"
+
 VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface)
 {
 	VectorGrid<Real> ghostFluidWeights(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
@@ -12,17 +14,13 @@ VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface)
 			Vec2i forwardCell = faceToCell(face, axis, 1);
 
 			if (backwardCell[axis] < 0 || forwardCell[axis] >= surface.size()[axis])
-				ghostFluidWeights.grid(axis)(face) = 0.;
+				return;
 			else
 			{
 				Real phiBackward = surface(backwardCell);
 				Real phiForward = surface(forwardCell);
 				
-				if (phiBackward < 0 && phiForward < 0)
-					ghostFluidWeights(face, axis) = 1;
-				else if ((phiBackward < 0. && phiForward >= 0.) ||
-							(phiBackward >= 0. && phiForward < 0.))
-					ghostFluidWeights(face, axis) = lengthFraction(phiBackward, phiForward);
+				ghostFluidWeights(face, axis) = lengthFraction(phiBackward, phiForward);
 			}
 		});
 	}

@@ -2,7 +2,7 @@
 
 #include "Common.h"
 #include "EdgeMesh.h"
-#include "InitialConditions.h"
+#include "InitialGeometry.h"
 #include "Integrator.h"
 #include "LevelSet.h"
 #include "MultiMaterialLiquid.h"
@@ -114,23 +114,23 @@ int main(int argc, char** argv)
 	renderer = std::make_unique<Renderer>("Multimaterial Liquid Simulator", Vec2i(pixelWidth, pixelHeight), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
 	// Build outer boundary grid.
-	EdgeMesh solidMesh = squareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
+	EdgeMesh solidMesh = InitialGeometry::makeSquareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
 	solidMesh.reverse();
-	assert(solidMesh.unitTest());
+	assert(solidMesh.unitTestMesh());
 
 	LevelSet solidSurface = LevelSet(xform, gridSize, 10);
-	solidSurface.setBoundaryNegative();
+	solidSurface.setBackgroundNegative();
 	solidSurface.initFromMesh(solidMesh, false);
 
 	// Build two-material level set.
 	// Circle centered in the grid.
 
 	Vec2R bubbleOffset(0, 1.);
-	EdgeMesh bubbleMesh = circleMesh(center - bubbleOffset, .75, 40);
+	EdgeMesh bubbleMesh = InitialGeometry::makeCircleMesh(center - bubbleOffset, .75, 40);
 
 	Real surfaceHeight = 1.;
 	Vec2R surfaceCenter(center[0], topRightCorner[1] - .5 * surfaceHeight - boundaryPadding * dx);
-	EdgeMesh surfaceMesh = squareMesh(surfaceCenter, Vec2R(.5 * simulationSize[0] - boundaryPadding * dx, .5*surfaceHeight));
+	EdgeMesh surfaceMesh = InitialGeometry::makeSquareMesh(surfaceCenter, Vec2R(.5 * simulationSize[0] - boundaryPadding * dx, .5*surfaceHeight));
 	bubbleMesh.insertMesh(surfaceMesh);
 
 	LevelSet bubbleSurface = LevelSet(xform, gridSize, 10);

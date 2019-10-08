@@ -4,7 +4,7 @@
 
 void PressureProjection::drawPressure(Renderer& renderer) const
 {
-	myPressure.drawSupersampledValues(renderer, .25, 1, 2);
+	myPressure.drawSuperSampledValues(renderer, .25, 1, 2);
 }
 
 void PressureProjection::project(VectorGrid<Real>& velocity)
@@ -16,12 +16,13 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 			velocity.size(1)[0] == mySurface.size()[0] &&
 			velocity.size(1)[1] - 1 == mySurface.size()[1]);
 
+	assert(velocity.isGridMatched(myCutCellWeights));
+
 	int liquidDOFCount = 0;
 	forEachVoxelRange(Vec2i(0), myFluidCellIndex.size(), [&](const Vec2i& cell)
 	{
 		if (mySurface(cell) <= 0)
 		{
-			bool isFluid = false;
 			for (int axis : {0, 1})
 				for (int direction : {0, 1})
 				{
@@ -56,9 +57,9 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 					double sign = (direction == 0) ? 1 : -1;
 
 					if (weight > 0)
-						divergence += sign * velocity(face, axis) * weight;
+						divergence += sign * weight * velocity(face, axis);
 					if (weight < 1.)
-						divergence += sign * mySolidVelocity(face, axis) * (1. - weight);
+						divergence += sign * (1. - weight) * mySolidVelocity(face, axis);
 				}
 
 			solver.addToRhs(fluidIndex, divergence);
@@ -101,10 +102,10 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 			solver.addToElement(fluidIndex, fluidIndex, diagonal);
 
 			// Add initial guess
-			if (myUseInitialGuess)
+			if (myUseInitialGuessPressure)
 			{
-				assert(myInitialGuess != nullptr);
-				solver.addToGuess(fluidIndex, (*myInitialGuess)(cell));
+				assert(myInitialGuessPressure != nullptr);
+				solver.addToGuess(fluidIndex, (*myInitialGuessPressure)(cell));
 			}
 		}
 	});
@@ -167,11 +168,11 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 				{
 					Real gradient = 0;
 
-					if (myFluidCellIndex(Vec2i(backwardCell)) >= 0)
-						gradient -= myPressure(Vec2i(backwardCell));
+					if (myFluidCellIndex(backwardCell) >= 0)
+						gradient -= myPressure(backwardCell);
 
-					if (myFluidCellIndex(Vec2i(forwardCell)) >= 0)
-						gradient += myPressure(Vec2i(forwardCell));
+					if (myFluidCellIndex(forwardCell) >= 0)
+						gradient += myPressure(forwardCell);
 
 					localVelocity = velocity(face, axis) - gradient / theta;
 				}

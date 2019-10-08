@@ -126,20 +126,13 @@
 
 #include "Predicates.h"
 
-Intersection exactEdgeIntersect(const Vec2R &a, const Vec2R &b, const Vec2R &c, Axis axis)
+Intersection exactEdgeIntersect(Vec2R q, Vec2R r, Vec2R s, Axis axis)
 {
-	Vec2R q, r, s;
 	if (axis == Axis::YAXIS)
 	{
-		q = Vec2R(a[1], a[0]);
-		r = Vec2R(b[1], b[0]);
-		s = Vec2R(c[1], c[0]);
-	}
-	else
-	{
-		q = a;
-		r = b;
-		s = c;
+		q = Vec2R(q[1], q[0]);
+		r = Vec2R(r[1], r[0]);
+		s = Vec2R(s[1], s[0]);
 	}
 
 	// Make sure y-axis bb crosses x-axis grid

@@ -37,11 +37,11 @@ void EulerianSmoke::drawSolidVelocity(Renderer& renderer, Real length) const
 void EulerianSmoke::setSolidSurface(const LevelSet& solidSurface)
 {
 	assert(solidSurface.isGridMatched(mySolidSurface));
-	assert(solidSurface.isBoundaryNegative());
+	assert(solidSurface.isBackgroundNegative());
 
 	EdgeMesh localMesh = solidSurface.buildDCMesh();
 
-	mySolidSurface.setBoundaryNegative();
+	mySolidSurface.setBackgroundNegative();
 	mySolidSurface.initFromMesh(localMesh, false);
 }
 

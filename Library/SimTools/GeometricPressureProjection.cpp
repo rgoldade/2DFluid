@@ -5,7 +5,7 @@
 
 void GeometricPressureProjection::drawPressure(Renderer& renderer) const
 {
-	myPressure.drawSupersampledValues(renderer, .25, 1, 2);
+	myPressure.drawSuperSampledValues(renderer, .25, 1, 2);
 }
 
 void GeometricPressureProjection::project(VectorGrid<Real>& velocity,

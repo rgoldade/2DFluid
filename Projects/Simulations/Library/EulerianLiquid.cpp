@@ -37,11 +37,11 @@ void EulerianLiquid::drawSolidVelocity(Renderer& renderer, Real length) const
 // Incoming solid surface must already be inverted
 void EulerianLiquid::setSolidSurface(const LevelSet& solidSurface)
 {
-    assert(solidSurface.isBoundaryNegative());
+    assert(solidSurface.isBackgroundNegative());
 
     EdgeMesh localMesh = solidSurface.buildDCMesh();
     
-    mySolidSurface.setBoundaryNegative();
+    mySolidSurface.setBackgroundNegative();
     mySolidSurface.initFromMesh(localMesh, false);
 }
 
@@ -135,7 +135,7 @@ void EulerianLiquid::advectLiquidSurface(Real dt, IntegrationOrder integrator)
 	auto velocityFunc = [&](Real, const Vec2R& pos) { return myLiquidVelocity.interp(pos);  };
 	EdgeMesh localMesh = myLiquidSurface.buildDCMesh();
 	localMesh.advect(dt, velocityFunc, integrator);
-	assert(localMesh.unitTest());
+	assert(localMesh.unitTestMesh());
 
 	myLiquidSurface.initFromMesh(localMesh, false);
 
@@ -194,8 +194,14 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	std::cout << "  Extrapolate into solids: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();
 
+	VectorGrid<Real> cutCellWeights = computeCutCellWeights(mySolidSurface, true);
+	VectorGrid<Real> ghostFluidWeights = computeGhostFluidWeights(extrapolatedSurface);
+
 	// Initialize and call pressure projection
-	PressureProjection projectDivergence(extrapolatedSurface, mySolidSurface, mySolidVelocity);
+	PressureProjection projectDivergence(extrapolatedSurface,
+											cutCellWeights,
+											ghostFluidWeights,
+											mySolidVelocity);
 
 	projectDivergence.setInitialGuess(myOldPressure);
 	projectDivergence.project(myLiquidVelocity);

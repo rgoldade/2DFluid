@@ -12,7 +12,7 @@
 //
 // Simple transform container to simplify
 // implementation for various transforms
-// in the package
+// between grids, etc.
 //
 ////////////////////////////////////
 

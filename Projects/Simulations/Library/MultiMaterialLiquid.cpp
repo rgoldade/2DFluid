@@ -109,11 +109,11 @@ void MultiMaterialLiquid::advectFluidSurfaces(Real dt, IntegrationOrder integrat
 
 void MultiMaterialLiquid::setSolidSurface(const LevelSet &solidSurface)
 {
-    assert(solidSurface.isBoundaryNegative());
+    assert(solidSurface.isBackgroundNegative());
 
     EdgeMesh localMesh = solidSurface.buildDCMesh();
     
-    mySolidSurface.setBoundaryNegative();
+    mySolidSurface.setBackgroundNegative();
     mySolidSurface.initFromMesh(localMesh, false /* don't resize grid*/);
 }
 

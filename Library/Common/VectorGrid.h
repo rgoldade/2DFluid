@@ -3,9 +3,10 @@
 
 #include "Common.h"
 #include "ScalarGrid.h"
-#include "Transform.h"
 #include "Util.h"
 #include "Vec.h"
+
+class Transform;
 
 ///////////////////////////////////
 //
@@ -33,7 +34,9 @@ class VectorGrid
 
 public:
 
-	VectorGrid() : myXform(1., Vec2R(0.)), mySize(0) { myGrids.resize(2); }
+	VectorGrid() : myXform(1., Vec2R(0.)), myGridSize(0)
+	{}
+
 	VectorGrid(const Transform& xform, const Vec2i& size,
 				SampleType sampleType = SampleType::CENTER, BorderType borderType = BorderType::CLAMP)
 		: VectorGrid(xform, size, T(0), sampleType, borderType)
@@ -42,10 +45,9 @@ public:
 	VectorGrid(const Transform& xform, const Vec2i& size, T val,
 				SampleType sampleType = SampleType::CENTER, BorderType borderType = BorderType::CLAMP)
 		: myXform(xform)
-		, mySize(size)
+		, myGridSize(size)
 		, mySampleType(sampleType)
 	{
-		myGrids.resize(2);
 		switch (sampleType)
 		{
 		case SampleType::CENTER:
@@ -80,13 +82,11 @@ public:
 
 	ScalarGridT& grid(int axis)
 	{
-		assert(axis >= 0 && axis < 2);
 		return myGrids[axis];
 	}
 
 	const ScalarGridT& grid(int axis) const
 	{
-		assert(axis >= 0 && axis < 2);
 		return myGrids[axis];
 	}
 	
@@ -94,7 +94,6 @@ public:
 
 	T& operator()(const Vec2i& coord, int axis)
 	{
-		assert(axis >= 0 && axis < 2);
 		return myGrids[axis](coord);
 	}
 
@@ -102,7 +101,6 @@ public:
 
 	const T& operator()(const Vec2i& coord, int axis) const
 	{
-		assert(axis >= 0 && axis < 2);
 		return myGrids[axis](coord);
 	}
 
@@ -117,7 +115,6 @@ public:
 	T interp(Real x, Real y, int axis) const { return interp(Vec2R(x, y), axis); }
 	T interp(const Vec2R& samplePoint, int axis) const
 	{ 
-		assert(axis >= 0 && axis < 2);
 		return myGrids[axis].interp(samplePoint);
 	}
 
@@ -127,7 +124,6 @@ public:
 	T cubicInterp(Real x, Real y, int axis) const { return cubicInterp(Vec2R(x, y), axis); }
 	T cubicInterp(const Vec2R& samplePoint, int axis) const
 	{
-		assert(axis >= 0 && axis < 2);
 		return myGrids[axis].cubicInterp(samplePoint);
 	}
 
@@ -136,13 +132,11 @@ public:
 	// grids are different depending on the SampleType.
 	Vec2R indexToWorld(const Vec2R& indexPoint, int axis) const
 	{
-		assert(axis >= 0 && axis < 2);
 		return myGrids[axis].indexToWorld(indexPoint);
 	}
 
 	Vec2R worldToIndex(const Vec2R& worldPoint, int axis) const
 	{
-		assert(axis < 2);
 		return myGrids[axis].worldToIndex(worldPoint);
 	}
 
@@ -152,11 +146,10 @@ public:
 
 	Vec2i size(int axis) const
 	{
-		assert(axis >= 0 && axis < 2);
 		return myGrids[axis].size();
 	}
 
-	Vec2i gridSize() const { return mySize; }
+	Vec2i gridSize() const { return myGridSize; }
 	SampleType sampleType() const { return mySampleType; }
 
 	// Rendering methods
@@ -175,11 +168,11 @@ private:
 		return myXform.indexToWorld(indexPos);
 	}
 
-	std::vector<ScalarGridT> myGrids;
+	std::array<ScalarGridT, 2> myGrids;
 
 	Transform myXform;
 
-	Vec2i mySize;
+	Vec2i myGridSize;
 
 	SampleType mySampleType;
 };
@@ -192,7 +185,7 @@ void VectorGrid<T>::drawGrid(Renderer& renderer) const
 
 	for (int axis : {0, 1})
 	{
-		for (int line = 0; line <= mySize[axis]; ++line)
+		for (int line = 0; line <= myGridSize[axis]; ++line)
 		{
 			Vec2R gridStart(0);
 			gridStart[axis] = line;
@@ -201,7 +194,7 @@ void VectorGrid<T>::drawGrid(Renderer& renderer) const
 			Vec2R startPoint = indexToWorld(gridStart);
 			startPoints.push_back(startPoint);
 
-			Vec2R gridEnd(mySize);
+			Vec2R gridEnd(myGridSize);
 			gridEnd[axis] = line;
 
 			Vec2R endPos = indexToWorld(gridEnd);
@@ -237,7 +230,7 @@ void VectorGrid<T>::drawSamplePointVectors(Renderer& renderer, const Vec3f& colo
 	{
 	case SampleType::CENTER:
 		
-		forEachVoxelRange(Vec2i(0), mySize, [&](const Vec2i& cell)
+		forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
 		{
 			Vec2R worldPos = indexToWorld(Vec2R(cell), 0);
 			startPoints.push_back(worldPos);
@@ -262,7 +255,7 @@ void VectorGrid<T>::drawSamplePointVectors(Renderer& renderer, const Vec3f& colo
 
 	case SampleType::STAGGERED:
 
-		forEachVoxelRange(Vec2i(0), mySize, [&](const Vec2i& cell)
+		forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
 		{
 			Vec2R avgWorldPos(0);
 			Vec2R avgVec(0);
@@ -297,7 +290,7 @@ T VectorGrid<T>::maxMagnitude() const
 	{
 	case SampleType::CENTER:
 		
-		forEachVoxelRange(Vec2i(0), mySize, [&](const Vec2i& cell)
+		forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
 		{
 			Real tempMag2 = mag2(Vec<T, 2>(myGrids[0](cell), myGrids[1](cell)));
 				
@@ -309,7 +302,7 @@ T VectorGrid<T>::maxMagnitude() const
 
 	case SampleType::NODE:
 
-		forEachVoxelRange(Vec2i(0), mySize, [&](const Vec2i& node)
+		forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& node)
 		{
 			Real tempMag2 = mag2(Vec<T, 2>(myGrids[0](node), myGrids[1](node)));
 
@@ -321,7 +314,7 @@ T VectorGrid<T>::maxMagnitude() const
 
 	case SampleType::STAGGERED:
 
-		forEachVoxelRange(Vec2i(0), mySize, [&](const Vec2i& cell)
+		forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
 		{
 			Vec2R avgVec(0);
 

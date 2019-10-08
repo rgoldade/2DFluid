@@ -2,7 +2,7 @@
 
 #include "Common.h"
 #include "EdgeMesh.h"
-#include "InitialConditions.h"
+#include "InitialGeometry.h"
 #include "LevelSet.h"
 #include "Renderer.h"
 #include "TestVelocityFields.h"
@@ -49,19 +49,19 @@ void display()
 
 int main(int argc, char** argv)
 {
-	EdgeMesh initialMesh = circleMesh();
+	EdgeMesh initialMesh = InitialGeometry::makeCircleMesh();
 	
-	EdgeMesh testMesh2 = circleMesh(Vec2R(.5), 1., 10);
-	EdgeMesh testMesh3 = circleMesh(Vec2R(.05), .5, 10);
+	EdgeMesh testMesh2 = InitialGeometry::makeCircleMesh(Vec2R(.5), 1., 10);
+	EdgeMesh testMesh3 = InitialGeometry::makeCircleMesh(Vec2R(.05), .5, 10);
 	
-	assert(initialMesh.unitTest());
-	assert(testMesh2.unitTest());
-	assert(testMesh3.unitTest());
+	assert(initialMesh.unitTestMesh());
+	assert(testMesh2.unitTestMesh());
+	assert(testMesh3.unitTestMesh());
 	
 	initialMesh.insertMesh(testMesh2);
 	initialMesh.insertMesh(testMesh3);
 
-	assert(initialMesh.unitTest());
+	assert(initialMesh.unitTestMesh());
 
 	Vec2R minBoundingBox(std::numeric_limits<Real>::max());
 	Vec2R maxBoundingBox(std::numeric_limits<Real>::lowest());

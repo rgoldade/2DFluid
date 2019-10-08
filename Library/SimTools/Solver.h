@@ -177,8 +177,6 @@ private:
 	Vector myRhs, mySolution, myGuess;
 
 	std::vector<Eigen::Triplet<SolverReal>> myMatrix;
-
-	std::vector<unsigned> myRemovedDOFs;
 };
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef LIBRARY_EDGEMESH_H
-#define LIBRARY_EDGEMESH_H
+#ifndef LIBRARY_EDGE_MESH_H
+#define LIBRARY_EDGE_MESH_H
 
 #include "Common.h"
 #include "Integrator.h"
@@ -43,7 +43,7 @@ public:
 		myPoint = point;
 	}
 
-	// Get edge stored at the eidx position in the mEdges list
+	// Get edge stored at the index position in the edges list
 	int edge(int index) const
 	{
 		return myEdges[index];
@@ -63,7 +63,8 @@ public:
 		assert(oldIndex >= 0 && newIndex >= 0);
 		auto result = std::find(myEdges.begin(), myEdges.end(), oldIndex);
 
-		if (result == myEdges.end()) return false;
+		if (result == myEdges.end())
+			return false;
 		else
 			*result = newIndex;
 
@@ -115,7 +116,6 @@ public:
 
 	int vertex(int index) const
 	{
-		assert(index >= 0 && index < 2);
 		return myVertices[index];
 	}
 
@@ -130,7 +130,7 @@ public:
 			return myVertices[0];
 		
 		assert(false);
-		return 0;
+		return -1;
 	}
 
 	void replaceVertex(int oldIndex, int newIndex)
@@ -323,7 +323,7 @@ public:
 		return myVertices[edge.vertex(0)].point() == myVertices[edge.vertex(1)].point();
 	}
 
-	bool unitTest() const;
+	bool unitTestMesh() const;
 
 	void drawMesh(Renderer& renderer,
 		Vec3f edgeColour = Vec3f(0),

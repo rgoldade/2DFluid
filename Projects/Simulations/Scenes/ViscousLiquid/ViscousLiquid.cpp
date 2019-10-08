@@ -3,7 +3,7 @@
 #include "Common.h"
 #include "EdgeMesh.h"
 #include "EulerianLiquid.h"
-#include "InitialConditions.h"
+#include "InitialGeometry.h"
 #include "Integrator.h"
 #include "LevelSet.h"
 #include "Renderer.h"
@@ -80,7 +80,7 @@ void display()
 			}
 
 			LevelSet combinedSolidSurface = LevelSet(xform, gridSize, 10);
-			combinedSolidSurface.setBoundaryNegative();
+			combinedSolidSurface.setBackgroundNegative();
 			combinedSolidSurface.initFromMesh(staticSolidsMesh, false);
 			combinedSolidSurface.unionSurface(movindSolidsSurface);
 
@@ -134,26 +134,26 @@ int main(int argc, char** argv)
 
 	renderer = std::make_unique<Renderer>("Viscous Liquid Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	movingSolidsMesh = circleMesh(center + Vec2R(1.2, 0), .25, 20);
+	movingSolidsMesh = InitialGeometry::makeCircleMesh(center + Vec2R(1.2, 0), .25, 20);
 	
-	staticSolidsMesh = squareMesh(center, Vec2R(2));
+	staticSolidsMesh = InitialGeometry::makeSquareMesh(center, Vec2R(2));
 	staticSolidsMesh.reverse();
-	assert(staticSolidsMesh.unitTest());
+	assert(staticSolidsMesh.unitTestMesh());
 	
-	EdgeMesh beamLiquidMesh = squareMesh(center - Vec2R(.8, 0), Vec2R(1.5, .2));
-	assert(beamLiquidMesh.unitTest());
+	EdgeMesh beamLiquidMesh = InitialGeometry::makeSquareMesh(center - Vec2R(.8, 0), Vec2R(1.5, .2));
+	assert(beamLiquidMesh.unitTestMesh());
 
 	LevelSet beamLiquidSurface = LevelSet(xform, gridSize, 10);
 	beamLiquidSurface.initFromMesh(beamLiquidMesh, false);
 
-	seedLiquidMesh = squareMesh(center + Vec2R(0, .6), Vec2R(.075, .25));
-	assert(seedLiquidMesh.unitTest());
+	seedLiquidMesh = InitialGeometry::makeSquareMesh(center + Vec2R(0, .6), Vec2R(.075, .25));
+	assert(seedLiquidMesh.unitTestMesh());
 
 	seedLiquidSurface = LevelSet(xform, gridSize, 10);
 	seedLiquidSurface.initFromMesh(seedLiquidMesh, false);
 
 	LevelSet solidSurface(xform, gridSize, 10);
-	solidSurface.setBoundaryNegative();
+	solidSurface.setBackgroundNegative();
 	solidSurface.initFromMesh(staticSolidsMesh, false);
 
 	// Set up simulation

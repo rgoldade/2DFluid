@@ -49,7 +49,7 @@ int main(int argc, char** argv)
 
 		testGrid.drawGrid(*renderer);
 		testGrid.drawSamplePoints(*renderer);
-		testGrid.drawSupersampledValues(*renderer, .5, 3, 5);
+		testGrid.drawSuperSampledValues(*renderer, .5, 3, 5);
 	}
 	// Test vector grid. TODO: move to vector grid test.. this is a scalar grid test after all.
 	else if (doVectorTest)

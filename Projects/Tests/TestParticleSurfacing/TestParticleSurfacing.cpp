@@ -3,7 +3,7 @@
 #include "Common.h"
 #include "EdgeMesh.h"
 #include "FluidParticles.h"
-#include "InitialConditions.h"
+#include "InitialGeometry.h"
 #include "LevelSet.h"
 #include "Renderer.h"
 #include "TestVelocityFields.h"
@@ -36,17 +36,17 @@ void keyboard(unsigned char key, int x, int y)
 
 int main(int argc, char** argv)
 {
-	EdgeMesh initialMesh = circleMesh();
+	EdgeMesh initialMesh = InitialGeometry::makeCircleMesh();
 	
-	EdgeMesh tempMesh = circleMesh(Vec2R(.5), 1., 10);
-	assert(tempMesh.unitTest());
+	EdgeMesh tempMesh = InitialGeometry::makeCircleMesh(Vec2R(.5), 1., 10);
+	assert(tempMesh.unitTestMesh());
 	initialMesh.insertMesh(tempMesh);
 
-	tempMesh = circleMesh(Vec2R(.05), .5, 10);
-	assert(tempMesh.unitTest());
+	tempMesh = InitialGeometry::makeCircleMesh(Vec2R(.05), .5, 10);
+	assert(tempMesh.unitTestMesh());
 	initialMesh.insertMesh(tempMesh);
 
-	assert(initialMesh.unitTest());
+	assert(initialMesh.unitTestMesh());
 
 	Real dx = .125;
 	Vec2R topRightCorner(2.25);

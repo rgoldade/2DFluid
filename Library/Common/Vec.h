@@ -59,13 +59,11 @@ struct Vec
 
 	T &operator[](unsigned index)
 	{
-		assert(index < N);
 		return myVec[index];
 	}
 
 	const T &operator[](unsigned index) const
 	{
-		assert(index < N);
 		return myVec[index];
 	}
 

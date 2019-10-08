@@ -1,10 +1,8 @@
-#include <iostream>
-
 #include "ViscositySolver.h"
 
 #include "ComputeWeights.h"
+#include "LevelSet.h"
 #include "Solver.h"
-#include "VectorGrid.h"
 
 void ViscositySolver(const Real dt,
 	const LevelSet& surface,

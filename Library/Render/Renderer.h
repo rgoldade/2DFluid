@@ -48,7 +48,7 @@ public:
 	
 	void drawPrimitives() const;
 
-	void printImage(const std::string &filename) const;
+	void printImage(const std::string& filename) const;
 	void clear();
 	void run();
 

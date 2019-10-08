@@ -31,7 +31,7 @@ public:
 		: myField(field)
 		{}
 
-	void extrapolate(const ScalarGrid<MarkedCells>& mask, int bandwidth = std::numeric_limits<int>::max());
+	void extrapolate(const ScalarGrid<MarkedCells>& mask, int bandwidth = mask.size()[0] * mask.size()[1]);
 
 private:
 	Field& myField;
@@ -55,13 +55,13 @@ void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, i
 		if (mask(cell) == MarkedCells::FINISHED) markedCells(cell) = MarkedCells::FINISHED;
 	});
 
-	using Voxel = std::pair<Vec2i, int>;
+	// TODO: make all loops parallel
 
-	// Initialize flood fill queue
-	std::queue<Voxel> markerQ;
+	// Build initial list of cells to process
+	std::vector<Vec2i> toVisitCellList;
 
 	// Load up neighbouring faces and push into queue
-	forEachVoxelRange(Vec2i(0), myField.size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i(0), markedCells.size(), [&](const Vec2i& cell)
 	{
 		if (markedCells(cell) == MarkedCells::FINISHED)
 		{
@@ -71,81 +71,66 @@ void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, i
 					Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 					// Boundary check
-					if (direction == 0 && adjacentCell[axis] < 0)
-						continue;
-					else if (direction == 1 && adjacentCell[axis] >= markedCells.size()[axis])
+					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= markedCells.size()[axis])
 						continue;
 
 					if (markedCells(adjacentCell) == MarkedCells::UNVISITED)
 					{
-						markerQ.push(Voxel(adjacentCell, 1));
+						toVisitCellList.push_back(adjacentCell);
 						markedCells(adjacentCell) = MarkedCells::VISITED;
 					}
 				}
 		}
 	});
 
-	while (!markerQ.empty())
+	std::vector<Vec2i> newCellList;
+	for (int layer = 0; layer < bandwidth; ++layer)
 	{
-		// Store reference to updated faces to set as finished after
-		// this layer is completed
-		std::queue<Voxel> tempQ = markerQ;
-		// Store references to next layer of faces
-		std::queue<Voxel> newLayer;
-
-		while (!markerQ.empty())
+		if (!toVisitCellList.empty())
 		{
-			Voxel voxel = markerQ.front();
-			Vec2i cell = voxel.first;
-			markerQ.pop();
+			newCellList.clear();
 
-			assert(markedCells(cell) == MarkedCells::VISITED);
-
-			Real value = 0.;
-			Real count = 0.;
-
-			if (voxel.second < bandwidth)
+			for (const auto& cell : toVisitCellList)
 			{
+				assert(markedCells(cell) == MarkedCells::VISITED);
+
+				Real accumulatedValue = 0.;
+				Real accumulatedCells = 0.;
+
 				for (int axis : {0, 1})
 					for (int direction : {0, 1})
 					{
 						Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 						// Boundary check
-						if (direction == 0 && adjacentCell[axis] < 0)
-							continue;
-						else if (direction == 1 && adjacentCell[axis] >= markedCells.size()[axis])
+						if (adjacentCell[axis] < 0 || adjacentCell[axis] >= markedCells.size()[axis])
 							continue;
 
 						if (markedCells(adjacentCell) == MarkedCells::FINISHED)
 						{
-							value += myField(adjacentCell);
-							++count;
+							accumulatedValue += myField(adjacentCell);
+							++accumulatedCells;
 						}
 						else if (markedCells(adjacentCell) == MarkedCells::UNVISITED)
 						{
-							newLayer.push(Voxel(adjacentCell, voxel.second + 1));
+							newCellList.push_back(adjacentCell);
 							markedCells(adjacentCell) = MarkedCells::VISITED;
 						}
 					}
 
-				assert(count > 0);
-				myField(cell) = value / count;
+				assert(accumulatedCells > 0);
+				myField(cell) = accumulatedValue / accumulatedCells;
 			}
-		}
 
-		//Set update cells to finished
-		while (!tempQ.empty())
-		{
-			Voxel voxel = tempQ.front();
-			Vec2i localCell = voxel.first;
-			tempQ.pop();
-			assert(markedCells(localCell) == MarkedCells::VISITED);
-			markedCells(localCell) = MarkedCells::FINISHED;
-		}
+			//Set update cells to finished
+			for (const auto& cell : toVisitCellList)
+			{
+				assert(markedCells(cell) == MarkedCells::VISITED);
+				markedCells(cell) = MarkedCells::FINISHED;
+			}
 
-		//Copy new queue
-		std::swap(markerQ, newLayer);
+			std::swap(toVisitCellList, newCellList);
+		}
 	}
 }
 
