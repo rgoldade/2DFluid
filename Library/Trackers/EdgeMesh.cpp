@@ -2,11 +2,63 @@
 
 #include "EdgeMesh.h"
 
+void EdgeMesh::reinitialize(const std::vector<Vec2i>& edges, const std::vector<Vec2R>& vertices)
+{
+	myEdges.clear();
+	myEdges.reserve(edges.size());
+	for (const auto& edge : edges) myEdges.push_back(Edge(edge));
+
+	myVertices.clear();
+	myVertices.reserve(vertices.size());
+	for (const auto& vert : vertices) myVertices.push_back(Vertex(vert));
+
+	// Update vertices to store adjacent edges in their edge lists
+	for (int edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
+	{
+		int vertIndex = myEdges[edgeIndex].vertex(0);
+		myVertices[vertIndex].addEdge(edgeIndex);
+
+		vertIndex = myEdges[edgeIndex].vertex(1);
+		myVertices[vertIndex].addEdge(edgeIndex);
+	}
+}
+
+void EdgeMesh::insertMesh(const EdgeMesh& mesh)
+{
+	int edgeCount = myEdges.size();
+	int vertexCount = myVertices.size();
+
+	myVertices.insert(myVertices.end(), mesh.myVertices.begin(), mesh.myVertices.end());
+	myEdges.insert(myEdges.end(), mesh.myEdges.begin(), mesh.myEdges.end());
+
+	// Update vertices to new edges
+	for (int vertexIndex = vertexCount; vertexIndex < myVertices.size(); ++vertexIndex)
+	{
+		for (int neighbourEdgeIndex = 0; neighbourEdgeIndex < myVertices[vertexIndex].valence(); ++neighbourEdgeIndex)
+		{
+			int edgeIndex = myVertices[vertexIndex].edge(neighbourEdgeIndex);
+			assert(edgeIndex >= 0 && edgeIndex < mesh.edgeListSize());
+
+			myVertices[vertexIndex].replaceEdge(edgeIndex, edgeIndex + edgeCount);
+		}
+	}
+	for (int edgeIndex = edgeCount; edgeIndex < myEdges.size(); ++edgeIndex)
+	{
+		int vertexIndex = myEdges[edgeIndex].vertex(0);
+		assert(vertexIndex >= 0 && vertexIndex < mesh.vertexListSize());
+		myEdges[edgeIndex].replaceVertex(vertexIndex, vertexIndex + vertexCount);
+
+		vertexIndex = myEdges[edgeIndex].vertex(1);
+		assert(vertexIndex >= 0 && vertexIndex < mesh.vertexListSize());
+		myEdges[edgeIndex].replaceVertex(vertexIndex, vertexIndex + vertexCount);
+	}
+}
+
 void EdgeMesh::drawMesh(Renderer& renderer,
 	Vec3f edgeColour,
 	Real edgeWidth,
-	bool renderEdgeNormals,
-	bool renderVertices,
+	bool doRenderEdgeNormals,
+	bool doRenderVertices,
 	Vec3f vertexColour)
 {
 	std::vector<Vec2R> startPoints;
@@ -23,7 +75,7 @@ void EdgeMesh::drawMesh(Renderer& renderer,
 
 	renderer.addLines(startPoints, endPoints, edgeColour, edgeWidth);
 	
-	if (renderEdgeNormals)
+	if (doRenderEdgeNormals)
 	{
 		std::vector<Vec2R> startNormals;
 		std::vector<Vec2R> endNormals;
@@ -47,7 +99,7 @@ void EdgeMesh::drawMesh(Renderer& renderer,
 		renderer.addLines(startNormals, endNormals, Vec3f(0.));
 	}
 
-	if (renderVertices)
+	if (doRenderVertices)
 	{
 		std::vector<Vec2R> vertexPoints;
 

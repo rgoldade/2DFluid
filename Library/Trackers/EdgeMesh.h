@@ -189,60 +189,12 @@ public:
 		}
 	}
 
-	void reinitialize(const std::vector<Vec2i>& edges, const std::vector<Vec2R>& verts)
-	{
-		myEdges.clear();
-		myEdges.reserve(edges.size());
-		for (const auto& edge : edges) myEdges.push_back(Edge(edge));
-
-		myVertices.clear();
-		myVertices.reserve(verts.size());
-		for (const auto& vert : verts) myVertices.push_back(Vertex(vert));
-
-		// Update vertices to store adjacent edges in their edge lists
-		for (int edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
-		{
-			int vertIndex = myEdges[edgeIndex].vertex(0);
-			myVertices[vertIndex].addEdge(edgeIndex);
-
-			vertIndex = myEdges[edgeIndex].vertex(1);
-			myVertices[vertIndex].addEdge(edgeIndex);
-		}
-	}
+	void reinitialize(const std::vector<Vec2i>& edges, const std::vector<Vec2R>& vertices);
 	
 	// Add more mesh pieces to an already existing mesh (although the existing mesh could
 	// empty). The incoming mesh edges point to vertices (and vice versa) from 0 to edge count - 1 locally. They need
 	// to be offset by the edge/vertex size in the existing mesh.
-	void insertMesh(const EdgeMesh& mesh)
-	{
-		int edgeCount = myEdges.size();
-		int vertexCount = myVertices.size();
-
-		myVertices.insert(myVertices.end(), mesh.myVertices.begin(), mesh.myVertices.end());
-		myEdges.insert(myEdges.end(), mesh.myEdges.begin(), mesh.myEdges.end());
-
-		// Update vertices to new edges
-		for (int vertexIndex = vertexCount; vertexIndex < myVertices.size(); ++vertexIndex)
-		{
-			for (int neighbourEdgeIndex = 0; neighbourEdgeIndex < myVertices[vertexIndex].valence(); ++neighbourEdgeIndex)
-			{
-				int edgeIndex = myVertices[vertexIndex].edge(neighbourEdgeIndex);
-				assert(edgeIndex >= 0 && edgeIndex < mesh.edgeListSize());
-
-				myVertices[vertexIndex].replaceEdge(edgeIndex, edgeIndex + edgeCount);
-			}
-		}
-		for (int edgeIndex = edgeCount; edgeIndex < myEdges.size(); ++edgeIndex)
-		{
-			int vertexIndex = myEdges[edgeIndex].vertex(0);
-			assert(vertexIndex >= 0 && vertexIndex < mesh.vertexListSize());
-			myEdges[edgeIndex].replaceVertex(vertexIndex, vertexIndex + vertexCount);
-
-			vertexIndex = myEdges[edgeIndex].vertex(1);
-			assert(vertexIndex >= 0 && vertexIndex < mesh.vertexListSize());
-			myEdges[edgeIndex].replaceVertex(vertexIndex, vertexIndex + vertexCount);
-		}
-	}
+	void insertMesh(const EdgeMesh& mesh);
 
 	const std::vector<Edge>& edges() const
 	{
@@ -329,8 +281,8 @@ public:
 		Vec3f edgeColour = Vec3f(0),
 		Real edgeWidth = 1.,
 		bool doRenderEdgeNormals = false,
-		bool doRenderVerts = false,
-		Vec3f vertColour = Vec3f(0));
+		bool doRenderVertices = false,
+		Vec3f vertexColour = Vec3f(0));
 
 	template<typename VelocityField>
 	void advect(Real dt, const VelocityField& velocity, const IntegrationOrder order);
