@@ -259,6 +259,3 @@ ModelManifest.xml
 /2dFluidSimulation/util/QuadTreeIndex.cpp
 /2dFluidSimulation/tracker/FlipParticles.h
 /2dFluidSimulation/tracker/FlipParticles.cpp
-
-# Mac
-.DS_Store
