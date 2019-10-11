@@ -23,115 +23,110 @@
 //
 ////////////////////////////////////
 
-template<typename Field>
-class ExtrapolateField
-{
+template <typename Field> class ExtrapolateField {
 public:
-	ExtrapolateField(Field& field)
-		: myField(field)
-		{}
+  ExtrapolateField(Field &field) : myField(field) {}
 
-	void extrapolate(const ScalarGrid<MarkedCells>& mask, int bandwidth = mask.size()[0] * mask.size()[1]);
+  void extrapolate(const ScalarGrid<MarkedCells> &mask);
+  void extrapolate(const ScalarGrid<MarkedCells> &mask, int bandwidth);
 
 private:
-	Field& myField;
+  Field &myField;
 };
 
-template<typename Field>
-void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells>& mask, int bandwidth)
-{
-	assert(bandwidth >= 0);
+template <typename Field>
+void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells> &mask) {
+  int bandwidth{mask.size()[0] * mask.size()[1]};
+  extrapolate(mask, bandwidth);
+}
 
-	// Run a BFS flood outwards from masked cells and average the values of the neighbouring "finished" cells
-	// It could be made more accurate if we used the value of the "closer" cell (smaller SDF value)
-	// It could be made more efficient if we truncated the BFS after a large enough distance (max SDF value)
-	assert(myField.isGridMatched(mask));
+template <typename Field>
+void ExtrapolateField<Field>::extrapolate(const ScalarGrid<MarkedCells> &mask,
+                                          int bandwidth) {
+  assert(bandwidth >= 0);
 
-	// Make local copy of mask
-	UniformGrid<MarkedCells> markedCells(myField.size(), MarkedCells::UNVISITED);
+  // Run a BFS flood outwards from masked cells and average the values of the
+  // neighbouring "finished" cells It could be made more accurate if we used the
+  // value of the "closer" cell (smaller SDF value) It could be made more
+  // efficient if we truncated the BFS after a large enough distance (max SDF
+  // value)
+  assert(myField.isGridMatched(mask));
 
-	forEachVoxelRange(Vec2i(0), myField.size(), [&](const Vec2i& cell)
-	{
-		if (mask(cell) == MarkedCells::FINISHED) markedCells(cell) = MarkedCells::FINISHED;
-	});
+  // Make local copy of mask
+  UniformGrid<MarkedCells> markedCells(myField.size(), MarkedCells::UNVISITED);
 
-	// TODO: make all loops parallel
+  forEachVoxelRange(Vec2i(0), myField.size(), [&](const Vec2i &cell) {
+    if (mask(cell) == MarkedCells::FINISHED)
+      markedCells(cell) = MarkedCells::FINISHED;
+  });
 
-	// Build initial list of cells to process
-	std::vector<Vec2i> toVisitCellList;
+  // TODO: make all loops parallel
 
-	// Load up neighbouring faces and push into queue
-	forEachVoxelRange(Vec2i(0), markedCells.size(), [&](const Vec2i& cell)
-	{
-		if (markedCells(cell) == MarkedCells::FINISHED)
-		{
-			for (int axis : {0, 1})
-				for (int direction : {0, 1})
-				{
-					Vec2i adjacentCell = cellToCell(cell, axis, direction);
+  // Build initial list of cells to process
+  std::vector<Vec2i> toVisitCellList;
 
-					// Boundary check
-					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= markedCells.size()[axis])
-						continue;
+  // Load up neighbouring faces and push into queue
+  forEachVoxelRange(Vec2i(0), markedCells.size(), [&](const Vec2i &cell) {
+    if (markedCells(cell) == MarkedCells::FINISHED) {
+      for (int axis : {0, 1})
+        for (int direction : {0, 1}) {
+          Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
-					if (markedCells(adjacentCell) == MarkedCells::UNVISITED)
-					{
-						toVisitCellList.push_back(adjacentCell);
-						markedCells(adjacentCell) = MarkedCells::VISITED;
-					}
-				}
-		}
-	});
+          // Boundary check
+          if (adjacentCell[axis] < 0 ||
+              adjacentCell[axis] >= markedCells.size()[axis])
+            continue;
 
-	std::vector<Vec2i> newCellList;
-	for (int layer = 0; layer < bandwidth; ++layer)
-	{
-		if (!toVisitCellList.empty())
-		{
-			newCellList.clear();
+          if (markedCells(adjacentCell) == MarkedCells::UNVISITED) {
+            toVisitCellList.push_back(adjacentCell);
+            markedCells(adjacentCell) = MarkedCells::VISITED;
+          }
+        }
+    }
+  });
 
-			for (const auto& cell : toVisitCellList)
-			{
-				assert(markedCells(cell) == MarkedCells::VISITED);
+  std::vector<Vec2i> newCellList;
+  for (int layer = 0; layer < bandwidth; ++layer) {
+    if (!toVisitCellList.empty()) {
+      newCellList.clear();
 
-				Real accumulatedValue = 0.;
-				Real accumulatedCells = 0.;
+      for (const auto &cell : toVisitCellList) {
+        assert(markedCells(cell) == MarkedCells::VISITED);
 
-				for (int axis : {0, 1})
-					for (int direction : {0, 1})
-					{
-						Vec2i adjacentCell = cellToCell(cell, axis, direction);
+        Real accumulatedValue = 0.;
+        Real accumulatedCells = 0.;
 
-						// Boundary check
-						if (adjacentCell[axis] < 0 || adjacentCell[axis] >= markedCells.size()[axis])
-							continue;
+        for (int axis : {0, 1})
+          for (int direction : {0, 1}) {
+            Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
-						if (markedCells(adjacentCell) == MarkedCells::FINISHED)
-						{
-							accumulatedValue += myField(adjacentCell);
-							++accumulatedCells;
-						}
-						else if (markedCells(adjacentCell) == MarkedCells::UNVISITED)
-						{
-							newCellList.push_back(adjacentCell);
-							markedCells(adjacentCell) = MarkedCells::VISITED;
-						}
-					}
+            // Boundary check
+            if (adjacentCell[axis] < 0 ||
+                adjacentCell[axis] >= markedCells.size()[axis])
+              continue;
 
-				assert(accumulatedCells > 0);
-				myField(cell) = accumulatedValue / accumulatedCells;
-			}
+            if (markedCells(adjacentCell) == MarkedCells::FINISHED) {
+              accumulatedValue += myField(adjacentCell);
+              ++accumulatedCells;
+            } else if (markedCells(adjacentCell) == MarkedCells::UNVISITED) {
+              newCellList.push_back(adjacentCell);
+              markedCells(adjacentCell) = MarkedCells::VISITED;
+            }
+          }
 
-			//Set update cells to finished
-			for (const auto& cell : toVisitCellList)
-			{
-				assert(markedCells(cell) == MarkedCells::VISITED);
-				markedCells(cell) = MarkedCells::FINISHED;
-			}
+        assert(accumulatedCells > 0);
+        myField(cell) = accumulatedValue / accumulatedCells;
+      }
 
-			std::swap(toVisitCellList, newCellList);
-		}
-	}
+      // Set update cells to finished
+      for (const auto &cell : toVisitCellList) {
+        assert(markedCells(cell) == MarkedCells::VISITED);
+        markedCells(cell) = MarkedCells::FINISHED;
+      }
+
+      std::swap(toVisitCellList, newCellList);
+    }
+  }
 }
 
 #endif
