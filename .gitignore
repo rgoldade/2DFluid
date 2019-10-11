@@ -253,9 +253,6 @@ ModelManifest.xml
 # Paket dependency manager
 .paket/paket.exe
 
-# FAKE - F# Make
-.fake/
-/2dFluidSimulation/util/QuadTreeIndex.h
-/2dFluidSimulation/util/QuadTreeIndex.cpp
-/2dFluidSimulation/tracker/FlipParticles.h
-/2dFluidSimulation/tracker/FlipParticles.cpp
+
+# Mac
+.DS_Store
