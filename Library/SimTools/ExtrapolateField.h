@@ -31,7 +31,7 @@ public:
 		: myField(field)
 		{}
 
-	void extrapolate(const ScalarGrid<MarkedCells>& mask, int bandwidth = mask.size()[0] * mask.size()[1]);
+	void extrapolate(const ScalarGrid<MarkedCells>& mask, int bandwidth);
 
 private:
 	Field& myField;
