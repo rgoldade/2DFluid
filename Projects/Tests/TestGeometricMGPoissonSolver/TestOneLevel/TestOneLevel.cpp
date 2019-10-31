@@ -5,9 +5,9 @@
 #include "Eigen/Sparse"
 
 #include "Common.h"
-#include "GeometricMGOperations.h"
-#include "GeometricMGPoissonSolver.h"
-#include "InitialMGTestDomains.h"
+#include "GeometricMultigridOperators.h"
+#include "GeometricMultigridPoissonSolver.h"
+#include "InitialMultigridTestDomains.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
@@ -15,98 +15,134 @@
 
 std::unique_ptr<Renderer> renderer;
 
-static const Vec2i resolution(128);
-
-static const bool useComplexDomain = true;
-static const bool useSolidSphere = true;
-static const Real sphereRadius = .125;
-
-std::default_random_engine generator;
-std::uniform_real_distribution<Real> distribution(0, 1);
+static constexpr int gridSize = 512;
+static constexpr bool useComplexDomain = true;
+static constexpr bool useSolidSphere = true;
 
 int main(int argc, char** argv)
 {
-	using namespace GeometricMGOperations;
+	using namespace GeometricMultigridOperators;
+
+	using StoreReal = double;
+	using SolveReal = double;
 
 	UniformGrid<CellLabels> domainCellLabels;
-	UniformGrid<Real> rhsGrid(resolution, 0);
+	VectorGrid<StoreReal> boundaryWeights;
 
-	// Complex domain set up
-	if (useComplexDomain)
-		domainCellLabels = buildComplexDomain(resolution,
-												useSolidSphere,
-												sphereRadius);
-	// Simple domain set up
-	else
-		domainCellLabels = buildSimpleDomain(resolution,
-												1 /*dirichlet band*/);
-
-	// Initialize grid with sin function
-	Real dx = 1. / resolution[0];
-
-	UniformGrid<Real> initialGuess(resolution, 0);
-	forEachVoxelRange(Vec2i(0), resolution, [&](const Vec2i &cell)
+	int mgLevels;
 	{
-		if (domainCellLabels(cell) == CellLabels::INTERIOR)
+		UniformGrid<CellLabels> baseDomainCellLabels;
+		VectorGrid<StoreReal> baseBoundaryWeights;
+
+		// Complex domain set up
+		if (useComplexDomain)
+			buildComplexDomain(baseDomainCellLabels,
+								baseBoundaryWeights,
+								gridSize,
+								useSolidSphere);
+		// Simple domain set up
+		else
+			buildSimpleDomain(baseDomainCellLabels,
+								baseBoundaryWeights,
+								gridSize,
+								1 /*dirichlet band*/);
+
+		// Build expanded domain
+		std::pair<Vec2i, int> mgSettings = buildExpandedDomain(domainCellLabels, boundaryWeights, baseDomainCellLabels, baseBoundaryWeights);
+
+		mgLevels = mgSettings.second;
+	}
+
+	SolveReal dx = boundaryWeights.dx();
+
+	UniformGrid<StoreReal> rhsGrid(domainCellLabels.size(), 0);
+
+	UniformGrid<StoreReal> solutionGrid(domainCellLabels.size(), 0);
+
+	int totalVoxels = domainCellLabels.size()[0] * domainCellLabels.size()[1];
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	{
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
-			Vec2R point = dx * Vec2R(cell);
-			initialGuess(cell) = std::sin(2 * Util::PI * point[0]) * std::sin(2 * Util::PI * point[1]) +
-									std::sin(4 * Util::PI * point[0]) * std::sin(4 * Util::PI * point[1]);
+			Vec2i cell = domainCellLabels.unflatten(flatIndex);
+
+			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+			{
+				Vec2R point = dx * Vec2R(cell);
+				solutionGrid(cell) = 4. * (std::sin(2 * Util::PI * point[0]) * std::sin(2 * Util::PI * point[1]) +
+										std::sin(4 * Util::PI * point[0]) * std::sin(4 * Util::PI * point[1]));
+			}
 		}
 	});
 
-	Transform xform(dx, Vec2R(0));
-	VectorGrid<Real> dummyWeights(xform, resolution, 0, VectorGridSettings::SampleType::STAGGERED);
-
-	for (int axis : {0, 1})
+	auto l1Norm = [&](const UniformGrid<StoreReal> &grid)
 	{
-		forEachVoxelRange(Vec2i(0), dummyWeights.size(axis), [&](const Vec2i& face)
+		assert(grid.size() == domainCellLabels.size());
+
+		using ParallelReal = tbb::enumerable_thread_specific<SolveReal>;
+		ParallelReal parallelAccumulatedValue(0);
+		tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			bool isInterior = false;
-			bool isExterior = false;
-			for (int direction : {0, 1})
+			auto &localAccumulatedValue = parallelAccumulatedValue.local();
+
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				Vec2i cell = faceToCell(face, axis, direction);
+				Vec2i cell = domainCellLabels.unflatten(flatIndex);
 
-				if (cell[axis] < 0 || cell[axis] >= domainCellLabels.size()[axis])
-					continue;
-
-				if (domainCellLabels(cell) == CellLabels::INTERIOR)
-					isInterior = true;
-				else if (domainCellLabels(cell) == CellLabels::EXTERIOR)
-					isExterior = true;
+				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+					domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+				{
+					localAccumulatedValue += fabs(grid(cell));
+				}
 			}
-
-			if (isInterior && !isExterior)
-				dummyWeights(face, axis) = 1;
 		});
-	}
+
+		SolveReal accumulatedValue = 0;
+		parallelAccumulatedValue.combine_each([&](const SolveReal localAccumulatedValue)
+		{
+			accumulatedValue += localAccumulatedValue;
+		});
+
+		return accumulatedValue;
+	};
 
 	// Print initial guess
-	initialGuess.printAsOBJ("initialGuess");
+	solutionGrid.printAsOBJ("initialGuess");
+
+	std::cout << "L-1 initial: " << l1Norm(solutionGrid) << std::endl;
 
 	// Pre-build multigrid preconditioner
-	GeometricMGPoissonSolver MGPreconditioner(domainCellLabels, 2, dx);
-	MGPreconditioner.setGradientWeights(dummyWeights);
+	GeometricMultigridPoissonSolver mgSolver(domainCellLabels, boundaryWeights, mgLevels, dx);
+	
+	for (int iteration = 0; iteration < 50; ++iteration)
+	{
+		mgSolver.applyMGVCycle(solutionGrid, rhsGrid, true /* use initial guess */);
 
-	MGPreconditioner.applyMGVCycle(initialGuess, rhsGrid, true);
+		std::cout << "L-1 v-cycle " << iteration << ": " << l1Norm(solutionGrid) << std::endl;
 
-	// Print corrected solution after one v-cycle
-	initialGuess.printAsOBJ("solutionGrid");
+		// Print corrected solution after one v-cycle
+		//solutionGrid.printAsOBJ("solutionGrid" + std::to_string(iteration));
+	}
 
 	// Print domain labels to make sure they are set up correctly
 	int pixelHeight = 1080;
 	int pixelWidth = pixelHeight;
-	renderer = std::make_unique<Renderer>("One Level MG V-cycle Test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
-	
-	ScalarGrid<Real> tempGrid(xform, resolution);
+	renderer = std::make_unique<Renderer>("One level correction test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
 
-	forEachVoxelRange(Vec2i(0), resolution, [&](const Vec2i &cell)
+	ScalarGrid<Real> tempGrid(Transform(dx, Vec2R(0)), domainCellLabels.size());
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.size()[0] * tempGrid.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
-		tempGrid(cell) = Real(domainCellLabels(cell));
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = tempGrid.unflatten(flatIndex);
+
+			tempGrid(cell) = Real(domainCellLabels(cell));
+		}
 	});
 
-	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR), Real(CellLabels::DIRICHLET));
+	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR_CELL), Real(CellLabels::BOUNDARY_CELL));
 
 	renderer->run();
 }

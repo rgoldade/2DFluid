@@ -3,10 +3,9 @@
 
 #include "Common.h"
 #include "ScalarGrid.h"
+#include "Transform.h"
 #include "Util.h"
 #include "Vec.h"
-
-class Transform;
 
 ///////////////////////////////////
 //
@@ -156,7 +155,7 @@ public:
 	void drawGrid(Renderer& renderer) const;
 	void drawSamplePoints(Renderer& renderer, const Vec3f& colour0 = Vec3f(1,0,0),
 								const Vec3f& colour1 = Vec3f(0, 0, 1), const Vec2R& sizes = Vec2R(1.)) const;
-	void drawSupersampledValues(Renderer& renderer, Real radius = .5, int samples = 5, Real sampleSize = 1.) const;
+	void drawSuperSampledValues(Renderer& renderer, Real radius = .5, int samples = 5, Real sampleSize = 1.) const;
 	void drawSamplePointVectors(Renderer& renderer, const Vec3f& colour = Vec3f(0,0,1), Real length = .25) const;
 
 private:
@@ -214,10 +213,10 @@ void VectorGrid<T>::drawSamplePoints(Renderer& renderer, const Vec3f& colour0,
 }
 
 template<typename T>
-void VectorGrid<T>::drawSupersampledValues(Renderer& renderer, Real radius, int samples, Real sampleSize) const
+void VectorGrid<T>::drawSuperSampledValues(Renderer& renderer, Real radius, int samples, Real sampleSize) const
 {
-	myGrids[0].drawSupersampledValues(renderer, radius, samples, sampleSize);
-	myGrids[1].drawSupersampledValues(renderer, radius, samples, sampleSize);
+	myGrids[0].drawSuperSampledValues(renderer, radius, samples, sampleSize);
+	myGrids[1].drawSuperSampledValues(renderer, radius, samples, sampleSize);
 }
 
 template<typename T>

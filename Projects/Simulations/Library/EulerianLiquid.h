@@ -96,7 +96,7 @@ private:
 	Transform myXform;
 
 	bool myDoSolveViscosity;
-	Real mySurfaceTensionScale, myCFL;
+	Real myCFL;
 
 	ScalarGrid<Real> myOldPressure;
 };

@@ -1,7 +1,9 @@
 #include "GeometricPressureProjection.h"
 
-#include "GeometricCGPoissonSolver.h"
-#include "GeometricMGPoissonSolver.h"
+#include "tbb/tbb.h"
+
+#include "GeometricConjugateGradientSolver.h"
+#include "GeometricMultigridPoissonSolver.h"
 
 void GeometricPressureProjection::drawPressure(Renderer& renderer) const
 {
@@ -11,144 +13,186 @@ void GeometricPressureProjection::drawPressure(Renderer& renderer) const
 void GeometricPressureProjection::project(VectorGrid<Real>& velocity,
 											const bool useMGPreconditioner)
 {
+	using GeometricMultigridOperators::CellLabels;
+
 	// For efficiency sake, this should only take in velocity on a staggered grid
-		// that matches the center sampled liquid and solid surfaces.
-	assert(velocity.size(0)[0] - 1 == mySurface.size()[0] &&
+	// that matches the center sampled liquid surface.
+	assert(velocity.sampleType() == VectorGridSettings::SampleType::STAGGERED &&
+			velocity.size(0)[0] - 1 == mySurface.size()[0] &&
 			velocity.size(0)[1] == mySurface.size()[1] &&
 			velocity.size(1)[0] == mySurface.size()[0] &&
 			velocity.size(1)[1] - 1 == mySurface.size()[1]);
 
+	assert(velocity.isGridMatched(myCutCellWeights));
+
 	bool hasDirichlet = false;
 
+	UniformGrid<CellLabels> baseDomainCellLabels(mySurface.size(), CellLabels::EXTERIOR_CELL);
 	// Build domain labels
-	forEachVoxelRange(Vec2i(0), mySurface.size(), [&](const Vec2i& cell)
+	tbb::parallel_for(tbb::blocked_range<int>(0, mySurface.size()[0] * mySurface.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
-		bool isInsideLiquid = mySurface(cell) <= 0;
-		bool isInsideSolid = true;
-		for (int axis : { 0, 1 })
-			for (int direction : {0, 1})
-			{
-				Vec2i face = cellToFace(cell, axis, direction);
-
-				if (myCutCellWeights(face, axis) > 0)
-					isInsideSolid = false;
-			}
-
-		if (isInsideSolid)
-			myDomainCellLabels(cell) = GeometricMGOperations::CellLabels::EXTERIOR;
-		else if (isInsideLiquid)
-			myDomainCellLabels(cell) = GeometricMGOperations::CellLabels::INTERIOR;
-		else
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
-			myDomainCellLabels(cell) = GeometricMGOperations::CellLabels::DIRICHLET;
-			hasDirichlet = true;
-		}
-	});
+			Vec2i cell = mySurface.unflatten(flatIndex);
 
-	// Build RHS
-	UniformGrid<Real> rhsGrid(mySurface.size(), 0);
-	
-	forEachVoxelRange(Vec2i(0), mySurface.size(), [&](const Vec2i& cell)
-	{
-		if (myDomainCellLabels(cell) == GeometricMGOperations::CellLabels::INTERIOR)
-		{
-			// Build RHS divergence
-			double divergence = 0;
-			for (int axis : {0, 1})
+			bool isInsideLiquid = mySurface(cell) <= 0;
+			bool isInsideSolid = true;
+			for (int axis : { 0, 1 })
 				for (int direction : {0, 1})
 				{
 					Vec2i face = cellToFace(cell, axis, direction);
 
-					Real weight = myCutCellWeights(face, axis);
-
-					double sign = (direction == 0) ? 1 : -1;
-
-					if (weight > 0)
-						divergence += sign * velocity(face, axis) * weight;
-					if (weight < 1.)
-						divergence += sign * mySolidVelocity(face, axis) * (1. - weight);
+					if (myCutCellWeights(face, axis) > 0)
+						isInsideSolid = false;
 				}
 
-			rhsGrid(cell) = divergence / mySurface.dx();
+			if (isInsideSolid)
+				baseDomainCellLabels(cell) = CellLabels::EXTERIOR_CELL;
+			else if (isInsideLiquid)
+				baseDomainCellLabels(cell) = CellLabels::INTERIOR_CELL;
+			else
+			{
+				baseDomainCellLabels(cell) = CellLabels::DIRICHLET_CELL;
+				hasDirichlet = true;
+			}
+		}
+	});
+
+	// Build RHS
+	UniformGrid<StoreReal> rhsGrid(mySurface.size(), 0);
+	tbb::parallel_for(tbb::blocked_range<int>(0, mySurface.size()[0] * mySurface.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	{
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = baseDomainCellLabels.unflatten(flatIndex);
+
+			if (baseDomainCellLabels(cell) == CellLabels::INTERIOR_CELL)
+			{
+				// Build RHS divergence
+				SolveReal divergence = 0;
+				for (int axis : {0, 1})
+					for (int direction : {0, 1})
+					{
+						Vec2i face = cellToFace(cell, axis, direction);
+
+						SolveReal weight = myCutCellWeights(face, axis);
+
+						SolveReal sign = (direction == 0) ? 1 : -1;
+
+						if (weight > 0)
+							divergence += sign * velocity(face, axis) * weight;
+						if (weight < 1.)
+							divergence += sign * (1. - weight) * mySolidVelocity(face, axis);
+					}
+
+				rhsGrid(cell) = divergence;
+			}
 		}
 	});
 
 	// Set a single interior cell to dirichlet and remove the average divergence
 	if (!hasDirichlet)
 	{
-		Real averageDivergence = 0;
-		Real cellCount = 0;
+		using ParallelReal = tbb::enumerable_thread_specific<SolveReal>;
 
-		forEachVoxelRange(Vec2i(0), mySurface.size(), [&](const Vec2i& cell)
+		ParallelReal parallelAccumulatedDivergence(0);
+		ParallelReal parallelCellCount(0);
+
+		tbb::parallel_for(tbb::blocked_range<int>(0, baseDomainCellLabels.size()[0] * baseDomainCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			if (myDomainCellLabels(cell) == GeometricMGOperations::CellLabels::INTERIOR)
+			auto &localAccumulatedDivergence = parallelAccumulatedDivergence.local();
+			auto &localCellCount = parallelCellCount.local();
+
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				averageDivergence += rhsGrid(cell);
-				++cellCount;
+				Vec2i cell = baseDomainCellLabels.unflatten(flatIndex);
+
+				if (baseDomainCellLabels(cell) == CellLabels::INTERIOR_CELL)
+				{
+					localAccumulatedDivergence += rhsGrid(cell);
+					++localCellCount;
+				}
 			}
+		});
+
+		SolveReal averageDivergence = 0;
+
+		parallelAccumulatedDivergence.combine_each([&](const SolveReal localAccumulatedDivergence)
+		{
+			averageDivergence += localAccumulatedDivergence;
+		});
+
+		SolveReal cellCount = 0;
+
+		parallelCellCount.combine_each([&](const SolveReal localCellCount)
+		{
+			cellCount += localCellCount;
 		});
 
 		averageDivergence /= cellCount;
 
-		forEachVoxelRange(Vec2i(0), mySurface.size(), [&](const Vec2i& cell)
+		tbb::parallel_for(tbb::blocked_range<int>(0, baseDomainCellLabels.size()[0] * baseDomainCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			if (myDomainCellLabels(cell) == GeometricMGOperations::CellLabels::INTERIOR)
-				rhsGrid(cell) -= averageDivergence;
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			{
+				Vec2i cell = baseDomainCellLabels.unflatten(flatIndex);
+
+				if (baseDomainCellLabels(cell) == CellLabels::INTERIOR_CELL)
+					rhsGrid(cell) -= averageDivergence;
+			}
 		});
 
-		// Remove divergence
+		// Remove single interior cell
 		bool hasRemovedInteriorCell = false;
-		forEachVoxelRange(Vec2i(0), mySurface.size(), [&](const Vec2i& cell)
+		forEachVoxelRange(Vec2i(0), baseDomainCellLabels.size(), [&](const Vec2i& cell)
 		{
-			if (!hasRemovedInteriorCell &&
-				myDomainCellLabels(cell) == GeometricMGOperations::CellLabels::INTERIOR)
+			if (hasRemovedInteriorCell) return;
+			
+			if (baseDomainCellLabels(cell) == CellLabels::INTERIOR_CELL)
 			{
 				bool hasNonInterior = false;
 				for (int axis : {0, 1})
 					for (int direction : {0, 1})
 					{
-						if (myDomainCellLabels(cell) != GeometricMGOperations::CellLabels::INTERIOR)
+						Vec2i adjacentCell = cellToCell(cell, axis, direction);
+						if (baseDomainCellLabels(adjacentCell) != CellLabels::INTERIOR_CELL)
 							hasNonInterior = true;
 					}
 
 				if (!hasNonInterior)
 				{
 					hasRemovedInteriorCell = true;
-					myDomainCellLabels(cell) = GeometricMGOperations::CellLabels::DIRICHLET;
+					baseDomainCellLabels(cell) = CellLabels::DIRICHLET_CELL;
 				}
 			}
 		});
+
+		assert(hasRemovedInteriorCell);
 	}
 
 	// Build poisson face weights
-	VectorGrid<Real> poissonFaceWeights(mySurface.xform(), mySurface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+	VectorGrid<StoreReal> poissonFaceWeights(mySurface.xform(), mySurface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 
 	for (int axis : {0, 1})
 	{
-		Vec2i start(0);
-		++start[axis];
-		Vec2i end = poissonFaceWeights.size(axis);
-		--end[axis];
-
-		forEachVoxelRange(start, end, [&](const Vec2i& face)
+		tbb::parallel_for(tbb::blocked_range<int>(0, poissonFaceWeights.size(axis)[0] * poissonFaceWeights.size(axis)[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			Real weight = myCutCellWeights(face, axis);
-			if (weight > 0)
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				bool localHasInterior = false;
-				bool localHasDirichlet = false;
-				for (int direction : {0, 1})
-				{
-					Vec2i cell = faceToCell(face, axis, direction);
-					if (myDomainCellLabels(cell) == GeometricMGOperations::CellLabels::DIRICHLET)
-						localHasDirichlet = true;
-					if (myDomainCellLabels(cell) == GeometricMGOperations::CellLabels::INTERIOR)
-						localHasInterior = true;
-				}
+				Vec2i face = poissonFaceWeights.grid(axis).unflatten(flatIndex);
 
-				if (localHasInterior)
+				Real weight = myCutCellWeights(face, axis);
+
+				if (weight > 0)
 				{
-					if (localHasDirichlet)
+					Vec2i backwardCell = faceToCell(face, axis, 0);
+					Vec2i forwardCell = faceToCell(face, axis, 1);
+
+					auto backwardLabel = baseDomainCellLabels(backwardCell);
+					auto forwardLabel = baseDomainCellLabels(forwardCell);
+
+					if ((backwardLabel == CellLabels::INTERIOR_CELL && forwardLabel == CellLabels::DIRICHLET_CELL) ||
+						(backwardLabel == CellLabels::DIRICHLET_CELL && forwardLabel == CellLabels::INTERIOR_CELL))
 					{
 						Real theta = myGhostFluidWeights(face, axis);
 						theta = Util::clamp(theta, MINTHETA, Real(1.));
@@ -162,158 +206,326 @@ void GeometricPressureProjection::project(VectorGrid<Real>& velocity,
 		});
 	}
 
-	Real dx = mySurface.dx();
-	auto MatrixVectorMultiply = [&myDomainCellLabels = this->myDomainCellLabels, &poissonFaceWeights, dx](UniformGrid<Real> &residualGrid, const UniformGrid<Real> &solutionGrid)
-	{
-		// Matrix-vector multiplication
-		applyWeightedPoissonMatrix(residualGrid, solutionGrid, myDomainCellLabels, poissonFaceWeights, dx);
-	};
+	// Build extended MG domain
+	UniformGrid<CellLabels> mgDomainCellLabels;
+	std::pair<Vec2i, int> mgSettings = GeometricMultigridOperators::buildExpandedDomainLabels(mgDomainCellLabels, baseDomainCellLabels);
 
-	UniformGrid<Real> diagonalPrecondGrid(mySurface.size(), 0);
+	Vec2i expandedOffset = mgSettings.first;
+	int mgLevels = mgSettings.second;
 
-	forEachVoxelRange(Vec2i(0), mySurface.size(), [&](const Vec2i &cell)
+	VectorGrid<StoreReal> mgBoundaryWeights(poissonFaceWeights.xform(), mgDomainCellLabels.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+
+	for (int axis : {0, 1})
+		GeometricMultigridOperators::buildExpandedBoundaryWeights(mgBoundaryWeights, poissonFaceWeights, mgDomainCellLabels, expandedOffset, axis);
+
+	GeometricMultigridOperators::setBoundaryDomainLabels(mgDomainCellLabels, mgBoundaryWeights);
+
+	// Build expanded rhs grid and solution grid
+	UniformGrid<StoreReal> mgRHSGrid(mgDomainCellLabels.size(), 0);
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, mgDomainCellLabels.size()[0] * mgDomainCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
-		Real gridScalar = 1. / Util::sqr(dx);
-		if (myDomainCellLabels(cell) == CellLabels::INTERIOR)
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
-			Real diagonal = 0;
-			for (int axis : {0, 1})
-				for (int direction : {0, 1})
-				{
-					Vec2i adjacentCell = cellToCell(cell, axis, direction);
-					Vec2i face = cellToFace(cell, axis, direction);
+			Vec2i cell = mgDomainCellLabels.unflatten(flatIndex);
 
-					if (myDomainCellLabels(adjacentCell) == CellLabels::INTERIOR ||
-						myDomainCellLabels(adjacentCell) == CellLabels::DIRICHLET)
-					{
-						diagonal += poissonFaceWeights(face, axis);
-					}
-					else assert(poissonFaceWeights(face, axis) == 0);
-				}
-			diagonal *= gridScalar;
-			diagonalPrecondGrid(cell) = 1. / diagonal;
+			if (mgDomainCellLabels(cell) == CellLabels::INTERIOR_CELL || mgDomainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+			{
+				assert(baseDomainCellLabels(cell - expandedOffset) == CellLabels::INTERIOR_CELL);
+				mgRHSGrid(cell) = rhsGrid(cell - expandedOffset);
+			}
 		}
 	});
 
-	auto DiagonalPreconditioner = [&myDomainCellLabels = this->myDomainCellLabels, &diagonalPrecondGrid](UniformGrid<Real> &solutionGrid,
-		const UniformGrid<Real> &rhsGrid)
+	UniformGrid<StoreReal> mgSolutionGrid(mgDomainCellLabels.size(), 0);
+	
+	// Add initial guess
+	if (myUseInitialGuessPressure)
+	{
+		assert(myInitialGuessPressure != nullptr);
+		tbb::parallel_for(tbb::blocked_range<int>(0, mgDomainCellLabels.size()[0] * mgDomainCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+		{
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			{
+				Vec2i cell = mgDomainCellLabels.unflatten(flatIndex);
+
+				if (mgDomainCellLabels(cell) == CellLabels::INTERIOR_CELL || mgDomainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+				{
+					assert(baseDomainCellLabels(cell - expandedOffset) == CellLabels::INTERIOR_CELL);
+					mgSolutionGrid(cell) = (*myInitialGuessPressure)(cell - expandedOffset);
+				}
+			}
+		});
+	}
+
+	UniformGrid<StoreReal> diagonalPrecondGrid(mgDomainCellLabels.size(), 0);
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, mgDomainCellLabels.size()[0] * mgDomainCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	{
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = mgDomainCellLabels.unflatten(flatIndex);
+
+			if (mgDomainCellLabels(cell) == CellLabels::INTERIOR_CELL)
+			{
+				for (int axis : {0, 1})
+					for (int direction : {0, 1})
+					{
+						Vec2i adjacentCell = cellToCell(cell, axis, direction);
+						assert(adjacentCell[axis] >= 0 && adjacentCell[axis] < mgDomainCellLabels.size()[axis]);
+
+						assert(mgDomainCellLabels(adjacentCell) == CellLabels::INTERIOR_CELL ||
+								mgDomainCellLabels(adjacentCell) == CellLabels::BOUNDARY_CELL);
+
+						Vec2i face = cellToFace(cell, axis, direction);
+						assert(mgBoundaryWeights(face, axis) == 1);
+					}
+
+				diagonalPrecondGrid(cell) = 1. / 4.;
+			}
+			else if (mgDomainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+			{
+				Real diagonal = 0;
+				for (int axis : {0, 1})
+					for (int direction : {0, 1})
+					{
+						Vec2i adjacentCell = cellToCell(cell, axis, direction);
+						Vec2i face = cellToFace(cell, axis, direction);
+
+						if (mgDomainCellLabels(adjacentCell) == CellLabels::INTERIOR_CELL)
+						{
+							assert(mgBoundaryWeights(face, axis) == 1);
+							++diagonal;							
+						}
+						else if (mgDomainCellLabels(adjacentCell) == CellLabels::BOUNDARY_CELL || 
+									mgDomainCellLabels(adjacentCell) == CellLabels::DIRICHLET_CELL)
+						{
+							diagonal += mgBoundaryWeights(face, axis);
+						}
+						else
+						{
+							assert(mgDomainCellLabels(adjacentCell) == CellLabels::EXTERIOR_CELL);
+							assert(mgBoundaryWeights(face, axis) == 0);
+						}
+					}
+				diagonalPrecondGrid(cell) = 1. / diagonal;
+			}
+		}
+	});
+
+	auto diagonalPreconditioner = [&](UniformGrid<StoreReal> &solutionGrid, const UniformGrid<StoreReal> &rhsGrid)
 	{
 		assert(solutionGrid.size() == rhsGrid.size());
-		forEachVoxelRange(Vec2i(0), solutionGrid.size(), [&](const Vec2i &cell)
+		tbb::parallel_for(tbb::blocked_range<int>(0, mgDomainCellLabels.size()[0] * mgDomainCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			if (myDomainCellLabels(cell) == CellLabels::INTERIOR)
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				solutionGrid(cell) = rhsGrid(cell) * diagonalPrecondGrid(cell);
+				Vec2i cell = mgDomainCellLabels.unflatten(flatIndex);
+				
+				if (mgDomainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+					mgDomainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+				{
+					solutionGrid(cell) = rhsGrid(cell) * diagonalPrecondGrid(cell);
+				}
 			}
 		});
 	};
 
+	auto matrixVectorMultiply = [&](UniformGrid<StoreReal> &destinationGrid, const UniformGrid<StoreReal> &sourceGrid)
+	{
+		assert(destinationGrid.size() == sourceGrid.size() &&
+				sourceGrid.size() == mgDomainCellLabels.size());
+		// Matrix-vector multiplication
+		GeometricMultigridOperators::applyPoissonMatrix<SolveReal>(destinationGrid, sourceGrid, mgDomainCellLabels, 1., &mgBoundaryWeights);
+	};
+
 	// Pre-build multigrid preconditioner
-	GeometricMGPoissonSolver MGPreconditioner(myDomainCellLabels, 4, dx);
-	MGPreconditioner.setGradientWeights(poissonFaceWeights);
+	GeometricMultigridPoissonSolver mgPreconditioner(mgDomainCellLabels, mgBoundaryWeights, mgLevels, 1.);
 
-	auto MultiGridPreconditioner = [&MGPreconditioner](UniformGrid<Real> &solutionGrid,
-		const UniformGrid<Real> &rhsGrid)
+	auto multiGridPreconditioner = [&](UniformGrid<StoreReal> &destinationGrid, const UniformGrid<StoreReal> &sourceGrid)
 	{
-		assert(solutionGrid.size() == rhsGrid.size());
-		MGPreconditioner.applyMGVCycle(solutionGrid, rhsGrid);
+		assert(destinationGrid.size() == sourceGrid.size() &&
+				sourceGrid.size() == mgDomainCellLabels.size());
+		mgPreconditioner.applyMGVCycle(destinationGrid, sourceGrid);
 	};
 
-	auto DotProduct = [&myDomainCellLabels = this->myDomainCellLabels](const UniformGrid<Real> &grid0,
-		const UniformGrid<Real> &grid1) -> Real
+	auto dotProduct = [&](const UniformGrid<StoreReal> &grid0, const UniformGrid<StoreReal> &grid1)
 	{
-		assert(grid0.size() == grid1.size());
-		return dotProduct(grid0, grid1, myDomainCellLabels);
+		assert(grid0.size() == grid1.size() &&
+				grid1.size() == mgDomainCellLabels.size());
+		return GeometricMultigridOperators::dotProduct<SolveReal>(grid0, grid1, mgDomainCellLabels);
 	};
 
-	auto L2Norm = [&myDomainCellLabels = this->myDomainCellLabels](const UniformGrid<Real> &grid) -> Real
+	auto squaredL2Norm = [&](const UniformGrid<StoreReal> &grid)
 	{
-		return l2Norm(grid, myDomainCellLabels);
+		assert(grid.size() == mgDomainCellLabels.size());
+		return GeometricMultigridOperators::squaredl2Norm<SolveReal>(grid, mgDomainCellLabels);
 	};
 
-	auto AddScaledVector = [&myDomainCellLabels = this->myDomainCellLabels](UniformGrid<Real> &destination,
-		const UniformGrid<Real> &unscaledSource,
-		const UniformGrid<Real> &scaledSource,
-		const Real scale)
+	auto addToVector = [&](UniformGrid<StoreReal> &destination,
+							const UniformGrid<StoreReal> &scaledSource,
+							const SolveReal scale)
 	{
-		addToVector(destination, unscaledSource, scaledSource, myDomainCellLabels, scale);
+		assert(destination.size() == scaledSource.size() &&
+				scaledSource.size() == mgDomainCellLabels.size());
+		GeometricMultigridOperators::addToVector<SolveReal>(destination, scaledSource, mgDomainCellLabels, scale);
+	};
+
+	auto addScaledVector = [&](UniformGrid<StoreReal> &destination,
+								const UniformGrid<StoreReal> &unscaledSource,
+								const UniformGrid<StoreReal> &scaledSource,
+								const SolveReal scale)
+	{
+		assert(destination.size() == unscaledSource.size() &&
+				unscaledSource.size() == scaledSource.size() &&
+				scaledSource.size() == mgDomainCellLabels.size());
+		GeometricMultigridOperators::addVectors<SolveReal>(destination, unscaledSource, scaledSource, mgDomainCellLabels, scale);
 	};
 
 	if (useMGPreconditioner)
 	{
-		solveGeometricCGPoisson(dynamic_cast<UniformGrid<Real>&>(myPressure),
-			rhsGrid,
-			MatrixVectorMultiply,
-			MultiGridPreconditioner,
-			DotProduct,
-			L2Norm,
-			AddScaledVector,
-			1E-5 /*solver tolerance*/, false, true, false);
+		solveGeometricConjugateGradient(mgSolutionGrid,
+										mgRHSGrid,
+										matrixVectorMultiply,
+										multiGridPreconditioner,
+										dotProduct,
+										squaredL2Norm,
+										addToVector,
+										addScaledVector,
+										1E-5 /*solver tolerance*/, 4000 /* max iterations */);
 	}
 	else
 	{
-		solveGeometricCGPoisson(dynamic_cast<UniformGrid<Real>&>(myPressure),
-			rhsGrid,
-			MatrixVectorMultiply,
-			DiagonalPreconditioner,
-			DotProduct,
-			L2Norm,
-			AddScaledVector,
-			1E-5 /*solver tolerance*/, true, false, true);
+		solveGeometricConjugateGradient(mgSolutionGrid,
+										mgRHSGrid,
+										matrixVectorMultiply,
+										diagonalPreconditioner,
+										dotProduct,
+										squaredL2Norm,
+										addToVector,
+										addScaledVector,
+										1E-5 /*solver tolerance*/, 4000 /* max iterations */);
 	}
+
+	{
+		UniformGrid<StoreReal> residualGrid(mgDomainCellLabels.size(), 0);
+
+		GeometricMultigridOperators::computePoissonResidual<SolveReal>(residualGrid, mgSolutionGrid, mgRHSGrid, mgDomainCellLabels, 1.);
+
+		std::cout << "L-infinity error of solution: " << GeometricMultigridOperators::lInfinityNorm<SolveReal>(residualGrid, mgDomainCellLabels) << std::endl;
+
+	}
+
+	// Apply solution back to pressure grid
+	myPressure.reset(0);
+	tbb::parallel_for(tbb::blocked_range<int>(0, mgDomainCellLabels.size()[0] * mgDomainCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	{
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = mgDomainCellLabels.unflatten(flatIndex);
+
+			if (mgDomainCellLabels(cell) == CellLabels::INTERIOR_CELL || mgDomainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+			{
+				assert(baseDomainCellLabels(cell - expandedOffset) == CellLabels::INTERIOR_CELL);
+				myPressure(cell - expandedOffset) = mgSolutionGrid(cell);
+			}
+		}
+	});
 
 	// Set valid faces
 	for (int axis : {0, 1})
 	{
-		Vec2i size = velocity.size(axis);
-
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		tbb::parallel_for(tbb::blocked_range<int>(0, myValidFaces.size(axis)[0] * myValidFaces.size(axis)[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			Vec2i backwardCell = faceToCell(face, axis, 0);
-			Vec2i forwardCell = faceToCell(face, axis, 1);
-
-			if (!(backwardCell[axis] < 0 || forwardCell[axis] >= mySurface.size()[axis]))
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				if ((myDomainCellLabels(backwardCell) == GeometricMGOperations::CellLabels::INTERIOR ||
-					myDomainCellLabels(forwardCell) == GeometricMGOperations::CellLabels::INTERIOR) &&
-					myCutCellWeights(face, axis) > 0)
-					myValidFaces(face, axis) = MarkedCells::FINISHED;
-				else myValidFaces(face, axis) = MarkedCells::UNVISITED;
+				Vec2i face = myValidFaces.grid(axis).unflatten(flatIndex);
+				
+				Vec2i backwardCell = faceToCell(face, axis, 0);
+				Vec2i forwardCell = faceToCell(face, axis, 1);
+
+				if (backwardCell[axis] >= 0 && forwardCell[axis] < mySurface.size()[axis])
+				{
+					if ((baseDomainCellLabels(backwardCell) == CellLabels::INTERIOR_CELL || baseDomainCellLabels(forwardCell) == CellLabels::INTERIOR_CELL) && myCutCellWeights(face, axis) > 0)
+						myValidFaces(face, axis) = MarkedCells::FINISHED;
+					else assert(myValidFaces(face, axis) == MarkedCells::UNVISITED);
+				}
+				else assert(myValidFaces(face, axis) == MarkedCells::UNVISITED);
 			}
-			else myValidFaces(face, axis) = MarkedCells::UNVISITED;
 		});
 	}
 
 	for (int axis : {0, 1})
 	{
-		Vec2i size = velocity.size(axis);
-
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		tbb::parallel_for(tbb::blocked_range<int>(0, velocity.size(axis)[0] * velocity.size(axis)[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			Real localVelocity = 0;
-			if (myValidFaces(face, axis) == MarkedCells::FINISHED)
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				Real theta = myGhostFluidWeights(face, axis);
-				theta = Util::clamp(theta, MINTHETA, Real(1.));
+				Vec2i face = myValidFaces.grid(axis).unflatten(flatIndex);
 
-				Vec2i backwardCell = faceToCell(face, axis, 0);
-				Vec2i forwardCell = faceToCell(face, axis, 1);
-
-				if (!(backwardCell[axis] < 0 || forwardCell[axis] >= mySurface.size()[axis]))
+				SolveReal localVelocity = 0;
+				if (myValidFaces(face, axis) == MarkedCells::FINISHED)
 				{
-					Real gradient = 0;
+					Vec2i backwardCell = faceToCell(face, axis, 0);
+					Vec2i forwardCell = faceToCell(face, axis, 1);
 
-					if (myDomainCellLabels(Vec2i(backwardCell)) == GeometricMGOperations::CellLabels::INTERIOR)
-						gradient -= myPressure(Vec2i(backwardCell));
+					assert(backwardCell[axis] >= 0 && forwardCell[axis] < mySurface.size()[axis]);
+					assert(baseDomainCellLabels(backwardCell) == CellLabels::INTERIOR_CELL ||
+							baseDomainCellLabels(forwardCell) == CellLabels::INTERIOR_CELL);
 
-					if (myDomainCellLabels(Vec2i(forwardCell)) == GeometricMGOperations::CellLabels::INTERIOR)
-						gradient += myPressure(Vec2i(forwardCell));
+					SolveReal gradient = myPressure(forwardCell);
+					gradient -= myPressure(backwardCell);
 
-					localVelocity = velocity(face, axis) - gradient / (theta * myPressure.dx());
+					if (baseDomainCellLabels(backwardCell) == CellLabels::DIRICHLET_CELL ||
+						baseDomainCellLabels(forwardCell) == CellLabels::DIRICHLET_CELL)
+					{
+						SolveReal theta = myGhostFluidWeights(face, axis);
+						theta = Util::clamp(theta, SolveReal(MINTHETA), SolveReal(1.));
+
+						gradient /= theta;
+					}
+
+					localVelocity = velocity(face, axis) - gradient;
 				}
-			}
 
-			velocity(face, axis) = localVelocity;
+				velocity(face, axis) = localVelocity;
+			}
 		});
 	}
+
+	// Verify divergence free
+	UniformGrid<StoreReal> divergenceGrid(mySurface.size(), 0);
+	tbb::parallel_for(tbb::blocked_range<int>(0, mySurface.size()[0] * mySurface.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	{
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = baseDomainCellLabels.unflatten(flatIndex);
+
+			if (baseDomainCellLabels(cell) == CellLabels::INTERIOR_CELL)
+			{
+				// Build RHS divergence
+				SolveReal divergence = 0;
+				for (int axis : {0, 1})
+					for (int direction : {0, 1})
+					{
+						Vec2i face = cellToFace(cell, axis, direction);
+
+						SolveReal weight = myCutCellWeights(face, axis);
+
+						SolveReal sign = (direction == 0) ? 1 : -1;
+
+						if (weight > 0)
+							divergence += sign * velocity(face, axis) * weight;
+						if (weight < 1.)
+							divergence += sign * mySolidVelocity(face, axis) * (1. - weight);
+					}
+
+				divergenceGrid(cell) = divergence;
+			}
+		}
+	});
+
+	UniformGrid<StoreReal> dummyGrid(mySurface.size(), 1);
+	std::cout << "Accumulated divergence: " << GeometricMultigridOperators::dotProduct<SolveReal>(divergenceGrid, dummyGrid, baseDomainCellLabels) << std::endl;
+	std::cout << "Max norm divergence: " << GeometricMultigridOperators::lInfinityNorm<SolveReal>(divergenceGrid, baseDomainCellLabels) << std::endl;
 }

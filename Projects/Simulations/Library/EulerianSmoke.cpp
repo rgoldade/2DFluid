@@ -181,6 +181,12 @@ void EulerianSmoke::runTimestep(Real dt, Renderer& renderer)
 	// Build weights for pressure projection
 	//
 	
+	VectorGrid<Real> cutCellWeights = computeCutCellWeights(mySolidSurface, true);
+	VectorGrid<Real> ghostFluidWeights(myVelocity.xform(), myVelocity.gridSize(), 1, myVelocity.sampleType());
+
+	std::cout << "  Compute weights: " << simTimer.stop() << "s" << std::endl;
+	simTimer.reset();
+
 	LevelSet dummySurface(mySolidSurface.xform(), mySolidSurface.size(), 5, true);
 
 	//
@@ -188,7 +194,10 @@ void EulerianSmoke::runTimestep(Real dt, Renderer& renderer)
 	//
 
 	// Initialize and call pressure projection
-	GeometricPressureProjection projectDivergence(dummySurface, mySolidSurface, mySolidVelocity);
+	GeometricPressureProjection projectDivergence(dummySurface,
+													cutCellWeights,
+													ghostFluidWeights,
+													mySolidVelocity);
 	
 	projectDivergence.setInitialGuess(myOldPressure);
 	projectDivergence.project(myVelocity, true);

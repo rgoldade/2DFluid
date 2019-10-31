@@ -174,14 +174,14 @@ inline Real lengthFraction(Real phi0, Real phi1)
 {
 	Real theta = 0.;
 
-	if (phi0 < 0)
+	if (phi0 <= 0)
 	{
-		if (phi1 < 0)
+		if (phi1 <= 0)
 			theta = 1.;
-		else if (phi1 >= 0)
+		else if (phi1 > 0)
 			theta = phi0 / (phi0 - phi1);
 	}
-	else if (phi0 >= 0 && phi1 < 0)
+	else if (phi0 > 0 && phi1 <= 0)
 		theta = phi1 / (phi1 - phi0);
 
 	return theta;

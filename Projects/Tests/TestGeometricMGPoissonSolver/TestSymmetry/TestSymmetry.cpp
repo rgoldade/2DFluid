@@ -5,9 +5,9 @@
 #include "Eigen/Sparse"
 
 #include "Common.h"
-#include "GeometricMGOperations.h"
-#include "GeometricMGPoissonSolver.h"
-#include "InitialMGTestDomains.h"
+#include "GeometricMultigridOperators.h"
+#include "GeometricMultigridPoissonSolver.h"
+#include "InitialMultigridTestDomains.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
@@ -15,227 +15,119 @@
 
 std::unique_ptr<Renderer> renderer;
 
-static const Vec2i interiorResolution(128);
-
-static const bool useComplexDomain = true;
-static const bool useSolidSphere = true;
-static const Real sphereRadius = .125;
-
-std::default_random_engine generator;
-std::uniform_real_distribution<Real> distribution(0, 1);
+static constexpr int gridSize = 512;
+static constexpr bool useComplexDomain = true;
+static constexpr bool useSolidSphere = true;
 
 int main(int argc, char** argv)
 {
-	using namespace GeometricMGOperations;
+	using namespace GeometricMultigridOperators;
 
-	UniformGrid<CellLabels> interiorDomainCellLabels;
+	using StoreReal = double;
+	using SolveReal = double;
 
-	// Complex domain set up
-	if (useComplexDomain)
-		interiorDomainCellLabels = buildComplexDomain(interiorResolution,
-												useSolidSphere,
-												sphereRadius);
-	// Simple domain set up
-	else
-		interiorDomainCellLabels = buildSimpleDomain(interiorResolution,
-												1 /*dirichlet band*/);
+	using Vector = std::conditional<std::is_same<SolveReal, float>::value, Eigen::VectorXf, Eigen::VectorXd>::type;
 
-	// Initialize grid with sin function
-	Real dx = 1. / interiorResolution[0];
-
-	Vec2i expandedOffset(2);
-	Vec2i expandedResolution = interiorResolution + 2 * expandedOffset;
-
-	// Build expanded domain cell labels
-	UniformGrid<CellLabels> expandedDomainCellLabels(expandedResolution, CellLabels::EXTERIOR);
-
-	forEachVoxelRange(Vec2i(0), interiorResolution, [&](const Vec2i &cell)
+	UniformGrid<CellLabels> domainCellLabels;
+	VectorGrid<StoreReal> boundaryWeights;
+	int mgLevels;
 	{
-		expandedDomainCellLabels(cell + expandedOffset) = interiorDomainCellLabels(cell);
-	});
+		UniformGrid<CellLabels> baseDomainCellLabels;
+		VectorGrid<StoreReal> baseBoundaryWeights;
 
+		// Complex domain set up
+		if (useComplexDomain)
+			buildComplexDomain(baseDomainCellLabels,
+								baseBoundaryWeights,
+								gridSize,
+								useSolidSphere);
+		// Simple domain set up
+		else
+			buildSimpleDomain(baseDomainCellLabels,
+								baseBoundaryWeights,
+								gridSize,
+								1 /*dirichlet band*/);
 
-	UniformGrid<Real> rhsA(expandedResolution, 0);
-	forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
+		// Build expanded domain
+		std::pair<Vec2i, int> mgSettings = buildExpandedDomain(domainCellLabels, boundaryWeights, baseDomainCellLabels, baseBoundaryWeights);
+
+		mgLevels = mgSettings.second;
+	}
+
+	SolveReal dx = boundaryWeights.dx();
+
+	UniformGrid<StoreReal> rhsA(domainCellLabels.size(), 0);
+	UniformGrid<StoreReal> rhsB(domainCellLabels.size(), 0);
+	
+	int totalVoxels = domainCellLabels.size()[0] * domainCellLabels.size()[1];
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
-		if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
+		std::default_random_engine generator;
+		std::uniform_real_distribution<Real> distribution(0, 1);
+
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
-			Vec2R point = dx * Vec2R(cell);
-			rhsA(cell) = distribution(generator);
-		}
-	});
-
-	UniformGrid<Real> rhsB(expandedResolution, 0);
-	forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
-	{
-		if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
-		{
-			Vec2R point = dx * Vec2R(cell);
-			rhsB(cell) = distribution(generator);
+			Vec2i cell = domainCellLabels.unflatten(flatIndex);
+			
+			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+			{
+				Vec2R point = dx * Vec2R(cell);
+				rhsA(cell) = distribution(generator);
+				rhsB(cell) = distribution(generator);
+			}
 		}
 	});
 
 	Transform xform(dx, Vec2R(0));
-	VectorGrid<Real> dummyWeights(xform, expandedResolution, 0, VectorGridSettings::SampleType::STAGGERED);
-
-	for (int axis : {0, 1})
+	std::cout.precision(10);
 	{
-		forEachVoxelRange(Vec2i(0), dummyWeights.size(axis), [&](const Vec2i& face)
-		{
-			bool isInterior = false;
-			bool isExterior = false;
-			for (int direction : {0, 1})
-			{
-				Vec2i cell = faceToCell(face, axis, direction);
+		UniformGrid<StoreReal> solutionA(domainCellLabels.size(), 0);
+		UniformGrid<StoreReal> solutionB(domainCellLabels.size(), 0);
 
-				if (cell[axis] < 0 || cell[axis] >= expandedDomainCellLabels.size()[axis])
-					continue;
-
-				if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
-					isInterior = true;
-				else if (expandedDomainCellLabels(cell) == CellLabels::EXTERIOR)
-					isExterior = true;
-			}
-
-			if (isInterior && !isExterior)
-				dummyWeights(face, axis) = 1;
-		});
-	}
-
-	{
-		UniformGrid<Real> solutionA(expandedResolution, 0);
-		UniformGrid<Real> solutionB(expandedResolution, 0);
+		std::vector<Vec2i> boundaryCells = buildBoundaryCells(domainCellLabels, 3);
 
 		// Test Jacobi symmetry
-		dampedJacobiWeightedPoissonSmoother(solutionA,
-			rhsA,
-			expandedDomainCellLabels,
-			dummyWeights,
-			dx);
+		boundaryJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, boundaryCells, dx, &boundaryWeights);
+		boundaryJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, boundaryCells, dx, &boundaryWeights);
 
-		dampedJacobiWeightedPoissonSmoother(solutionB,
-			rhsB,
-			expandedDomainCellLabels,
-			dummyWeights,
-			dx);
+		interiorJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, dx, &boundaryWeights);
+		interiorJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, dx, &boundaryWeights);
 
+		boundaryJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, boundaryCells, dx, &boundaryWeights);
+		boundaryJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, boundaryCells, dx, &boundaryWeights);
 
-		Real dotA = dotProduct(solutionA, rhsB, expandedDomainCellLabels);
-		Real dotB = dotProduct(solutionB, rhsA, expandedDomainCellLabels);
+		SolveReal dotA = dotProduct<SolveReal>(solutionA, rhsB, domainCellLabels);
+		SolveReal dotB = dotProduct<SolveReal>(solutionB, rhsA, domainCellLabels);
 
+		std::cout << "Jacobi smoother symmetry test: " << dotA << ", " << dotB << std::endl;
 		assert(fabs(dotA - dotB) / fabs(std::max(dotA, dotB)) < 1E-10);
 	}
-
-	{
-		UniformGrid<Real> solutionA(expandedResolution, 0);
-		UniformGrid<Real> solutionB(expandedResolution, 0);
-
-		// Test Jacobi symmetry
-		dampedJacobiPoissonSmoother(solutionA,
-			rhsA,
-			expandedDomainCellLabels,
-			dx);
-
-		dampedJacobiPoissonSmoother(solutionB,
-			rhsB,
-			expandedDomainCellLabels,
-			dx);
-
-
-		Real dotA = dotProduct(solutionA, rhsB, expandedDomainCellLabels);
-		Real dotB = dotProduct(solutionB, rhsA, expandedDomainCellLabels);
-
-		assert(fabs(dotA - dotB) / fabs(std::max(dotA, dotB)) < 1E-10);
-	}
-
-	{
-		UniformGrid<Real> solutionA(expandedResolution, 0);
-		UniformGrid<Real> solutionB(expandedResolution, 0);
-
-		std::vector<Vec2i> tempInteriorCells;
-		forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
-		{
-			if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
-			{
-				tempInteriorCells.push_back(cell);
-			}
-		});
-
-		dampedJacobiPoissonSmoother(solutionA,
-			rhsA,
-			expandedDomainCellLabels,
-			tempInteriorCells,
-			dx);
-
-		dampedJacobiPoissonSmoother(solutionB,
-			rhsB,
-			expandedDomainCellLabels,
-			tempInteriorCells,
-			dx);
-
-		Real dotA = dotProduct(solutionA, rhsB, expandedDomainCellLabels);
-		Real dotB = dotProduct(solutionB, rhsA, expandedDomainCellLabels);
-
-		assert(fabs(dotA - dotB) / fabs(std::max(dotA, dotB)) < 1E-10);
-	}
-
-	{
-		UniformGrid<Real> solutionA(expandedResolution, 0);
-		UniformGrid<Real> solutionB(expandedResolution, 0);
-
-		std::vector<Vec2i> tempInteriorCells;
-		forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
-		{
-			if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
-			{
-				tempInteriorCells.push_back(cell);
-			}
-		});
-
-		dampedJacobiWeightedPoissonSmoother(solutionA,
-			rhsA,
-			expandedDomainCellLabels,
-			tempInteriorCells,
-			dummyWeights,
-			dx);
-
-		dampedJacobiWeightedPoissonSmoother(solutionB,
-			rhsB,
-			expandedDomainCellLabels,
-			tempInteriorCells,
-			dummyWeights,
-			dx);
-
-		Real dotA = dotProduct(solutionA, rhsB, expandedDomainCellLabels);
-		Real dotB = dotProduct(solutionB, rhsA, expandedDomainCellLabels);
-
-		assert(fabs(dotA - dotB) / fabs(std::max(dotA, dotB)) < 1E-10);
-	}
-
 	{
 		// Test direct solve symmetry
-		Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> myCoarseSolver;
-		Eigen::SparseMatrix<double> sparseMatrix;
+		Eigen::SimplicialCholesky<Eigen::SparseMatrix<SolveReal>> myCoarseSolver;
+		Eigen::SparseMatrix<SolveReal> sparseMatrix;
 
 		// Pre-build matrix at the coarsest level
 		int interiorCellCount = 0;
-		UniformGrid<int> directSolverIndices(expandedResolution, -1);
+		UniformGrid<int> directSolverIndices(domainCellLabels.size(), -1);
 		{
-			forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
+			forEachVoxelRange(Vec2i(0), domainCellLabels.size(), [&](const Vec2i &cell)
 			{
-				if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
+				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+					domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 					directSolverIndices(cell) = interiorCellCount++;
 			});
 
 			// Build rows
-			std::vector<Eigen::Triplet<double>> sparseElements;
+			std::vector<Eigen::Triplet<SolveReal>> sparseElements;
 
 			Real gridScale = 1. / Util::sqr(dx);
-			forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
+			forEachVoxelRange(Vec2i(0), domainCellLabels.size(), [&](const Vec2i &cell)
 			{
-				if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
+				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL)
 				{
-					int diagonal = 0;
 					int index = directSolverIndices(cell);
 					assert(index >= 0);
 					for (int axis : {0, 1})
@@ -243,25 +135,80 @@ int main(int argc, char** argv)
 						{
 							Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
-							auto cellLabels = expandedDomainCellLabels(adjacentCell);
-							if (cellLabels == CellLabels::INTERIOR)
+							assert(domainCellLabels(adjacentCell) == CellLabels::INTERIOR_CELL ||
+									domainCellLabels(adjacentCell) == CellLabels::BOUNDARY_CELL);
+
+							Vec2i face = cellToFace(cell, axis, direction);
+							assert(boundaryWeights(face, axis) == 1);
+
+							int adjacentIndex = directSolverIndices(adjacentCell);
+							assert(adjacentIndex >= 0);
+
+							sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScale));
+						}
+					sparseElements.push_back(Eigen::Triplet<SolveReal>(index, index, 4. * gridScale));
+				}
+				else if (domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+				{
+					int index = directSolverIndices(cell);
+					assert(index >= 0);
+
+					SolveReal diagonal = 0;
+
+					for (int axis : {0, 1})
+						for (int direction : {0, 1})
+						{
+							Vec2i adjacentCell = cellToCell(cell, axis, direction);
+
+							if (domainCellLabels(adjacentCell) == CellLabels::INTERIOR_CELL)
 							{
 								int adjacentIndex = directSolverIndices(adjacentCell);
 								assert(adjacentIndex >= 0);
 
-								sparseElements.push_back(Eigen::Triplet<double>(index, adjacentIndex, -gridScale));
+								Vec2i face = cellToFace(cell, axis, direction);
+								assert(boundaryWeights(face, axis) == 1);
+
+								sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScale));
 								++diagonal;
 							}
-							else if (cellLabels == CellLabels::DIRICHLET)
-								++diagonal;
+							else if (domainCellLabels(adjacentCell) == CellLabels::BOUNDARY_CELL)
+							{
+								int adjacentIndex = directSolverIndices(adjacentCell);
+								assert(adjacentIndex >= 0);
+
+								Vec2i face = cellToFace(cell, axis, direction);
+								SolveReal weight = boundaryWeights(face, axis);
+
+								sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScale * weight));
+								diagonal += weight;
+							}
+							else if (domainCellLabels(adjacentCell) == CellLabels::DIRICHLET_CELL)
+							{
+								int adjacentIndex = directSolverIndices(adjacentCell);
+								assert(adjacentIndex == -1);
+
+								Vec2i face = cellToFace(cell, axis, direction);
+								SolveReal weight = boundaryWeights(face, axis);
+
+								diagonal += weight;
+							}
+							else
+							{
+								assert(domainCellLabels(adjacentCell) == CellLabels::EXTERIOR_CELL);
+								int adjacentIndex = directSolverIndices(adjacentCell);
+								assert(adjacentIndex == -1);
+
+								Vec2i face = cellToFace(cell, axis, direction);
+								assert(boundaryWeights(face, axis) == 0);
+							}
 						}
 
-					sparseElements.push_back(Eigen::Triplet<double>(index, index, gridScale * diagonal));
+					sparseElements.push_back(Eigen::Triplet<SolveReal>(index, index, gridScale * diagonal));
 				}
 			});
 
 			// Solve system
-			sparseMatrix = Eigen::SparseMatrix<double>(interiorCellCount, interiorCellCount);
+			sparseMatrix = Eigen::SparseMatrix<SolveReal>(interiorCellCount, interiorCellCount);
 			sparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
 			sparseMatrix.makeCompressed();
 
@@ -270,128 +217,183 @@ int main(int argc, char** argv)
 			assert(myCoarseSolver.info() == Eigen::Success);
 		}
 
-		UniformGrid<Real> solutionA(expandedResolution, 0);
+		UniformGrid<StoreReal> solutionA(domainCellLabels.size(), 0);
 
 		{
-			Eigen::VectorXd coarseRHSVector = Eigen::VectorXd::Zero(interiorCellCount);
+			Vector coarseRHSVector = Vector::Zero(interiorCellCount);
 			// Copy to Eigen and direct solve
-			forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
+			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 				{
-					int index = directSolverIndices(cell);
-					assert(index >= 0);
+					Vec2i cell = domainCellLabels.unflatten(flatIndex);
 
-					coarseRHSVector(index) = rhsA(cell);
+					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+					{
+						int index = directSolverIndices(cell);
+						assert(index >= 0);
+
+						coarseRHSVector(index) = rhsA(cell);
+					}
 				}
 			});
 
-			Eigen::VectorXd directSolution = myCoarseSolver.solve(coarseRHSVector);
+			Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 			// Copy solution back
-			forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
+			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 				{
-					int index = directSolverIndices(cell);
-					assert(index >= 0);
+					Vec2i cell = domainCellLabels.unflatten(flatIndex);
 
-					solutionA(cell) = directSolution(index);
+					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+					{
+						int index = directSolverIndices(cell);
+						assert(index >= 0);
+
+						solutionA(cell) = directSolution(index);
+					}
 				}
 			});
 		}
 
-		UniformGrid<Real> solutionB(expandedResolution, 0);
+		UniformGrid<StoreReal> solutionB(domainCellLabels.size(), 0);
 
 		{
-			Eigen::VectorXd coarseRHSVector = Eigen::VectorXd::Zero(interiorCellCount);
+			Vector coarseRHSVector = Vector::Zero(interiorCellCount);
 			// Copy to Eigen and direct solve
-			forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
+			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 				{
-					int index = directSolverIndices(cell);
-					assert(index >= 0);
+					Vec2i cell = domainCellLabels.unflatten(flatIndex);
 
-					coarseRHSVector(index) = rhsB(cell);
+					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+					{
+						int index = directSolverIndices(cell);
+						assert(index >= 0);
+
+						coarseRHSVector(index) = rhsB(cell);
+					}
 				}
 			});
 
-			Eigen::VectorXd directSolution = myCoarseSolver.solve(coarseRHSVector);
+			Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 			// Copy solution back
-			forEachVoxelRange(Vec2i(0), expandedResolution, [&](const Vec2i &cell)
+			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				if (expandedDomainCellLabels(cell) == CellLabels::INTERIOR)
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 				{
-					int index = directSolverIndices(cell);
-					assert(index >= 0);
+					Vec2i cell = domainCellLabels.unflatten(flatIndex);
 
-					solutionB(cell) = directSolution(index);
+					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+					{
+						int index = directSolverIndices(cell);
+						assert(index >= 0);
+
+						solutionB(cell) = directSolution(index);
+					}
 				}
 			});
 		}
 
 		// Compute dot products
-		Real dotA = dotProduct(solutionA, rhsB, expandedDomainCellLabels);
-		Real dotB = dotProduct(solutionB, rhsA, expandedDomainCellLabels);
+		SolveReal dotA = dotProduct<SolveReal>(solutionA, rhsB, domainCellLabels);
+		SolveReal dotB = dotProduct<SolveReal>(solutionB, rhsA, domainCellLabels);
 
+		std::cout << "Direct solver symmetry test: " << dotA << ", " << dotB << std::endl;
 		assert(fabs(dotA - dotB) / fabs(std::max(dotA, dotB)) < 1E-10);
 	}
 
 	{
 		// Test down and up sampling
-		UniformGrid<CellLabels> coarseDomainLabels = buildCoarseCellLabels(expandedDomainCellLabels);
-		UniformGrid<Real> solutionA(expandedResolution, 0);
-		Vec2i coarseResolution = coarseDomainLabels.size();
-		
+		UniformGrid<CellLabels> coarseDomainLabels = buildCoarseCellLabels(domainCellLabels);
+
+		assert(unitTestBoundaryCells<StoreReal>(coarseDomainLabels) && unitTestBoundaryCells<StoreReal>(domainCellLabels, &boundaryWeights));
+		assert(unitTestExteriorCells(coarseDomainLabels) && unitTestExteriorCells(domainCellLabels));
+		assert(unitTestCoarsening(coarseDomainLabels, domainCellLabels));
+
+		UniformGrid<StoreReal> coarseRhs(coarseDomainLabels.size(), 0);
+
+		UniformGrid<StoreReal> solutionA(domainCellLabels.size(), 0);
+
 		{
-			UniformGrid<Real> coarseRhs(coarseResolution, 0);
-			downsample(coarseRhs, rhsA, coarseDomainLabels, expandedDomainCellLabels);
-			upsampleAndAdd(solutionA, coarseRhs, expandedDomainCellLabels, coarseDomainLabels);
+			downsample<SolveReal>(coarseRhs, rhsA, coarseDomainLabels, domainCellLabels);
+			upsampleAndAdd<SolveReal>(solutionA, coarseRhs, domainCellLabels, coarseDomainLabels);
 		}
 		
-		UniformGrid<Real> solutionB(expandedResolution, 0);
+		UniformGrid<StoreReal> solutionB(domainCellLabels.size(), 0);
 		
 		{
-			UniformGrid<Real> coarseRhs(coarseResolution, 0);
-			downsample(coarseRhs, rhsB, coarseDomainLabels, expandedDomainCellLabels);
-			upsampleAndAdd(solutionB, coarseRhs, expandedDomainCellLabels, coarseDomainLabels);
+			downsample<SolveReal>(coarseRhs, rhsB, coarseDomainLabels, domainCellLabels);
+			upsampleAndAdd<SolveReal>(solutionB, coarseRhs, domainCellLabels, coarseDomainLabels);
 		}
 
 		// Compute dot products
-		Real dotA = dotProduct(solutionA, rhsB, expandedDomainCellLabels);
-		Real dotB = dotProduct(solutionB, rhsA, expandedDomainCellLabels);
+		SolveReal dotA = dotProduct<SolveReal>(solutionA, rhsB, domainCellLabels);
+		SolveReal dotB = dotProduct<SolveReal>(solutionB, rhsA, domainCellLabels);
 
+		std::cout << "Coarse transfer symmetry test: " << dotA << ", " << dotB << std::endl;
 		assert(fabs(dotA - dotB) / fabs(std::max(dotA, dotB)) < 1E-10);
 	}
 	{
 		// Test single level correction
-		UniformGrid<CellLabels> coarseDomainLabels = buildCoarseCellLabels(expandedDomainCellLabels);
-		Vec2i coarseResolution = coarseDomainLabels.size();
+		UniformGrid<CellLabels> coarseDomainLabels = buildCoarseCellLabels(domainCellLabels);
 
-		Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> myCoarseSolver;
-		Eigen::SparseMatrix<double> sparseMatrix;
+		assert(unitTestBoundaryCells<StoreReal>(coarseDomainLabels) && unitTestBoundaryCells<StoreReal>(domainCellLabels, &boundaryWeights));
+		assert(unitTestExteriorCells(coarseDomainLabels) && unitTestExteriorCells(domainCellLabels));
+		assert(unitTestCoarsening(coarseDomainLabels, domainCellLabels));
+	
+		Eigen::SimplicialCholesky<Eigen::SparseMatrix<SolveReal>> myCoarseSolver;
+		Eigen::SparseMatrix<SolveReal> sparseMatrix;
 
 		// Pre-build matrix at the coarsest level
 		int interiorCellCount = 0;
-		UniformGrid<int> directSolverIndices(coarseResolution, -1);
+		UniformGrid<int> directSolverIndices(coarseDomainLabels.size(), -1);
 		{
-			forEachVoxelRange(Vec2i(0), coarseResolution, [&](const Vec2i &cell)
+			forEachVoxelRange(Vec2i(0), coarseDomainLabels.size(), [&](const Vec2i &cell)
 			{
-				if (coarseDomainLabels(cell) == CellLabels::INTERIOR)
+				if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
+					coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
 					directSolverIndices(cell) = interiorCellCount++;
 			});
 
 			// Build rows
-			std::vector<Eigen::Triplet<double>> sparseElements;
+			std::vector<Eigen::Triplet<SolveReal>> sparseElements;
 
-			Real gridScale = 1. / Util::sqr(2 * dx);
-			forEachVoxelRange(Vec2i(0), coarseResolution, [&](const Vec2i &cell)
+			SolveReal gridScale = 1. / Util::sqr(2. * dx);
+			forEachVoxelRange(Vec2i(0), coarseDomainLabels.size(), [&](const Vec2i &cell)
 			{
-				if (coarseDomainLabels(cell) == CellLabels::INTERIOR)
+				if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL)
 				{
-					int diagonal = 0;
+					int index = directSolverIndices(cell);
+					assert(index >= 0);
+					for (int axis : {0, 1})
+						for (int direction : {0, 1})
+						{
+							Vec2i adjacentCell = cellToCell(cell, axis, direction);
+
+							auto adjacentLabels = coarseDomainLabels(adjacentCell);
+							assert(adjacentLabels == CellLabels::INTERIOR_CELL ||
+								adjacentLabels == CellLabels::BOUNDARY_CELL);
+
+							int adjacentIndex = directSolverIndices(adjacentCell);
+							assert(adjacentIndex >= 0);
+
+							sparseElements.push_back(Eigen::Triplet<double>(index, adjacentIndex, -gridScale));
+						}
+
+					sparseElements.push_back(Eigen::Triplet<double>(index, index, 4. * gridScale));
+				}
+				else if (coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
+				{
+					SolveReal diagonal = 0;
 					int index = directSolverIndices(cell);
 					assert(index >= 0);
 					for (int axis : {0, 1})
@@ -400,7 +402,8 @@ int main(int argc, char** argv)
 							Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 							auto cellLabels = coarseDomainLabels(adjacentCell);
-							if (cellLabels == CellLabels::INTERIOR)
+							if (cellLabels == CellLabels::INTERIOR_CELL ||
+								cellLabels == CellLabels::BOUNDARY_CELL)
 							{
 								int adjacentIndex = directSolverIndices(adjacentCell);
 								assert(adjacentIndex >= 0);
@@ -408,15 +411,15 @@ int main(int argc, char** argv)
 								sparseElements.push_back(Eigen::Triplet<double>(index, adjacentIndex, -gridScale));
 								++diagonal;
 							}
-							else if (cellLabels == CellLabels::DIRICHLET)
+							else if (cellLabels == CellLabels::DIRICHLET_CELL)
 								++diagonal;
 						}
 
-					sparseElements.push_back(Eigen::Triplet<double>(index, index, gridScale * diagonal));
+					sparseElements.push_back(Eigen::Triplet<double>(index, index, diagonal * gridScale));
 				}
 			});
 
-			sparseMatrix = Eigen::SparseMatrix<double>(interiorCellCount, interiorCellCount);
+			sparseMatrix = Eigen::SparseMatrix<SolveReal>(interiorCellCount, interiorCellCount);
 			sparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
 			sparseMatrix.makeCompressed();
 
@@ -426,127 +429,183 @@ int main(int argc, char** argv)
 		}
 
 		// Transfer rhs to coarse rhs as if it was a residual with a zero initial guess
-		UniformGrid<Real> solutionA(expandedResolution, 0);
+		UniformGrid<StoreReal> solutionA(domainCellLabels.size(), 0);
 		{
 			// Pre-smooth to get an initial guess
-			dampedJacobiWeightedPoissonSmoother(solutionA, rhsA, expandedDomainCellLabels, dummyWeights, dx);
+			std::vector<Vec2i> boundaryCells = buildBoundaryCells(domainCellLabels, 3);
 
+			// Test Jacobi symmetry
+			for (int iteration = 0; iteration < 3; ++iteration)
+				boundaryJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, boundaryCells, dx, &boundaryWeights);
+
+			interiorJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, dx, &boundaryWeights);
+		
+			for (int iteration = 0; iteration < 3; ++iteration)
+				boundaryJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, boundaryCells, dx, &boundaryWeights);
+		
 			// Compute new residual
-			UniformGrid<Real> residualA(expandedResolution, 0);
-			computeWeightedPoissonResidual(residualA, solutionA, rhsA, expandedDomainCellLabels, dummyWeights, dx);
+			UniformGrid<StoreReal> residualA(domainCellLabels.size(), 0);
 
-			UniformGrid<Real> coarseRhs(coarseResolution, 0);
-			downsample(coarseRhs, residualA, coarseDomainLabels, expandedDomainCellLabels);
+			computePoissonResidual<SolveReal>(residualA, solutionA, rhsA, domainCellLabels, dx, &boundaryWeights);
 
-			Eigen::VectorXd coarseRHSVector = Eigen::VectorXd::Zero(interiorCellCount);
+			UniformGrid<StoreReal> coarseRhs(coarseDomainLabels.size(), 0);
+			downsample<SolveReal>(coarseRhs, residualA, coarseDomainLabels, domainCellLabels);
+
+			Vector coarseRHSVector = Vector::Zero(interiorCellCount);
+			
 			// Copy to Eigen and direct solve
-			forEachVoxelRange(Vec2i(0), coarseResolution, [&](const Vec2i &cell)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.size()[0] * coarseDomainLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				if (coarseDomainLabels(cell) == CellLabels::INTERIOR)
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 				{
-					int index = directSolverIndices(cell);
-					assert(index >= 0);
+					Vec2i cell = coarseDomainLabels.unflatten(flatIndex);
 
-					coarseRHSVector(index) = coarseRhs(cell);
+					if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
+						coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
+					{
+						int index = directSolverIndices(cell);
+						assert(index >= 0);
+
+						coarseRHSVector(index) = coarseRhs(cell);
+					}
 				}
 			});
 
-			UniformGrid<Real> coarseSolution(coarseResolution, 0);
+			UniformGrid<StoreReal> coarseSolution(coarseDomainLabels.size(), 0);
 
-			Eigen::VectorXd directSolution = myCoarseSolver.solve(coarseRHSVector);
+			Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 			// Copy solution back
-			forEachVoxelRange(Vec2i(0), coarseResolution, [&](const Vec2i &cell)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.size()[0] * coarseDomainLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				if (coarseDomainLabels(cell) == CellLabels::INTERIOR)
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 				{
-					int index = directSolverIndices(cell);
-					assert(index >= 0);
+					Vec2i cell = coarseDomainLabels.unflatten(flatIndex);
 
-					coarseSolution(cell) = directSolution(index);
+					if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
+						coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
+					{
+						int index = directSolverIndices(cell);
+						assert(index >= 0);
+
+						coarseSolution(cell) = directSolution(index);
+					}
 				}
 			});
 
-			upsampleAndAdd(solutionA, coarseSolution, expandedDomainCellLabels, coarseDomainLabels);
+			upsampleAndAdd<SolveReal>(solutionA, coarseSolution, domainCellLabels, coarseDomainLabels);
 
-			dampedJacobiWeightedPoissonSmoother(solutionA, rhsA, expandedDomainCellLabels, dummyWeights, dx);
+			for (int iteration = 0; iteration < 3; ++iteration)
+				boundaryJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, boundaryCells, dx, &boundaryWeights);
+
+			interiorJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, dx, &boundaryWeights);
+
+			for (int iteration = 0; iteration < 3; ++iteration)
+				boundaryJacobiPoissonSmoother<SolveReal>(solutionA, rhsA, domainCellLabels, boundaryCells, dx, &boundaryWeights);
 		}
 
-		UniformGrid<Real> solutionB(expandedResolution, 0);
+		UniformGrid<StoreReal> solutionB(domainCellLabels.size(), 0);
 		{
 			// Pre-smooth to get an initial guess
-			dampedJacobiWeightedPoissonSmoother(solutionB, rhsB, expandedDomainCellLabels, dummyWeights, dx);
+			std::vector<Vec2i> boundaryCells = buildBoundaryCells(domainCellLabels, 3);
+
+			// Test Jacobi symmetry
+			for (int iteration = 0; iteration < 3; ++iteration)
+				boundaryJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, boundaryCells, dx, &boundaryWeights);
+
+			interiorJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, dx, &boundaryWeights);
+
+			for (int iteration = 0; iteration < 3; ++iteration)
+				boundaryJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, boundaryCells, dx, &boundaryWeights);
 
 			// Compute new residual
-			UniformGrid<Real> residualB(expandedResolution, 0);
-			computeWeightedPoissonResidual(residualB, solutionB, rhsB, expandedDomainCellLabels, dummyWeights, dx);
+			UniformGrid<StoreReal> residualB(domainCellLabels.size(), 0);
 
-			UniformGrid<Real> coarseRhs(coarseResolution, 0);
-			downsample(coarseRhs, residualB, coarseDomainLabels, expandedDomainCellLabels);
+			computePoissonResidual<SolveReal>(residualB, solutionB, rhsB, domainCellLabels, dx, &boundaryWeights);
 
-			Eigen::VectorXd coarseRHSVector = Eigen::VectorXd::Zero(interiorCellCount);
+			UniformGrid<StoreReal> coarseRhs(coarseDomainLabels.size(), 0);
+			downsample<SolveReal>(coarseRhs, residualB, coarseDomainLabels, domainCellLabels);
+
+			Vector coarseRHSVector = Vector::Zero(interiorCellCount);
+
 			// Copy to Eigen and direct solve
-			forEachVoxelRange(Vec2i(0), coarseResolution, [&](const Vec2i &cell)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.size()[0] * coarseDomainLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				if (coarseDomainLabels(cell) == CellLabels::INTERIOR)
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 				{
-					int index = directSolverIndices(cell);
-					assert(index >= 0);
+					Vec2i cell = coarseDomainLabels.unflatten(flatIndex);
 
-					coarseRHSVector(index) = coarseRhs(cell);
+					if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
+						coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
+					{
+						int index = directSolverIndices(cell);
+						assert(index >= 0);
+
+						coarseRHSVector(index) = coarseRhs(cell);
+					}
 				}
 			});
 
-			UniformGrid<Real> coarseSolution(coarseResolution, 0);
+			UniformGrid<StoreReal> coarseSolution(coarseDomainLabels.size(), 0);
 
-			Eigen::VectorXd directSolution = myCoarseSolver.solve(coarseRHSVector);
+			Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 			// Copy solution back
-			forEachVoxelRange(Vec2i(0), coarseResolution, [&](const Vec2i &cell)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.size()[0] * coarseDomainLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				if (coarseDomainLabels(cell) == CellLabels::INTERIOR)
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 				{
-					int index = directSolverIndices(cell);
-					assert(index >= 0);
+					Vec2i cell = coarseDomainLabels.unflatten(flatIndex);
 
-					coarseSolution(cell) = directSolution(index);
+					if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
+						coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
+					{
+						int index = directSolverIndices(cell);
+						assert(index >= 0);
+
+						coarseSolution(cell) = directSolution(index);
+					}
 				}
 			});
 
-			upsampleAndAdd(solutionB, coarseSolution, expandedDomainCellLabels, coarseDomainLabels);
+			upsampleAndAdd<SolveReal>(solutionB, coarseSolution, domainCellLabels, coarseDomainLabels);
 
-			dampedJacobiWeightedPoissonSmoother(solutionB, rhsB, expandedDomainCellLabels, dummyWeights, dx);
+			for (int iteration = 0; iteration < 3; ++iteration)
+				boundaryJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, boundaryCells, dx, &boundaryWeights);
+
+			interiorJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, dx, &boundaryWeights);
+
+			for (int iteration = 0; iteration < 3; ++iteration)
+				boundaryJacobiPoissonSmoother<SolveReal>(solutionB, rhsB, domainCellLabels, boundaryCells, dx, &boundaryWeights);
 		}
 
-		Real dotA = dotProduct(solutionA, rhsB, expandedDomainCellLabels);
-		Real dotB = dotProduct(solutionB, rhsA, expandedDomainCellLabels);
+		SolveReal dotA = dotProduct<SolveReal>(solutionA, rhsB, domainCellLabels);
+		SolveReal dotB = dotProduct<SolveReal>(solutionB, rhsA, domainCellLabels);
 
+		std::cout << "One level correction symmetry: " << dotA << ", " << dotB << std::endl;
 		assert(fabs(dotA - dotB) / fabs(std::max(dotA, dotB)) < 1E-10);
 	}
 
 	{
 		// Pre-build multigrid preconditioner
-		GeometricMGPoissonSolver MGPreconditionerA(expandedDomainCellLabels, 4, dx);
-		MGPreconditionerA.setGradientWeights(dummyWeights);
+		GeometricMultigridPoissonSolver mgSolver(domainCellLabels, boundaryWeights, mgLevels, dx);
 
-		UniformGrid<Real> solutionA(expandedResolution, 0);
-		MGPreconditionerA.applyMGVCycle(solutionA, rhsA);
-		MGPreconditionerA.applyMGVCycle(solutionA, rhsA, true);
-		MGPreconditionerA.applyMGVCycle(solutionA, rhsA, true);
-		MGPreconditionerA.applyMGVCycle(solutionA, rhsA, true);
+		UniformGrid<StoreReal> solutionA(domainCellLabels.size(), 0);
+		mgSolver.applyMGVCycle(solutionA, rhsA);
+		mgSolver.applyMGVCycle(solutionA, rhsA, true);
+		mgSolver.applyMGVCycle(solutionA, rhsA, true);
+		mgSolver.applyMGVCycle(solutionA, rhsA, true);
 
-		GeometricMGPoissonSolver MGPreconditionerB(expandedDomainCellLabels, 4, dx);
-		MGPreconditionerB.setGradientWeights(dummyWeights);
+		UniformGrid<StoreReal> solutionB(domainCellLabels.size(), 0);
+		mgSolver.applyMGVCycle(solutionB, rhsB);
+		mgSolver.applyMGVCycle(solutionB, rhsB, true);
+		mgSolver.applyMGVCycle(solutionB, rhsB, true);
+		mgSolver.applyMGVCycle(solutionB, rhsB, true);
 
-		UniformGrid<Real> solutionB(expandedResolution, 0);
-		MGPreconditionerB.applyMGVCycle(solutionB, rhsB);
-		MGPreconditionerB.applyMGVCycle(solutionB, rhsB, true);
-		MGPreconditionerB.applyMGVCycle(solutionB, rhsB, true);
-		MGPreconditionerB.applyMGVCycle(solutionB, rhsB, true);
+		SolveReal dotA = dotProduct<SolveReal>(solutionA, rhsB, domainCellLabels);
+		SolveReal dotB = dotProduct<SolveReal>(solutionB, rhsA, domainCellLabels);
 
-		Real dotA = dotProduct(solutionA, rhsB, expandedDomainCellLabels);
-		Real dotB = dotProduct(solutionB, rhsA, expandedDomainCellLabels);
-
+		std::cout << "4 v-cycle symmetry: " << dotA << ", " << dotB << std::endl;
 		assert(fabs(dotA - dotB) / fabs(std::max(dotA, dotB)) < 1E-10);
 	}
 
@@ -554,15 +613,20 @@ int main(int argc, char** argv)
 	int pixelHeight = 1080;
 	int pixelWidth = pixelHeight;
 	renderer = std::make_unique<Renderer>("MG Symmetry Test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
-	
-	ScalarGrid<Real> tempGrid(xform, interiorResolution);
 
-	forEachVoxelRange(Vec2i(0), interiorResolution, [&](const Vec2i &cell)
+	ScalarGrid<Real> tempGrid(Transform(dx, Vec2R(0)), domainCellLabels.size());
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.size()[0] * tempGrid.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
-		tempGrid(cell) = Real(interiorDomainCellLabels(cell));
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = tempGrid.unflatten(flatIndex);
+
+			tempGrid(cell) = Real(domainCellLabels(cell));
+		}
 	});
 
-	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR), Real(CellLabels::DIRICHLET));
+	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR_CELL), Real(CellLabels::BOUNDARY_CELL));
 
 	renderer->run();
 }

@@ -1,7 +1,7 @@
 add_library(2DFluidSimTools
 				ComputeWeights.cpp
-				GeometricMGOperations.cpp
-				GeometricMGPoissonSolver.cpp
+				GeometricMultigridOperators.cpp
+				GeometricMultigridPoissonSolver.cpp
 				GeometricPressureProjection.cpp
 				PressureProjection.cpp
 				ViscositySolver.cpp

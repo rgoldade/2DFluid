@@ -1,5 +1,5 @@
-#ifndef LIBRARY_PRESSUREPROJECTION_H
-#define LIBRARY_PRESSUREPROJECTION_H
+#ifndef LIBRARY_PRESSURE_PROJECTION_H
+#define LIBRARY_PRESSURE_PROJECTION_H
 
 #include "Common.h"
 #include "ComputeWeights.h"
@@ -48,7 +48,7 @@ public:
 		assert(solidVelocity.sampleType() == VectorGridSettings::SampleType::STAGGERED);
 
 		assert(solidVelocity.isGridMatched(cutCellWeights) &&
-			solidVelocity.isGridMatched(ghostFluidWeights));
+				solidVelocity.isGridMatched(ghostFluidWeights));
 
 		myPressure = ScalarGrid<Real>(surface.xform(), surface.size(), 0);
 		myValidFaces = VectorGrid<MarkedCells>(surface.xform(), surface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);

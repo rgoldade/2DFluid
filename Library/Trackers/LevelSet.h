@@ -113,7 +113,7 @@ public:
 	const Real& operator()(int i, int j) const { return myPhiGrid(i, j); }
 	const Real& operator()(const Vec2i& cell) const { return myPhiGrid(cell); }
 
-	Vec2i unflatten(int cellIndex) { return myPhiGrid.unflatten(cellIndex); }
+	Vec2i unflatten(int cellIndex) const { return myPhiGrid.unflatten(cellIndex); }
 
 	Vec2R findSurface(const Vec2R& worldPoint, int iterationLimit) const;
 	

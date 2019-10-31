@@ -3,8 +3,8 @@
 #include <string>
 
 #include "Common.h"
-#include "GeometricMGOperations.h"
-#include "InitialMGTestDomains.h"
+#include "GeometricMultigridOperators.h"
+#include "InitialMultigridTestDomains.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
@@ -12,113 +12,140 @@
 
 std::unique_ptr<Renderer> renderer;
 
-static const Vec2i resolution(64);
-static const bool useComplexDomain = true;
-static const bool useSolidSphere = true;
-static const Real sphereRadius = .125;
+static constexpr int gridSize = 256;
+static constexpr bool useComplexDomain = true;
+static constexpr bool useSolidSphere = true;
 
-static const bool useGaussSeidelSmoother = true;
-
-static const bool useRandomGuess = true;
+static constexpr bool useRandomGuess = true;
 
 std::default_random_engine generator;
 std::uniform_real_distribution<Real> distribution(0, 1);
 
-static const int maxSmootherIterations = 1000;
-static const int deltaAmplitude = 1000;
+static constexpr int maxIterations = 1000;
+static constexpr double deltaAmplitude = 1000;
 
 int main(int argc, char** argv)
 {
-	using namespace GeometricMGOperations;
+	using namespace GeometricMultigridOperators;
+
+	using StoreReal = double;
+	using SolveReal = double;
 
 	UniformGrid<CellLabels> domainCellLabels;
-	UniformGrid<Real> rhsGrid(resolution, 0);
-	UniformGrid<Real> solutionGrid(resolution, 0);
-	
-	UniformGrid<Real> residualGrid(resolution, 0);
+	VectorGrid<StoreReal> boundaryWeights;
 
-	// Complex domain set up
-	if (useComplexDomain)
-		domainCellLabels = buildComplexDomain(resolution,
-												useSolidSphere,
-												sphereRadius);
-	// Simple domain set up
-	else
-		domainCellLabels = buildSimpleDomain(resolution,
-												1 /*dirichlet band*/);
+	int mgLevels;
+	Vec2i exteriorOffset;
+	{
+		UniformGrid<CellLabels> baseDomainCellLabels;
+		VectorGrid<StoreReal> baseBoundaryWeights;
+
+		// Complex domain set up
+		if (useComplexDomain)
+			buildComplexDomain(baseDomainCellLabels,
+								baseBoundaryWeights,
+								gridSize,
+								useSolidSphere);
+		// Simple domain set up
+		else
+			buildSimpleDomain(baseDomainCellLabels,
+								baseBoundaryWeights,
+								gridSize,
+								1 /*dirichlet band*/);
+
+		// Build expanded domain
+		std::pair<Vec2i, int> mgSettings = buildExpandedDomain(domainCellLabels, boundaryWeights, baseDomainCellLabels, baseBoundaryWeights);
+
+		exteriorOffset = mgSettings.first;
+		mgLevels = mgSettings.second;
+	}
+
+	SolveReal dx = boundaryWeights.dx();
+
+	UniformGrid<StoreReal> rhsGrid(domainCellLabels.size(), 0);
+	UniformGrid<StoreReal> solutionGrid(domainCellLabels.size(), 0);
+	UniformGrid<StoreReal> residualGrid(domainCellLabels.size(), 0);
+
+	int totalVoxels = domainCellLabels.size()[0] * domainCellLabels.size()[1];
 	if (useRandomGuess)
 	{
-		forEachVoxelRange(Vec2i(0), resolution, [&](const Vec2i &cell)
+		tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			if (domainCellLabels(cell) == CellLabels::INTERIOR)
+			std::default_random_engine generator;
+			std::uniform_real_distribution<StoreReal> distribution(0, 1);
+
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				solutionGrid(cell) = distribution(generator);
+				Vec2i cell = domainCellLabels.unflatten(flatIndex);
+
+				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+					domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+				{
+					solutionGrid(cell) = distribution(generator);
+				}
 			}
 		});
 	}
 
 	// Set delta function
-	Real deltaPercent = .1;
-	Vec2i deltaPoint = Vec2i(deltaPercent * Vec2R(resolution));
+	StoreReal deltaPercent = .1;
+	Vec2i deltaPoint = Vec2i(deltaPercent * Vec2R(gridSize)) + exteriorOffset;
 
 	forEachVoxelRange(deltaPoint - Vec2i(1), deltaPoint + Vec2i(2), [&](const Vec2i &cell)
 	{
-		rhsGrid(cell) = deltaAmplitude;
+		if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+			domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+			rhsGrid(cell) = deltaAmplitude;
 	});
 	
 	Real oldLInfinityError = std::numeric_limits<Real>::max();
 	Real oldL2Error = oldLInfinityError;
 
-	Real dx = 1. / resolution[0];
+	std::vector<Vec2i> boundaryCells = buildBoundaryCells(domainCellLabels, 3);
 
-	for (int iteration = 0; iteration < maxSmootherIterations; ++iteration)
+	std::cout.precision(10);
+
+	for (int iteration = 0; iteration < maxIterations; ++iteration)
 	{
-		dampedJacobiPoissonSmoother(solutionGrid, rhsGrid, domainCellLabels, dx);
+		boundaryJacobiPoissonSmoother<SolveReal>(solutionGrid, rhsGrid, domainCellLabels, boundaryCells, dx, &boundaryWeights);
 
-		computePoissonResidual(residualGrid, solutionGrid, rhsGrid, domainCellLabels, dx);
+		interiorJacobiPoissonSmoother<SolveReal>(solutionGrid, rhsGrid, domainCellLabels, dx, &boundaryWeights);
 
-		// Print out residual as a height field
-		residualGrid.printAsOBJ("smootherResidual" + std::to_string(iteration + 1));
-		
-		// Print solution grid
-		solutionGrid.printAsOBJ("solutionGrid" + std::to_string(iteration + 1));
+		boundaryJacobiPoissonSmoother<SolveReal>(solutionGrid, rhsGrid, domainCellLabels, boundaryCells, dx, &boundaryWeights);
 
-		// Print out L-infinity norm;
-		Real LInfinityError = 0;
-		Real L2Error = 0;
-		forEachVoxelRange(Vec2i(0), resolution, [&](const Vec2i &cell)
-		{
-			if (domainCellLabels(cell) == CellLabels::INTERIOR)
-			{
-				LInfinityError = std::max(LInfinityError, (Real)fabs(residualGrid(cell)));
-				L2Error += Util::sqr(residualGrid(cell));
-			}
-		});
+		computePoissonResidual<SolveReal>(residualGrid, solutionGrid, rhsGrid, domainCellLabels, dx);
 
-		if (oldLInfinityError < LInfinityError)
+		SolveReal lInfinityError = lInfinityNorm<SolveReal>(residualGrid, domainCellLabels);
+		SolveReal l2Error = squaredl2Norm<SolveReal>(residualGrid, domainCellLabels);
+
+		if (oldLInfinityError < lInfinityError)
 			std::cout << "L-Infinity error didn't decrease" << std::endl;
-		if (oldL2Error < L2Error)
+		if (oldL2Error < l2Error)
 			std::cout << "L-2 error didn't decrease" << std::endl;
 
-		oldLInfinityError = LInfinityError;
-		oldL2Error = L2Error;
-		std::cout << "Iteration: " << iteration << ". L-infinity error: " << LInfinityError << ". L-2 error: " << L2Error << std::endl;
+		oldLInfinityError = lInfinityError;
+		oldL2Error = l2Error;
+		std::cout << "Iteration: " << iteration << ". L-infinity error: " << lInfinityError << ". L-2 error: " << std::sqrt(l2Error) << std::endl;
 	}
 
 	// Print domain labels to make sure they are set up correctly
 	int pixelHeight = 1080;
 	int pixelWidth = pixelHeight;
-	renderer = std::make_unique<Renderer>("MG Smoother Test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
-	
-	Transform xform(1. / resolution[0], Vec2R(0));
-	ScalarGrid<Real> tempGrid(xform, resolution);
+	renderer = std::make_unique<Renderer>("Smoother Test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
 
-	forEachVoxelRange(Vec2i(0), resolution, [&](const Vec2i &cell)
+	ScalarGrid<Real> tempGrid(Transform(dx, Vec2R(0)), domainCellLabels.size());
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.size()[0] * tempGrid.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
-		tempGrid(cell) = Real(domainCellLabels(cell));
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = tempGrid.unflatten(flatIndex);
+
+			tempGrid(cell) = Real(domainCellLabels(cell));
+		}
 	});
 
-	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR), Real(CellLabels::DIRICHLET));
+	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR_CELL), Real(CellLabels::BOUNDARY_CELL));
 
 	renderer->run();
 }
