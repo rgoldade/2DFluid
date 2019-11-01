@@ -176,7 +176,7 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 		int interiorCellCount = 0;
 		Vec2i coarsestSize = myDomainLabels[myMGLevels - 1].size();
 
-		myDirectSolverIndices = UniformGrid<int>(coarsestSize, UNLABELLED_CELL);
+		myDirectSolverIndices = UniformGrid<int>(coarsestSize, -1 /* unlabelled cell marker */);
 
 		forEachVoxelRange(Vec2i(0), coarsestSize, [&](const Vec2i &cell)
 		{

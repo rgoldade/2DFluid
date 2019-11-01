@@ -10,8 +10,6 @@
 
 class GeometricMultigridPoissonSolver
 {
-	static constexpr int UNLABELLED_CELL = -1;
-
 	using StoreReal = double;
 	using SolveReal = double;
 	using Vector = std::conditional<std::is_same<SolveReal, float>::value, Eigen::VectorXf, Eigen::VectorXd>::type;
