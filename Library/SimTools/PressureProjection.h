@@ -94,7 +94,7 @@ private:
 
 	const ScalarGrid<Real> *myInitialGuessPressure;
 	bool myUseInitialGuessPressure;
-	const VectorGrid<Real>& myGhostFluidWeights, &myCutCellWeights;
+	const VectorGrid<Real> &myGhostFluidWeights, &myCutCellWeights;
 };
 
 #endif

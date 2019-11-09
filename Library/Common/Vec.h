@@ -20,7 +20,7 @@ struct Vec
 {
 	Vec<T, N>()	{}
 
-	explicit Vec<T, N>(T val)
+	constexpr explicit Vec<T, N>(T val)
 	{
 		myVec.fill(val);
 	}

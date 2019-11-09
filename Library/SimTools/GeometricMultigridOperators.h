@@ -776,14 +776,20 @@ namespace GeometricMultigridOperators
 					assert(expandedDomainCellLabels(backwardCell + exteriorOffset) != CellLabels::EXTERIOR_CELL &&
 							expandedDomainCellLabels(forwardCell + exteriorOffset) != CellLabels::EXTERIOR_CELL);
 
-					assert(expandedDomainCellLabels(backwardCell + exteriorOffset) == CellLabels::INTERIOR_CELL ||
-							expandedDomainCellLabels(forwardCell + exteriorOffset) == CellLabels::INTERIOR_CELL);
-
 					Vec2i expandedFace = face + exteriorOffset;
 
 					expandedBoundaryWeights(expandedFace, axis) = baseBoundaryWeights(face, axis);
 				}
-				else assert(baseBoundaryWeights(face, axis) == 0);
+				else
+				{
+					assert(baseBoundaryWeights(face, axis) == 0);
+
+					Vec2i backwardCell = faceToCell(face, axis, 0);
+					Vec2i forwardCell = faceToCell(face, axis, 1);
+
+					assert(expandedDomainCellLabels(backwardCell + exteriorOffset) == CellLabels::EXTERIOR_CELL ||
+							expandedDomainCellLabels(forwardCell + exteriorOffset) == CellLabels::EXTERIOR_CELL);
+				}
 			}
 		});
 	}

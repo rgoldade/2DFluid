@@ -77,6 +77,8 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal> &solutionGrid,
 
 		// Update residual
 		addToVectorFunctor(residualGrid, tempGrid, -alpha);
+
+		residualGrid.printAsOBJ("geometricResidual" + std::to_string(iteration));
 		
 		residualNorm2 = squaredNormFunctor(residualGrid);
 

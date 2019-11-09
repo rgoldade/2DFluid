@@ -126,8 +126,8 @@ public:
 	void drawSupersampledValues(Renderer& renderer, Real radius = .5, 
 									int samples = 1, Real sampleSize = 1.) const;
 	void drawNormals(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), Real length = .25) const;
-	void drawSurface(Renderer& renderer, const Vec3f& colour = Vec3f(0.), Real lineWidth = 1);
-	void drawDCSurface(Renderer& renderer, const Vec3f& colour = Vec3f(0.), Real lineWidth = 1);
+	void drawSurface(Renderer& renderer, const Vec3f& colour = Vec3f(0.), Real lineWidth = 1) const;
+	void drawDCSurface(Renderer& renderer, const Vec3f& colour = Vec3f(0.), Real lineWidth = 1) const;
 
 private:
 

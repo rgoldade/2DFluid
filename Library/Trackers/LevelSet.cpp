@@ -28,13 +28,13 @@ void LevelSet::drawNormals(Renderer& renderer, const Vec3f& colour, Real length)
 	myPhiGrid.drawSampleGradients(renderer, colour, length);
 }
 
-void LevelSet::drawSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth)
+void LevelSet::drawSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth) const
 {
 	EdgeMesh surface = buildMSMesh();
 	surface.drawMesh(renderer, colour, lineWidth);
 }
 
-void LevelSet::drawDCSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth)
+void LevelSet::drawDCSurface(Renderer& renderer, const Vec3f& colour, const Real lineWidth) const
 {
 	EdgeMesh surface = buildDCMesh();
 	surface.drawMesh(renderer, colour, lineWidth);

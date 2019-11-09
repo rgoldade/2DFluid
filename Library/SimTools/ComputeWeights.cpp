@@ -1,5 +1,7 @@
 #include "ComputeWeights.h"
 
+#include "tbb/tbb.h"
+
 #include "LevelSet.h"
 
 VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface)
@@ -8,19 +10,27 @@ VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface)
 	
 	for (int axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2i(0), ghostFluidWeights.size(axis), [&](const Vec2i& face)
+		tbb::parallel_for(tbb::blocked_range<int>(0, ghostFluidWeights.size(axis)[0] * ghostFluidWeights.size(axis)[1], tbbGrainSize),
+		[&](const tbb::blocked_range<int> &range)
 		{
-			Vec2i backwardCell = faceToCell(face, axis, 0);
-			Vec2i forwardCell = faceToCell(face, axis, 1);
-
-			if (backwardCell[axis] < 0 || forwardCell[axis] >= surface.size()[axis])
-				return;
-			else
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 			{
-				Real phiBackward = surface(backwardCell);
-				Real phiForward = surface(forwardCell);
-				
-				ghostFluidWeights(face, axis) = lengthFraction(phiBackward, phiForward);
+				Vec2i face = ghostFluidWeights.grid(axis).unflatten(flatIndex);
+
+				Vec2i backwardCell = faceToCell(face, axis, 0);
+				Vec2i forwardCell = faceToCell(face, axis, 1);
+
+				if (backwardCell[axis] < 0 || forwardCell[axis] >= surface.size()[axis])
+					continue;
+				else
+				{
+					Real phiBackward = surface(backwardCell);
+					Real phiForward = surface(forwardCell);
+
+					Real theta = lengthFraction<Real>(phiBackward, phiForward);
+					theta = Util::clamp(theta, Real(MINTHETA), Real(1));
+					ghostFluidWeights(face, axis) = theta;
+				}
 			}
 		});
 	}
@@ -34,23 +44,29 @@ VectorGrid<Real> computeCutCellWeights(const LevelSet& surface, bool invert)
 
 	for (unsigned axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2i(0), cutCellWeights.size(axis), [&](const Vec2i& face)
+		tbb::parallel_for(tbb::blocked_range<int>(0, cutCellWeights.size(axis)[0] * cutCellWeights.size(axis)[1], tbbGrainSize),
+		[&](const tbb::blocked_range<int> &range)
 		{
-			int otherAxis = (axis + 1) % 2;
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			{
+				Vec2i face = cutCellWeights.grid(axis).unflatten(flatIndex);
 
-			Vec2R offset(0); offset[otherAxis] = .5;
+				int otherAxis = (axis + 1) % 2;
 
-			Vec2R pos0 = cutCellWeights.indexToWorld(Vec2R(face) - offset, axis);
-			Vec2R pos1 = cutCellWeights.indexToWorld(Vec2R(face) + offset, axis);
+				Vec2R offset(0); offset[otherAxis] = .5;
 
-			Real weight = lengthFraction(surface.interp(pos0), surface.interp(pos1));
+				Vec2R pos0 = cutCellWeights.indexToWorld(Vec2R(face) - offset, axis);
+				Vec2R pos1 = cutCellWeights.indexToWorld(Vec2R(face) + offset, axis);
 
-			if (invert) weight = 1. - weight;
+				Real weight = lengthFraction<Real>(surface.interp(pos0), surface.interp(pos1));
 
-			// Clamp below zero and above one.
-			weight = Util::clamp(weight, 0., 1.);
+				if (invert) weight = 1. - weight;
 
-			cutCellWeights(face, axis) = weight;
+				// Clamp weight down to zero if the cut-cell size is small
+				if (weight < MINTHETA) weight = 0;
+
+				cutCellWeights(face, axis) = weight;
+			}
 		});
 	}
 

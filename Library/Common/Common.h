@@ -170,19 +170,22 @@ const Vec3f colours[] = { Vec3f(1., 0., 0.),
 							Vec3f(1., 0., 1.),
 							Vec3f(0., 1., 1.) };
 
-inline Real lengthFraction(Real phi0, Real phi1)
+template<typename RealType>
+RealType lengthFraction(RealType phi0, RealType phi1)
 {
-	Real theta = 0.;
+	RealType theta = 0.;
 
 	if (phi0 <= 0)
 	{
 		if (phi1 <= 0)
 			theta = 1.;
-		else if (phi1 > 0)
+		else // if (phi1 > 0)
 			theta = phi0 / (phi0 - phi1);
 	}
 	else if (phi0 > 0 && phi1 <= 0)
 		theta = phi1 / (phi1 - phi0);
+
+	assert(theta >= 0 && theta <= 1);
 
 	return theta;
 }

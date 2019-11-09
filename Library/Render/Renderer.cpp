@@ -393,7 +393,7 @@ void Renderer::printImage(const std::string &filename) const
 	Real scale = Real(myWindowSize[1]) / myCurrentScreenHeight;
 	svg::Point originOffset(-myCurrentScreenOrigin[0], -myCurrentScreenOrigin[1]);
 
-	svg::Document svgDocument(filename,
+	svg::Document svgDocument(filename + ".svg",
 		svg::Layout(svg::Dimensions(myWindowSize[0], myWindowSize[1]),
 			svg::Layout::BottomLeft,
 			scale, originOffset));

@@ -139,6 +139,7 @@ namespace GeometricMultigridOperators
 			boundaryCellList.insert(boundaryCellList.end(), localList.begin(), localList.end());
 		});
 
+		// TODO: sort and skip duplicates to prevent an explosion in list sizes
 		for (int layer = 1; layer < boundaryWidth; ++layer)
 		{
 			// Set cells to visited

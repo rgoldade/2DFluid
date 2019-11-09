@@ -59,7 +59,7 @@ void EdgeMesh::drawMesh(Renderer& renderer,
 	Real edgeWidth,
 	bool doRenderEdgeNormals,
 	bool doRenderVertices,
-	Vec3f vertexColour)
+	Vec3f vertexColour) const
 {
 	std::vector<Vec2R> startPoints;
 	std::vector<Vec2R> endPoints;
