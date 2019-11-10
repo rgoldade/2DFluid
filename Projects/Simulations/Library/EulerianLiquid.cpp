@@ -55,12 +55,17 @@ void EulerianLiquid::setLiquidVelocity(const VectorGrid<Real>& velocity)
 {
 	for (int axis : {0, 1})
 	{
-		Vec2i size = myLiquidVelocity.size(axis);
+		int totalFaces = myLiquidVelocity.size(axis)[0] * myLiquidVelocity.size(axis)[1];
 
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		tbb::parallel_for(tbb::blocked_range<int>(0, totalFaces, tbbGrainSize), [&](tbb::blocked_range<int> &range)
 		{
-			Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
-			myLiquidVelocity(face, axis) = velocity.interp(facePosition, axis);
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			{
+				Vec2i face = myLiquidVelocity.grid(axis).unflatten(flatIndex);
+
+				Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
+				myLiquidVelocity(face, axis) = velocity.interp(facePosition, axis);
+			}
 		});
 	}
 }
@@ -69,12 +74,17 @@ void EulerianLiquid::setSolidVelocity(const VectorGrid<Real>& solidVelocity)
 {
 	for (int axis : {0, 1})
 	{
-		Vec2i size = mySolidVelocity.size(axis);
+		int totalFaces = mySolidVelocity.size(axis)[0] * mySolidVelocity.size(axis)[1];
 
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		tbb::parallel_for(tbb::blocked_range<int>(0, totalFaces, tbbGrainSize), [&](tbb::blocked_range<int> &range)
 		{
-			Vec2R facePosition = mySolidVelocity.indexToWorld(Vec2R(face), axis);
-			mySolidVelocity(face, axis) = solidVelocity.interp(facePosition, axis);
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			{
+				Vec2i face = mySolidVelocity.grid(axis).unflatten(flatIndex);
+
+				Vec2R facePosition = mySolidVelocity.indexToWorld(Vec2R(face), axis);
+				mySolidVelocity(face, axis) = solidVelocity.interp(facePosition, axis);
+			}
 		});
 	}
 }
@@ -84,11 +94,18 @@ void EulerianLiquid::unionLiquidSurface(const LevelSet& addedLiquidSurface)
 	// Need to zero out velocity in this added region as it could get extrapolated values
 	for (int axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2i(0), myLiquidVelocity.size(axis), [&](const Vec2i& face)
+		int totalFaces = myLiquidVelocity.size(axis)[0] * myLiquidVelocity.size(axis)[1];
+
+		tbb::parallel_for(tbb::blocked_range<int>(0, totalFaces, tbbGrainSize), [&](tbb::blocked_range<int> &range)
 		{
-			Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
-			if (addedLiquidSurface.interp(facePosition) <= 0. && myLiquidSurface.interp(facePosition) > 0.)
-				myLiquidVelocity(face, axis) = 0;
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			{
+				Vec2i face = myLiquidVelocity.grid(axis).unflatten(flatIndex);
+
+				Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
+				if (addedLiquidSurface.interp(facePosition) <= 0. && myLiquidSurface.interp(facePosition) > 0.)
+					myLiquidVelocity(face, axis) = 0;
+			}
 		});
 	}
 
@@ -102,10 +119,17 @@ void EulerianLiquid::addForce(Real dt, const ForceSampler& force)
 {
 	for (int axis : {0, 1})
 	{
-		forEachVoxelRange(Vec2i(0), myLiquidVelocity.size(axis), [&](const Vec2i& face)
+		int totalFaces = myLiquidVelocity.size(axis)[0] * myLiquidVelocity.size(axis)[1];
+
+		tbb::parallel_for(tbb::blocked_range<int>(0, totalFaces, tbbGrainSize), [&](tbb::blocked_range<int> &range)
 		{
-			Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
-			myLiquidVelocity(face, axis) = myLiquidVelocity(face, axis) + dt * force(facePosition, axis);
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			{
+				Vec2i face = myLiquidVelocity.grid(axis).unflatten(flatIndex);
+
+				Vec2R facePosition = myLiquidVelocity.indexToWorld(Vec2R(face), axis);
+				myLiquidVelocity(face, axis) = myLiquidVelocity(face, axis) + dt * force(facePosition, axis);
+			}
 		});
 	}
 }
@@ -115,7 +139,7 @@ void EulerianLiquid::addForce(Real dt, const Vec2R& force)
 	addForce(dt, [&](Vec2R, int axis) {return force[axis]; });
 }
 
-void EulerianLiquid::advectOldPressure(const Real dt, const InterpolationOrder order)
+void EulerianLiquid::advectOldPressure(const Real dt)
 {
 	auto velocityFunc = [&](Real, const Vec2R& pos) { return myLiquidVelocity.interp(pos); };
 
@@ -124,7 +148,7 @@ void EulerianLiquid::advectOldPressure(const Real dt, const InterpolationOrder o
 
 		ScalarGrid<Real> tempPressure(myOldPressure.xform(), myOldPressure.size());
 
-		pressureAdvector.advectField(dt, tempPressure, velocityFunc, IntegrationOrder::RK3, order);
+		pressureAdvector.advectField(dt, tempPressure, velocityFunc, IntegrationOrder::RK3, InterpolationOrder::LINEAR);
 
 		std::swap(myOldPressure, tempPressure);
 	}
@@ -140,9 +164,14 @@ void EulerianLiquid::advectLiquidSurface(Real dt, IntegrationOrder integrator)
 	myLiquidSurface.initFromMesh(localMesh, false);
 
 	// Remove solid regions from liquid surface
-	forEachVoxelRange(Vec2i(0), myLiquidSurface.size(), [&](const Vec2i& cell)
+	const int totalVoxels = myLiquidSurface.size()[0] * myLiquidSurface.size()[1];
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](tbb::blocked_range<int> &range)
 	{
-		myLiquidSurface(cell) = std::max(myLiquidSurface(cell), -mySolidSurface(cell));
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = myLiquidSurface.unflatten(flatIndex);
+			myLiquidSurface(cell) = std::max(myLiquidSurface(cell), -mySolidSurface(cell));
+		}
 	});
 
 	myLiquidSurface.reinitMesh();
@@ -183,10 +212,17 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	LevelSet extrapolatedSurface = myLiquidSurface;
 
 	Real dx = extrapolatedSurface.dx();
-	forEachVoxelRange(Vec2i(0), extrapolatedSurface.size(), [&](const Vec2i& cell)
+
+	const int totalVoxels = myLiquidSurface.size()[0] * myLiquidSurface.size()[1];
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](tbb::blocked_range<int> &range)
 	{
-		if (mySolidSurface(cell) <= 0)
-			extrapolatedSurface(cell) -= dx;
+		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		{
+			Vec2i cell = myLiquidSurface.unflatten(flatIndex);
+
+			if (mySolidSurface(cell) <= 0)
+				extrapolatedSurface(cell) -= dx;
+		}
 	});
 
 	extrapolatedSurface.reinitMesh();
@@ -246,7 +282,7 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 	std::cout << "  Extrapolate velocity: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();
 
-	advectOldPressure(dt, InterpolationOrder::LINEAR);
+	advectOldPressure(dt);
 	advectLiquidSurface(dt, IntegrationOrder::RK3);
 	
 	if (myDoSolveViscosity)

@@ -18,8 +18,10 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 
 	assert(velocity.isGridMatched(myCutCellWeights));
 
+	UniformGrid<int> fluidCellIndices(mySurface.size(), PressureCellLabels::UNSOLVED_CELL);
+
 	int liquidDOFCount = 0;
-	forEachVoxelRange(Vec2i(0), myFluidCellIndex.size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i(0), fluidCellIndices.size(), [&](const Vec2i& cell)
 	{
 		if (mySurface(cell) <= 0)
 		{
@@ -30,7 +32,7 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 
 					if (myCutCellWeights(face, axis) > 0)
 					{
-						myFluidCellIndex(cell) = liquidDOFCount++;
+						fluidCellIndices(cell) = liquidDOFCount++;
 						return;
 					}
 				}
@@ -40,9 +42,9 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 	Solver<false> solver(liquidDOFCount, liquidDOFCount * 5);
 
 	// Build linear system
-	forEachVoxelRange(Vec2i(0), myFluidCellIndex.size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i(0), fluidCellIndices.size(), [&](const Vec2i& cell)
 	{
-		int fluidIndex = myFluidCellIndex(cell);
+		int fluidIndex = fluidCellIndices(cell);
 		if (fluidIndex >= 0)
 		{
 			// Build RHS divergence
@@ -83,7 +85,7 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 					if (weight > 0)
 					{
 						// If neighbouring cell is solvable, it should have an entry in the system
-						int adjacentFluidIndex = myFluidCellIndex(adjacentCell);
+						int adjacentFluidIndex = fluidCellIndices(adjacentCell);
 						if (adjacentFluidIndex >= 0)
 						{
 							solver.addToElement(fluidIndex, adjacentFluidIndex, -weight);
@@ -119,9 +121,9 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 	}
 
 	// Load solution into pressure grid
-	forEachVoxelRange(Vec2i(0), myFluidCellIndex.size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i(0), fluidCellIndices.size(), [&](const Vec2i& cell)
 	{
-		int fluidIndex = myFluidCellIndex(cell);
+		int fluidIndex = fluidCellIndices(cell);
 		if (fluidIndex >= 0)
 			myPressure(cell) = solver.solution(fluidIndex);
 		else
@@ -140,7 +142,7 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 
 			if (!(backwardCell[axis] < 0 || forwardCell[axis] >= mySurface.size()[axis]))
 			{
-				if ((myFluidCellIndex(backwardCell) >= 0 || myFluidCellIndex(forwardCell) >= 0) &&
+				if ((fluidCellIndices(backwardCell) >= 0 || fluidCellIndices(forwardCell) >= 0) &&
 					myCutCellWeights(face, axis) > 0)
 					myValidFaces(face, axis) = MarkedCells::FINISHED;
 				else myValidFaces(face, axis) = MarkedCells::UNVISITED;
@@ -168,10 +170,10 @@ void PressureProjection::project(VectorGrid<Real>& velocity)
 				{
 					Real gradient = 0;
 
-					if (myFluidCellIndex(backwardCell) >= 0)
+					if (fluidCellIndices(backwardCell) >= 0)
 						gradient -= myPressure(backwardCell);
 
-					if (myFluidCellIndex(forwardCell) >= 0)
+					if (fluidCellIndices(forwardCell) >= 0)
 						gradient += myPressure(forwardCell);
 
 					localVelocity = velocity(face, axis) - gradient / theta;

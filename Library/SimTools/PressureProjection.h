@@ -52,7 +52,6 @@ public:
 
 		myPressure = ScalarGrid<Real>(surface.xform(), surface.size(), 0);
 		myValidFaces = VectorGrid<MarkedCells>(surface.xform(), surface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
-		myFluidCellIndex = UniformGrid<int>(surface.size(), PressureCellLabels::UNSOLVED_CELL);
 	}
 	
 	void project(VectorGrid<Real>& velocity);
@@ -84,17 +83,16 @@ public:
 private:
 
 	const VectorGrid<Real> &mySolidVelocity;
-
-	VectorGrid<MarkedCells> myValidFaces; // Store solved faces
+	const VectorGrid<Real> &myGhostFluidWeights, &myCutCellWeights;
+	VectorGrid<MarkedCells> myValidFaces;
 
 	const LevelSet &mySurface;
 	
 	ScalarGrid<Real> myPressure;
-	UniformGrid<int> myFluidCellIndex;
 
 	const ScalarGrid<Real> *myInitialGuessPressure;
 	bool myUseInitialGuessPressure;
-	const VectorGrid<Real> &myGhostFluidWeights, &myCutCellWeights;
+	
 };
 
 #endif

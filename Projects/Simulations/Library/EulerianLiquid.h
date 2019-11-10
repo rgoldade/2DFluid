@@ -1,8 +1,6 @@
 #ifndef SIMULATIONS_EULERIANLIQUID_H
 #define SIMULATIONS_EULERIANLIQUID_H
 
-#include <vector>
-
 #include "AdvectField.h"
 #include "Common.h"
 #include "ExtrapolateField.h"
@@ -66,7 +64,7 @@ public:
 	
 	void addForce(Real dt, const Vec2R& force);
 
-	void advectOldPressure(const Real dt, const InterpolationOrder order);
+	void advectOldPressure(const Real dt);
 	void advectLiquidSurface(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
 	void advectViscosity(Real dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
 	void advectLiquidVelocity(Real dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);

@@ -21,6 +21,8 @@ static Transform xform;
 static Vec2i gridSize;
 static int frameCount = 0;
 
+static Real cfl = 3;
+
 void display()
 {
 	if (runSimulation || runSingleStep)
@@ -38,7 +40,7 @@ void display()
 
 			if (speed > 1E-6)
 			{
-				Real cflDt = 3. * xform.dx() / speed;
+				Real cflDt = cfl * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
 					localDt = cflDt;
