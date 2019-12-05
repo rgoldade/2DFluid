@@ -88,6 +88,16 @@ namespace GeometricMultigridOperators
 	std::pair<Vec2i, int> buildExpandedDomainLabels(UniformGrid<CellLabels> &expandedDomainCellLabels,
 													const UniformGrid<CellLabels> &baseDomainCellLabels);
 
+	template<typename CustomLabel,
+		typename IsExteriorFunctor,
+		typename IsDirichletFunctor,
+		typename IsInteriorFunctor>
+	std::pair<Vec2i, int> buildCustomExpandedDomainLabels(UniformGrid<CellLabels> &expandedDomainCellLabels,
+															const UniformGrid<CustomLabel> &baseCustomLabels,
+															const IsExteriorFunctor &isExteriorFunctor,
+															const IsDirichletFunctor &isDirichletFunctor,
+															const IsInteriorFunctor &isInteriorFunctor);
+
 	template<typename StoreReal>
 	void buildExpandedBoundaryWeights(VectorGrid<StoreReal> &expandedBoundaryWeights,
 										const VectorGrid<StoreReal> &baseBoundaryWeights,
@@ -654,6 +664,71 @@ namespace GeometricMultigridOperators
 		});
 
 		return maxError;
+	}
+
+	template<typename CustomLabel,
+				typename IsExteriorFunctor,
+				typename IsDirichletFunctor,
+				typename IsInteriorFunctor>
+	std::pair<Vec2i, int> buildCustomExpandedDomainLabels(UniformGrid<CellLabels> &expandedDomainCellLabels,
+															const UniformGrid<CustomLabel> &baseCustomLabels,
+															const IsExteriorFunctor &isExteriorFunctor,
+															const IsDirichletFunctor &isDirichletFunctor,
+															const IsInteriorFunctor &isInteriorFunctor)
+	{
+		// Build domain labels with the appropriate padding to apply
+		// geometric multigrid directly without a wasteful transfer
+		// for each v-cycle.
+
+		// Cap MG levels at 4 voxels in the smallest dimension
+		Real minLog = std::min(std::log2(Real(baseCustomLabels.size()[0])),
+								std::log2(Real(baseCustomLabels.size()[1])));
+
+		int mgLevels = std::ceil(minLog) - std::log2(Real(2));
+
+		// Add the necessary exterior cells so that after coarsening to the top level
+		// there is still a single layer of exterior cells
+		int exteriorPadding = std::pow(2, mgLevels - 1);
+
+		Vec2i expandedGridSize = baseCustomLabels.size() + 2 * Vec2i(exteriorPadding);
+
+		for (int axis : {0, 1})
+		{
+			Real logSize = std::log2(Real(expandedGridSize[axis]));
+			logSize = std::ceil(logSize);
+
+			expandedGridSize[axis] = std::exp2(logSize);
+		}
+
+		Vec2i exteriorOffset = Vec2i(exteriorPadding);
+
+		expandedDomainCellLabels.resize(expandedGridSize, CellLabels::EXTERIOR_CELL);
+
+		// Copy initial domain labels to interior domain labels with padding
+		int totalVoxels = baseCustomLabels.size()[0] * baseCustomLabels.size()[1];
+
+		tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+		{
+			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			{
+				Vec2i cell = baseCustomLabels.unflatten(flatIndex);
+
+				auto baseLabel = baseCustomLabels(cell);
+				if (!isExteriorFunctor(baseLabel))
+				{
+					Vec2i expandedCell = cell + exteriorOffset;
+					if (isInteriorFunctor(baseLabel))
+						expandedDomainCellLabels(expandedCell) = CellLabels::INTERIOR_CELL;
+					else
+					{
+						assert(isDirichletFunctor(baseLabel));
+						expandedDomainCellLabels(expandedCell) = CellLabels::DIRICHLET_CELL;
+					}
+				}
+			}
+		});
+
+		return std::pair<Vec2i, int>(exteriorOffset, mgLevels);
 	}
 
 	template<typename StoreReal>

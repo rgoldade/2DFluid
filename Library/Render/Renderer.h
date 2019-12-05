@@ -53,6 +53,7 @@ public:
 	void drawPrimitives() const;
 
 	void printImage(const std::string& filename) const;
+	
 	void clear();
 	void run();
 
@@ -64,8 +65,8 @@ private:
 	std::vector<Vec3f> myPointColours;
 	std::vector<Real> myPointSize;
 
-	std::vector<std::vector<Vec2R>> myStartLines;
-	std::vector<std::vector<Vec2R>> myEndLines;
+	std::vector<std::vector<Vec2R>> myLineStartingPoints;
+	std::vector<std::vector<Vec2R>> myLineEndingPoints;
 	std::vector<Vec3f> myLineColours;
 	std::vector<Real> myLineSizes;
 
@@ -89,6 +90,7 @@ private:
 	// Mouse specific state
 	Vec2i myMousePosition;
 	bool myMouseMoved;
+
 	enum class MouseAction {INACTIVE, PAN, ZOOM_IN, ZOOM_OUT};
 	MouseAction myMouseAction;
 

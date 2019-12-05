@@ -1,7 +1,5 @@
 #include "Renderer.h"
 
-#include <fstream>
-
 #include "simple_svg_1.0.0.hpp"
 
 // Helper struct because glut is a pain.
@@ -231,8 +229,8 @@ void Renderer::addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour
 {
 	std::vector<Vec2R> lineStarts; lineStarts.push_back(start);
 	std::vector<Vec2R> lineEnds; lineEnds.push_back(end);
-	myStartLines.push_back(lineStarts);
-	myEndLines.push_back(lineEnds);
+	myLineStartingPoints.push_back(lineStarts);
+	myLineEndingPoints.push_back(lineEnds);
 
 	myLineColours.push_back(colour);
 	myLineSizes.push_back(width);
@@ -241,8 +239,8 @@ void Renderer::addLine(const Vec2R& start, const Vec2R& end, const Vec3f& colour
 void Renderer::addLines(const std::vector<Vec2R>& start, const std::vector<Vec2R>& end, const Vec3f& colour, const Real width)
 {
 	assert(start.size() == end.size());
-	myStartLines.push_back(start);
-	myEndLines.push_back(end);
+	myLineStartingPoints.push_back(start);
+	myLineEndingPoints.push_back(end);
 	myLineColours.push_back(colour);
 	myLineSizes.push_back(width);
 }
@@ -267,8 +265,8 @@ void Renderer::clear()
 	myPointColours.clear();
 	myPointSize.clear();
 
-	myStartLines.clear();
-	myEndLines.clear();
+	myLineStartingPoints.clear();
+	myLineEndingPoints.clear();
 	myLineColours.clear();
 	myLineSizes.clear();
 
@@ -335,7 +333,7 @@ void Renderer::drawPrimitives() const
 
 	glEnd();
 
-	int lineListSize = myStartLines.size();
+	int lineListSize = myLineStartingPoints.size();
 	for (int lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
 	{
 		Vec3f lineColour = myLineColours[lineListIndex];
@@ -345,11 +343,11 @@ void Renderer::drawPrimitives() const
 		
 		glBegin(GL_LINES);
 
-		int lineSublistSize = myStartLines[lineListIndex].size();
+		int lineSublistSize = myLineStartingPoints[lineListIndex].size();
 		for (int lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
 		{
-			Vec2R startPoint = myStartLines[lineListIndex][lineIndex];
-			Vec2R endPoint = myEndLines[lineListIndex][lineIndex];
+			Vec2R startPoint = myLineStartingPoints[lineListIndex][lineIndex];
+			Vec2R endPoint = myLineEndingPoints[lineListIndex][lineIndex];
 
 			glVertex2d(startPoint[0], startPoint[1]);
 			glVertex2d(endPoint[0], endPoint[1]);
@@ -454,16 +452,16 @@ void Renderer::printImage(const std::string &filename) const
 	}
 
 	// Draw line segments
-	int lineListSize = myStartLines.size();
+	int lineListSize = myLineStartingPoints.size();
 	for (int lineListIndex = 0; lineListIndex < lineListSize; ++lineListIndex)
 	{
 		Vec3f lineColour = 255 * myLineColours[lineListIndex];
 
-		int lineSublistSize = myStartLines[lineListIndex].size();
+		int lineSublistSize = myLineStartingPoints[lineListIndex].size();
 		for (int lineIndex = 0; lineIndex < lineSublistSize; ++lineIndex)
 		{
-			Vec2R startPoint = myStartLines[lineListIndex][lineIndex];
-			Vec2R endPoint = myEndLines[lineListIndex][lineIndex];
+			Vec2R startPoint = myLineStartingPoints[lineListIndex][lineIndex];
+			Vec2R endPoint = myLineEndingPoints[lineListIndex][lineIndex];
 
 			svgDocument << svg::Line(svg::Point(startPoint[0], startPoint[1]),
 				svg::Point(endPoint[0], endPoint[1]),
