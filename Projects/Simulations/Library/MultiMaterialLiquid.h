@@ -28,7 +28,6 @@ public:
 		: myXform(xform)
 		, myGridSize(size)
 		, myMaterialCount(materials)
-		, myInitializedMaterialsCount(0)
 	{
 		assert(myMaterialCount > 1);
 		myFluidVelocities.resize(myMaterialCount);
@@ -104,7 +103,6 @@ private:
 	const Vec2i myGridSize;
 	const Transform myXform;
 	const unsigned myMaterialCount;
-	unsigned myInitializedMaterialsCount;
 };
 
 #endif

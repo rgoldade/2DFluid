@@ -15,7 +15,9 @@ std::unique_ptr<Renderer> renderer;
 static bool runSimulation = false;
 static bool runSingleStep = false;
 static bool isDisplayDirty = true;
-static constexpr Real dt = 1. / 30.;
+static constexpr Real dt = 1. / 60.;
+
+static bool printFrame = false;
 
 static unsigned liquidMaterialCount;
 static unsigned currentMaterial = 0;
@@ -24,7 +26,8 @@ static Transform xform;
 static Vec2i gridSize;
 
 static int frameCount = 0;
-static const Real bubbleDensity = 10000;
+static const Real bubbleDensity = 10;
+static const Real liquidDensity = 1000;
 
 void display()
 {
@@ -43,13 +46,19 @@ void display()
 
 			if (speed > 1E-6)
 			{
-				Real cflDt = 3. * xform.dx() / speed;
+				Real cflDt = 5. * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
-					localDt = cflDt;
+					if (cflDt < dt / 20.)
+						localDt = dt / 20.;
+					else
+						localDt = cflDt;
 					std::cout << "\n  Throttling frame with substep: " << localDt << "\n" << std::endl;
 				}
 			}
+
+			if (localDt <= 0)
+				break;
 
 			for (int material = 0; material < liquidMaterialCount; ++material)
 				multiMaterialSimulator->addForce(localDt, material, Vec2R(0., -9.8));
@@ -70,7 +79,16 @@ void display()
 		renderer->clear();
 		multiMaterialSimulator->drawMaterialSurface(*renderer, currentMaterial);
 		multiMaterialSimulator->drawSolidSurface(*renderer);
-		multiMaterialSimulator->drawMaterialVelocity(*renderer, .5, currentMaterial);
+
+		for (int material = 0; material < liquidMaterialCount; ++material)
+			multiMaterialSimulator->drawMaterialVelocity(*renderer, .25, material);
+		
+		if (printFrame)
+		{
+			std::string frameCountString = std::to_string(frameCount);
+			std::string renderFilename = "multimaterial_" + std::to_string(unsigned(bubbleDensity)) + "_" + std::string(4 - frameCountString.length(), '0') + frameCountString;
+			renderer->printImage(renderFilename);
+		}
 
 		isDisplayDirty = false;
 
@@ -89,18 +107,23 @@ void keyboard(unsigned char key, int x, int y)
 		currentMaterial = (currentMaterial + 1) % 2;
 		isDisplayDirty = true;
 	}
+	else if (key == 'p')
+	{
+		printFrame = !printFrame;
+		isDisplayDirty = true;
+	}
 }
 
 int main(int argc, char** argv)
 {
 	// Scene settings
-	Real dx = .025;
+	Real dx = .015;
 	Real boundaryPadding = 10.;
 
-	Vec2R topRightCorner(2.0, 2.5);
+	Vec2R topRightCorner(1.5, 2.5);
 	topRightCorner += dx * boundaryPadding;
 
-	Vec2R bottomLeftCorner(-2.0, -2.5);
+	Vec2R bottomLeftCorner(-1.5, -2.5);
 	bottomLeftCorner -= dx * boundaryPadding;
 
 	Vec2R simulationSize = topRightCorner - bottomLeftCorner;
@@ -125,22 +148,16 @@ int main(int argc, char** argv)
 	// Build two-material level set.
 	// Circle centered in the grid.
 
-	Vec2R bubbleOffset(0, 1.);
-	EdgeMesh bubbleMesh = InitialGeometry::makeCircleMesh(center - bubbleOffset, .75, 40);
-
-	Real surfaceHeight = 1.;
-	Vec2R surfaceCenter(center[0], topRightCorner[1] - .5 * surfaceHeight - boundaryPadding * dx);
-	EdgeMesh surfaceMesh = InitialGeometry::makeSquareMesh(surfaceCenter, Vec2R(.5 * simulationSize[0] - boundaryPadding * dx, .5*surfaceHeight));
-	bubbleMesh.insertMesh(surfaceMesh);
+	EdgeMesh bubbleMesh = InitialGeometry::makeCircleMesh(center, .75, 40);
 
 	LevelSet bubbleSurface = LevelSet(xform, gridSize, 10);
 	bubbleSurface.initFromMesh(bubbleMesh, false);
 	bubbleMesh.reverse();
 
 	EdgeMesh liquidMesh = solidMesh;
-
 	liquidMesh.reverse();
 	liquidMesh.insertMesh(bubbleMesh);
+
 	LevelSet liquidSurface = LevelSet(xform, gridSize, 10);
 	liquidSurface.initFromMesh(liquidMesh, false);
 
@@ -148,7 +165,7 @@ int main(int argc, char** argv)
 
 	multiMaterialSimulator->setSolidSurface(solidSurface);
 
-	multiMaterialSimulator->setMaterial(liquidSurface, 1000, 0);
+	multiMaterialSimulator->setMaterial(liquidSurface, liquidDensity, 0);
 	multiMaterialSimulator->setMaterial(bubbleSurface, bubbleDensity, 1);
 
 	liquidMaterialCount = 2;
@@ -158,12 +175,6 @@ int main(int argc, char** argv)
 
 	std::function<void(unsigned char, int, int)> keyboardFunc = keyboard;
 	renderer->setUserKeyboard(keyboardFunc);
-
-	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
-	{
-		if (liquidSurface(cell) > 0 && solidSurface(cell) > 0 && bubbleSurface(cell) > 0)
-			renderer->addPoint(liquidSurface.indexToWorld(Vec2R(cell)), Vec3f(0,1,0), 4);
-	});
 
 	renderer->run();
 }

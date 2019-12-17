@@ -25,36 +25,35 @@ namespace PressureCellLabels
 class MultiMaterialPressureProjection
 {
 public:
-    MultiMaterialPressureProjection(const std::vector<LevelSet> &surface,
-									const std::vector<Real> &density,
+    MultiMaterialPressureProjection(const std::vector<LevelSet> &surfaces,
+									const std::vector<Real> &densities,
 									const LevelSet &solidSurface)
-    : mySurfaceList(surface)
-
-    , myDensityList(density)
+    : myFluidSurfaces(surfaces)
+    , myFluidDensities(densities)
     , mySolidSurface(solidSurface)
-    , myMaterialsCount(surface.size())
+    , myMaterialsCount(surfaces.size())
     {
-		assert(mySurfaceList.size() == myDensityList.size());
+		assert(myFluidSurfaces.size() == myFluidDensities.size());
 
 		for (int material = 1; material < myMaterialsCount; ++material)
-			assert(mySurfaceList[material - 1].isGridMatched(mySurfaceList[material]));
+			assert(myFluidSurfaces[material - 1].isGridMatched(myFluidSurfaces[material]));
 
-		assert(mySurfaceList[0].isGridMatched(mySolidSurface));
+		assert(myFluidSurfaces[0].isGridMatched(mySolidSurface));
 
 		myPressure = ScalarGrid<Real>(mySolidSurface.xform(), mySolidSurface.size(), 0);
 		myValidFaces = VectorGrid<MarkedCells>(mySolidSurface.xform(), mySolidSurface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
 
-		myValidMaterialFacesList.resize(myMaterialsCount);
+		myValidMaterialFaces.resize(myMaterialsCount);
 		for (int material = 0; material < myMaterialsCount; ++material)
-			myValidMaterialFacesList[material] = VectorGrid<MarkedCells>(mySolidSurface.xform(), mySolidSurface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
+			myValidMaterialFaces[material] = VectorGrid<MarkedCells>(mySolidSurface.xform(), mySolidSurface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
 		
 		// Compute cut-cell weights
 		mySolidCutCellWeights = computeCutCellWeights(solidSurface);
 		
-		myMaterialCutCellWeightsList.resize(myMaterialsCount);
+		myMaterialCutCellWeights.resize(myMaterialsCount);
 
 		for (int material = 0; material < myMaterialsCount; ++material)
-			myMaterialCutCellWeightsList[material] = computeCutCellWeights(surface[material]);
+			myMaterialCutCellWeights[material] = computeCutCellWeights(surfaces[material]);
 
 		// Now normalize the weights, removing the solid boundary contribution first.
 		for (int axis : {0, 1})
@@ -69,27 +68,27 @@ public:
 				{
 					Real accumulatedWeight = 0;
 					for (int material = 0; material < myMaterialsCount; ++material)
-						accumulatedWeight += myMaterialCutCellWeightsList[material](face, axis);
+						accumulatedWeight += myMaterialCutCellWeights[material](face, axis);
 
 					if (accumulatedWeight > 0)
 					{
 						weight /= accumulatedWeight;
 
 						for (int material = 0; material < myMaterialsCount; ++material)
-							myMaterialCutCellWeightsList[material](face, axis) *= weight;
+							myMaterialCutCellWeights[material](face, axis) *= weight;
 					}
 				}
 				else
 				{
 					for (int material = 0; material < myMaterialsCount; ++material)
-						myMaterialCutCellWeightsList[material](face, axis) = 0;
+						myMaterialCutCellWeights[material](face, axis) = 0;
 				}
 
 				// Debug check
 				Real totalWeight = mySolidCutCellWeights(face, axis);
 
 				for (int material = 0; material < myMaterialsCount; ++material)
-					totalWeight += myMaterialCutCellWeightsList[material](face, axis);
+					totalWeight += myMaterialCutCellWeights[material](face, axis);
 
 				if (totalWeight == 0)
 				{
@@ -105,10 +104,10 @@ public:
 
 					for (int material = 0; material < myMaterialsCount; ++material)
 					{
-						Vec2R pos0 = myMaterialCutCellWeightsList[material].indexToWorld(Vec2R(face) - offset, axis);
-						Vec2R pos1 = myMaterialCutCellWeightsList[material].indexToWorld(Vec2R(face) + offset, axis);
+						Vec2R pos0 = myMaterialCutCellWeights[material].indexToWorld(Vec2R(face) - offset, axis);
+						Vec2R pos1 = myMaterialCutCellWeights[material].indexToWorld(Vec2R(face) + offset, axis);
 
-						Real weight = lengthFraction(surface[material].interp(pos0), surface[material].interp(pos1));
+						Real weight = lengthFraction(surfaces[material].interp(pos0), surfaces[material].interp(pos1));
 
 						if (weight == 0)
 							faceAlignedSurfaces.push_back(material);
@@ -121,7 +120,7 @@ public:
 					}
 					assert(faceAlignedSurfaces.size() > 1);
 
-					myMaterialCutCellWeightsList[faceAlignedSurfaces[0]](face, axis) = 1.;
+					myMaterialCutCellWeights[faceAlignedSurfaces[0]](face, axis) = 1.;
 				}
 			});
 		}
@@ -130,7 +129,7 @@ public:
 	const VectorGrid<MarkedCells>& getValidFaces(int material)
 	{
 		assert(material < myMaterialsCount);
-		return myValidMaterialFacesList[material];
+		return myValidMaterialFaces[material];
 	}
 
     void project(std::vector<VectorGrid<Real>> &velocities);
@@ -147,15 +146,12 @@ private:
     ScalarGrid<Real> myPressure;
     VectorGrid<MarkedCells> myValidFaces;
 
-    UniformGrid<int> myMaterialLabels;
-    UniformGrid<int> mySolverIndex;
-
-    const std::vector<LevelSet> &mySurfaceList;
-    const std::vector<Real> &myDensityList;
+    const std::vector<LevelSet> &myFluidSurfaces;
+    const std::vector<Real> &myFluidDensities;
 
 	VectorGrid<Real> mySolidCutCellWeights;
-	std::vector<VectorGrid<Real>> myMaterialCutCellWeightsList;
-	std::vector<VectorGrid<MarkedCells>> myValidMaterialFacesList;
+	std::vector<VectorGrid<Real>> myMaterialCutCellWeights;
+	std::vector<VectorGrid<MarkedCells>> myValidMaterialFaces;
 
     const LevelSet &mySolidSurface;
     const int myMaterialsCount;

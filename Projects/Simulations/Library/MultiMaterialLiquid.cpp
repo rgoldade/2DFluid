@@ -129,7 +129,7 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer, int frame)
 
 	std::vector<LevelSet> extrapolatedSurfaces(myMaterialCount);
 
-	for (unsigned material = 0; material < myMaterialCount; ++material)
+	for (int material = 0; material < myMaterialCount; ++material)
 		extrapolatedSurfaces[material] = myFluidSurfaces[material];
 
 	Real dx = mySolidSurface.dx();
@@ -164,7 +164,7 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer, int frame)
 
 	for (int material = 0; material < myMaterialCount; ++material)
 	{
-		VectorGrid<MarkedCells> validFaces = pressureSolver.getValidFaces(material);
+		const VectorGrid<MarkedCells> &validFaces = pressureSolver.getValidFaces(material);
 
 		for (int axis : {0, 1})
 		{
