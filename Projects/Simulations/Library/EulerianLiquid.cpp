@@ -14,9 +14,36 @@ void EulerianLiquid::drawGrid(Renderer& renderer) const
 	myLiquidSurface.drawGrid(renderer);
 }
 
+void EulerianLiquid::drawVolumetricSurface(Renderer &renderer) const
+{
+	ScalarGrid<Real> centerAreas = computeSuperSampledAreas(myLiquidSurface, ScalarGridSettings::SampleType::CENTER, 3);
+
+	Vec2R nodeOffset[4] = { Vec2R(-.51), Vec2R(-.51, .51), Vec2R(.51), Vec2R(.51, -.51) };
+
+	forEachVoxelRange(Vec2i(0), myLiquidSurface.size(), [&](const Vec2i& cell)
+	{
+		if (centerAreas(cell) > 0)
+		{
+			std::vector<Vec2R> quadVertex(4);
+			std::vector<Vec4i> quadFace(1);
+			std::vector<Vec3f> quadColour(1);
+
+			for (int nodeIndex = 0; nodeIndex < 4; ++nodeIndex)
+			{
+				quadVertex[nodeIndex] = myLiquidSurface.indexToWorld(Vec2R(cell) + nodeOffset[nodeIndex]);
+				quadFace[0][nodeIndex] = nodeIndex;
+			}
+
+			Real s = centerAreas(cell);
+			quadColour[0] = (1 - s) * Vec3f(1) + s * Vec3f(0,1,1);
+			renderer.addQuads(quadVertex, quadFace, quadColour);
+		}
+	});
+}
+
 void EulerianLiquid::drawLiquidSurface(Renderer& renderer)
 {
-	myLiquidSurface.drawSurface(renderer, Vec3f(0., 0., 1.0));
+	myLiquidSurface.drawSurface(renderer, Vec3f(0., 0., 1.0), 3);
 }
 
 void EulerianLiquid::drawLiquidVelocity(Renderer& renderer, Real length) const
@@ -26,7 +53,7 @@ void EulerianLiquid::drawLiquidVelocity(Renderer& renderer, Real length) const
 
 void EulerianLiquid::drawSolidSurface(Renderer& renderer)
 {
-	mySolidSurface.drawSurface(renderer, Vec3f(1.,0.,1.));
+	mySolidSurface.drawSurface(renderer, Vec3f(0), 3);
 }
 
 void EulerianLiquid::drawSolidVelocity(Renderer& renderer, Real length) const

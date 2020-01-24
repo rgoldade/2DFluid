@@ -14,14 +14,17 @@ static std::unique_ptr<EulerianLiquid> simulator;
 static bool runSimulation = false;
 static bool runSingleStep = false;
 static bool isDisplayDirty = true;
-static constexpr Real dt = 1./30.;
+static constexpr Real dt = 1. / 60.;
+
+static bool printFrame = false;
+
+static Real cfl = 5.;
+
 static Real seedTime = 0;
 
 static Transform xform;
 static Vec2i gridSize;
 static int frameCount = 0;
-
-static Real cfl = 3;
 
 void display()
 {
@@ -77,11 +80,21 @@ void display()
 	{
 		renderer->clear();
 
+		
+
+		simulator->drawVolumetricSurface(*renderer);
 		simulator->drawLiquidSurface(*renderer);
 		simulator->drawSolidSurface(*renderer);
-		simulator->drawLiquidVelocity(*renderer, .5);
+		//simulator->drawLiquidVelocity(*renderer, .5);
 
 		isDisplayDirty = false;
+
+		if (printFrame)
+		{
+			std::string frameCountString = std::to_string(frameCount);
+			std::string renderFilename = "freeSurfaceLiquidSimulation_" + std::string(4 - frameCountString.length(), '0') + frameCountString;
+			renderer->printImage(renderFilename);
+		}
 
 		glutPostRedisplay();
 	}
@@ -93,12 +106,17 @@ void keyboard(unsigned char key, int x, int y)
 		runSimulation = !runSimulation;
 	else if (key == 'n')
 		runSingleStep = true;
+	else if (key == 'p')
+	{
+		printFrame = !printFrame;
+		isDisplayDirty = true;
+	}
 }
 
 int main(int argc, char** argv)
 {
 	// Scene settings
-	Real dx = .025;
+	Real dx = .0125;
 	Vec2R topRightCorner(2.5);
 	Vec2R bottomLeftCorner(-2.5);
 	gridSize = Vec2i((topRightCorner - bottomLeftCorner) / dx);

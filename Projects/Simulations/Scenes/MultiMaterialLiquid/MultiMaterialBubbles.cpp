@@ -17,6 +17,8 @@ static bool runSingleStep = false;
 static bool isDisplayDirty = true;
 static constexpr Real dt = 1. / 60.;
 
+static constexpr Real cfl = 5;
+
 static bool printFrame = false;
 
 static unsigned liquidMaterialCount;
@@ -46,7 +48,7 @@ void display()
 
 			if (speed > 1E-6)
 			{
-				Real cflDt = 5. * xform.dx() / speed;
+				Real cflDt = cfl * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
 					if (cflDt < dt / 20.)

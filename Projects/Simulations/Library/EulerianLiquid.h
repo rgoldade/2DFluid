@@ -78,6 +78,8 @@ public:
 	// Rendering tools
 	void drawGrid(Renderer& renderer) const;
 
+	void drawVolumetricSurface(Renderer &renderer) const;
+
 	void drawLiquidSurface(Renderer& renderer);
 	void drawLiquidVelocity(Renderer& renderer, Real length) const;
 
