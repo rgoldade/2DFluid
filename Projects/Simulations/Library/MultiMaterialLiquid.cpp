@@ -9,7 +9,7 @@
 
 void MultiMaterialLiquid::drawMaterialSurface(Renderer& renderer, int material)
 {
-	myFluidSurfaces[material].drawSurface(renderer, Vec3f(0., 0., 1.0));
+	myFluidSurfaces[material].drawSurface(renderer, Vec3f(0., 0., 1.0), 2);
 }
 
 void MultiMaterialLiquid::drawMaterialVelocity(Renderer& renderer, Real length, int material) const
@@ -19,7 +19,7 @@ void MultiMaterialLiquid::drawMaterialVelocity(Renderer& renderer, Real length, 
 
 void MultiMaterialLiquid::drawSolidSurface(Renderer &renderer)
 {
-    mySolidSurface.drawSurface(renderer, Vec3f(1.,0.,1.));
+    mySolidSurface.drawSurface(renderer, Vec3f(0.), 2);
 }
 
 template<typename ForceSampler>
@@ -165,6 +165,22 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer, int frame)
 	for (int material = 0; material < myMaterialCount; ++material)
 	{
 		const VectorGrid<MarkedCells> &validFaces = pressureSolver.getValidFaces(material);
+
+		// Zero out-of-bounds velocity
+		for (int axis : {0, 1})
+		{
+			int totalFaces = validFaces.size(axis)[0] * validFaces.size(axis)[1];
+			tbb::parallel_for(tbb::blocked_range<int>(0, totalFaces, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			{
+				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				{
+					Vec2i face = validFaces.grid(axis).unflatten(flatIndex);
+
+					if (validFaces(face, axis) != MarkedCells::FINISHED)
+						myFluidVelocities[material](face, axis) = 0;
+				}
+			});
+		}
 
 		for (int axis : {0, 1})
 		{
