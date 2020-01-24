@@ -826,9 +826,7 @@ namespace GeometricMultigridOperators
 	{
 		assert(expandedBoundaryWeights.sampleType() == VectorGridSettings::SampleType::STAGGERED &&
 				baseBoundaryWeights.sampleType() == VectorGridSettings::SampleType::STAGGERED);
-		Vec2i gridSize = expandedBoundaryWeights.size(axis);
-		--gridSize[axis];
-		assert(gridSize == expandedDomainCellLabels.size());
+		Vec2i gridSize = expandedDomainCellLabels.size();
 
 		assert(expandedBoundaryWeights.size(axis)[0] >= baseBoundaryWeights.size(axis)[0] + exteriorOffset[0] &&
 				expandedBoundaryWeights.size(axis)[1] >= baseBoundaryWeights.size(axis)[1] + exteriorOffset[1]);
@@ -854,16 +852,6 @@ namespace GeometricMultigridOperators
 					Vec2i expandedFace = face + exteriorOffset;
 
 					expandedBoundaryWeights(expandedFace, axis) = baseBoundaryWeights(face, axis);
-				}
-				else
-				{
-					assert(baseBoundaryWeights(face, axis) == 0);
-
-					Vec2i backwardCell = faceToCell(face, axis, 0);
-					Vec2i forwardCell = faceToCell(face, axis, 1);
-
-					assert(expandedDomainCellLabels(backwardCell + exteriorOffset) == CellLabels::EXTERIOR_CELL ||
-							expandedDomainCellLabels(forwardCell + exteriorOffset) == CellLabels::EXTERIOR_CELL);
 				}
 			}
 		});
