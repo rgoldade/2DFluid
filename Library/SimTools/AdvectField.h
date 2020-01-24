@@ -42,22 +42,27 @@ void AdvectField<Field>::advectField(Real dt, Field& field, const VelocityField&
 {
 	assert(&field != &myField);
 
-	forEachVoxelRange(Vec2i(0), field.size(), [&](const Vec2i& cell)
+	tbb::parallel_for(tbb::blocked_range<int>(0, field.size()[0] * field.size()[1]), [&](const tbb::blocked_range<int> &range)
 	{
-		Vec2R worldPoint = field.indexToWorld(Vec2R(cell));
-		worldPoint = Integrator(-dt, worldPoint, velocity, order);
-
-		switch (interpOrder)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-		case InterpolationOrder::LINEAR:
-			field(cell) = myField.interp(worldPoint);
-			break;
-		case InterpolationOrder::CUBIC:
-			field(cell) = myField.cubicInterp(worldPoint, false, true);
-			break;
-		default:
-			assert(false);
-			break;
+			Vec2i cell = field.unflatten(cellIndex);
+
+			Vec2R worldPoint = field.indexToWorld(Vec2R(cell));
+			worldPoint = Integrator(-dt, worldPoint, velocity, order);
+
+			switch (interpOrder)
+			{
+			case InterpolationOrder::LINEAR:
+				field(cell) = myField.interp(worldPoint);
+				break;
+			case InterpolationOrder::CUBIC:
+				field(cell) = myField.cubicInterp(worldPoint, false, true);
+				break;
+			default:
+				assert(false);
+				break;
+			}
 		}
 	});
 }
