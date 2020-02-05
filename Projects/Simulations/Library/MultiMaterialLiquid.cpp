@@ -26,15 +26,22 @@ template<typename ForceSampler>
 void MultiMaterialLiquid::addForce(Real dt, int material, const ForceSampler& force)
 {
 	for (int axis : {0, 1})
-    {
+	{
 		Vec2i size = myFluidVelocities[material].size(axis);
 
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		int totalFaces = size[0] * size[1];
+		tbb::parallel_for(tbb::blocked_range<int>(0, totalFaces, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			Vec2R worldPosition = myFluidVelocities[material].indexToWorld(Vec2R(face), axis);
-			myFluidVelocities[material](face, axis) += dt * force(worldPosition, axis);
+			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
+			{
+				Vec2i face = myFluidVelocities[0].grid(axis).unflatten(faceIndex);
+				Vec2R worldPosition = myFluidVelocities[0].indexToWorld(Vec2R(face), axis);
+
+				for (int material = 0; material < myMaterialCount; ++material)
+					myFluidVelocities[material](face, axis) += dt * force(worldPosition, axis);
+			}
 		});
-    }
+	}
 }
 
 void MultiMaterialLiquid::addForce(Real dt, int material, const Vec2R& force)
@@ -78,13 +85,16 @@ void MultiMaterialLiquid::advectFluidSurfaces(Real dt, IntegrationOrder integrat
     }
 
 	// Fix possible overlaps between the materials.
-	forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
+	int totalVoxels = myFluidSurfaces[0].size()[0] * myFluidSurfaces[0].size()[1];
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
-		Real firstMin = std::min(myFluidSurfaces[0](cell), mySolidSurface(cell));
-		Real secondMin = std::max(myFluidSurfaces[0](cell), mySolidSurface(cell));
-
-		if (myMaterialCount > 1)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
+			Vec2i cell = myFluidSurfaces[0].unflatten(cellIndex);
+
+			Real firstMin = std::min(myFluidSurfaces[0](cell), mySolidSurface(cell));
+			Real secondMin = std::max(myFluidSurfaces[0](cell), mySolidSurface(cell));
+
 			for (int material = 1; material < myMaterialCount; ++material)
 			{
 				Real localMin = myFluidSurfaces[material](cell);
@@ -95,12 +105,12 @@ void MultiMaterialLiquid::advectFluidSurfaces(Real dt, IntegrationOrder integrat
 				}
 				else secondMin = std::min(localMin, secondMin);
 			}
+
+			Real avgSDF = .5 * (firstMin + secondMin);
+
+			for (int material = 0; material < myMaterialCount; ++material)
+				myFluidSurfaces[material](cell) -= avgSDF;
 		}
-
-		Real avgSDF = .5 * (firstMin + secondMin);
-
-		for (int material = 0; material < myMaterialCount; ++material)
-			myFluidSurfaces[material](cell) -= avgSDF;
 	});
 
 	for (int material = 0; material < myMaterialCount; ++material)
@@ -133,13 +143,19 @@ void MultiMaterialLiquid::runTimestep(Real dt, Renderer& renderer, int frame)
 		extrapolatedSurfaces[material] = myFluidSurfaces[material];
 
 	Real dx = mySolidSurface.dx();
-	forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
+	int totalVoxels = myFluidSurfaces[0].size()[0] * myFluidSurfaces[0].size()[1];
+	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
-		for (int material = 0; material < myMaterialCount; ++material)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			if (mySolidSurface(cell) <= 0. ||
-				(mySolidSurface(cell) <= dx && myFluidSurfaces[material](cell) <= 0))
-				extrapolatedSurfaces[material](cell) -= dx;
+			Vec2i cell = myFluidSurfaces[0].unflatten(cellIndex);
+
+			for (int material = 0; material < myMaterialCount; ++material)
+			{
+				if (mySolidSurface(cell) <= 0. ||
+					(mySolidSurface(cell) <= dx && myFluidSurfaces[material](cell) <= 0))
+					extrapolatedSurfaces[material](cell) -= dx;
+			}
 		}
 	});
 
