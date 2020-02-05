@@ -14,6 +14,9 @@ static std::unique_ptr<EulerianLiquid> simulator;
 static bool runSimulation = false;
 static bool runSingleStep = false;
 static bool isDisplayDirty = true;
+
+static bool drawVelocities = false;
+
 static constexpr Real dt = 1. / 60.;
 
 static bool printFrame = false;
@@ -51,6 +54,9 @@ void display()
 				}			
 			}
 
+			if (localDt <= 0)
+				break;
+
 			if (seedTime > 2.)
 			{
 				Vec2R center = xform.offset() + Vec2R(xform.dx()) * Vec2R(gridSize / 2) + Vec2R(.8);
@@ -80,12 +86,12 @@ void display()
 	{
 		renderer->clear();
 
-		
-
 		simulator->drawVolumetricSurface(*renderer);
 		simulator->drawLiquidSurface(*renderer);
 		simulator->drawSolidSurface(*renderer);
-		//simulator->drawLiquidVelocity(*renderer, .5);
+
+		if (drawVelocities)
+			simulator->drawLiquidVelocity(*renderer, .5);
 
 		isDisplayDirty = false;
 
@@ -111,6 +117,8 @@ void keyboard(unsigned char key, int x, int y)
 		printFrame = !printFrame;
 		isDisplayDirty = true;
 	}
+	else if (key == 'v')
+		drawVelocities = !drawVelocities;
 }
 
 int main(int argc, char** argv)
