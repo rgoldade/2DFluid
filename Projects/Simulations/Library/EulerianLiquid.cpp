@@ -286,7 +286,6 @@ void EulerianLiquid::runTimestep(Real dt, Renderer& debugRenderer)
 		std::cout << "  Solve for viscosity: " << simTimer.stop() << "s" << std::endl;
 		simTimer.reset();
 
-		// Initialize and call pressure projection
 		projectDivergence.disableInitialGuess();
 		projectDivergence.project(myLiquidVelocity);
 
