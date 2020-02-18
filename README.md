@@ -5,7 +5,7 @@ To build the project in Linux, create a new folder in the root directly (usually
 
 For VS, use the cmake-gui to generate the solution file. Make sure to include the path to your Eigen3, freeglut, and tbb folders.
 
-Legal stuff:
+## Legal stuff:
 
 Copyright 2018 Ryan Goldade
 
