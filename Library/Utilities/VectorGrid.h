@@ -114,7 +114,7 @@ public:
 		return Vec<2, T>(biLerp(samplePoint, 0), biLerp(samplePoint, 1));
 	}
 
-	T biLerp(float x, float y, int axis) const { return interp(Vec2f(x, y), axis); }
+	T biLerp(float x, float y, int axis) const { return biLerp(Vec2f(x, y), axis); }
 	T biLerp(const Vec2f& samplePoint, int axis) const
 	{
 		return myGrids[axis].biLerp(samplePoint);
@@ -126,7 +126,7 @@ public:
 	T biCubicInterp(float x, float y, int axis) const { return biCubicInterp(Vec2f(x, y), axis); }
 	T biCubicInterp(const Vec2f& samplePoint, int axis) const
 	{
-		return myGrids[axis].cubicInterp(samplePoint);
+		return myGrids[axis].biCubicInterp(samplePoint);
 	}
 
 	// World space vs. index space converters need to be done at the 

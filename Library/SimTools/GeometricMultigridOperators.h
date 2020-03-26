@@ -655,10 +655,10 @@ std::pair<Vec2i, int> buildCustomExpandedDomainLabels(UniformGrid<CellLabels>& e
 	// for each v-cycle.
 
 	// Cap MG levels at 4 voxels in the smallest dimension
-	SolveReal minLog = std::min(std::log2(SolveReal(baseCustomLabels.size()[0])),
-							std::log2(SolveReal(baseCustomLabels.size()[1])));
+	float minLog = std::min(std::log2(float(baseCustomLabels.size()[0])),
+							std::log2(float(baseCustomLabels.size()[1])));
 
-	int mgLevels = std::ceil(minLog) - std::log2(SolveReal(2));
+	int mgLevels = std::ceil(minLog) - std::log2(float(2));
 
 	// Add the necessary exterior cells so that after coarsening to the top level
 	// there is still a single layer of exterior cells
@@ -668,7 +668,7 @@ std::pair<Vec2i, int> buildCustomExpandedDomainLabels(UniformGrid<CellLabels>& e
 
 	for (int axis : {0, 1})
 	{
-		Real logSize = std::log2(Real(expandedGridSize[axis]));
+		float logSize = std::log2(float(expandedGridSize[axis]));
 		logSize = std::ceil(logSize);
 
 		expandedGridSize[axis] = std::exp2(logSize);

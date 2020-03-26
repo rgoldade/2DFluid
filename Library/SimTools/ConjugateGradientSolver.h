@@ -100,7 +100,7 @@ template<typename SolveReal,
 	residualNorm2 = residual.squaredNorm();
 	std::cout << "Re-computed Relative L2 Error: " << std::sqrt(residualNorm2 / rhs.squaredNorm()) << std::endl;
 
-	std::cout << "L-infinity Error: " << residual.lpNorm<Eigen::Infinity>() << std::endl;
+	std::cout << "L-infinity Error: " << residual.template lpNorm<Eigen::Infinity>() << std::endl;
 }
 
 }

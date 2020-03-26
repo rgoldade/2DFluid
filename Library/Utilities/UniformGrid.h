@@ -1,9 +1,11 @@
 #ifndef LIBRARY_UNIFORM_GRID_H
 #define LIBRARY_UNIFORM_GRID_H
 
+#include <iostream>
 #include <fstream>
 #include <vector>
 
+#include "GridUtilities.h"
 #include "Utilities.h"
 #include "Vec.h"
 

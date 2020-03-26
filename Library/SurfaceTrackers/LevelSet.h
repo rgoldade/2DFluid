@@ -52,6 +52,7 @@ static const int marchingSquaresTemplate[16][4] = { { -1,-1,-1,-1 },
 	
 
 using namespace RenderTools;
+using namespace SimTools;
 using namespace Utilities;
 
 class LevelSet
@@ -179,10 +180,8 @@ private:
 template<typename VelocityField>
 void LevelSet::advect(float dt, const VelocityField& velocity, IntegrationOrder order)
 {
-	AdvectField<ScalarGrid<float>> advector(myPhiGrid);
-
 	ScalarGrid<float> tempPhiGrid = myPhiGrid;
-	advector.advectField(dt, tempPhiGrid, velocity, order, InterpolationOrder::CUBIC);
+	advectField(dt, tempPhiGrid, myPhiGrid, velocity, order, InterpolationOrder::CUBIC);
 
 	//std::swap(tempPhiGrid, myPhiGrid);
 
