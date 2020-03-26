@@ -326,9 +326,9 @@ void PressureProjection::project(VectorGrid<float>& velocity)
 	//
 
 	{
-		tbb::enumerable_thread_specific<SolveReal> parallelMaxDivergence(0);
-		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(0);
-		tbb::enumerable_thread_specific<SolveReal> parallelCellCount(0);
+		tbb::enumerable_thread_specific<SolveReal> parallelMaxDivergence(SolveReal(0));
+		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(SolveReal(0));
+		tbb::enumerable_thread_specific<SolveReal> parallelCellCount(SolveReal(0));
 
 		tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{

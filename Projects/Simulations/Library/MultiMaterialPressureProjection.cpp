@@ -1,8 +1,8 @@
 #include "MultiMaterialPressureProjection.h"
 
 #include <limits>
-
 #include <iostream>
+#include <memory>
 
 #include "tbb/tbb.h"
 
@@ -668,7 +668,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 
 	// Project out null space
 	{
-		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(0);
+		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(SolveReal(0));
 		tbb::parallel_for(tbb::blocked_range<int>(0, rhsVector.rows(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
 				SolveReal& localAccumulatedDivergence = parallelAccumulatedDivergence.local();
@@ -1240,9 +1240,9 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 	//
 
 	{
-		tbb::enumerable_thread_specific<SolveReal> parallelMaxDivergence(0);
-		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(0);
-		tbb::enumerable_thread_specific<SolveReal> parallelCellCount(0);
+		tbb::enumerable_thread_specific<SolveReal> parallelMaxDivergence(SolveReal(0));
+		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(SolveReal(0));
+		tbb::enumerable_thread_specific<SolveReal> parallelCellCount(SolveReal(0));
 
 		tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{

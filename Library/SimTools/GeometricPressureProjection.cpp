@@ -133,7 +133,7 @@ void GeometricPressureProjection::project(VectorGrid<float>& velocity,
 	// Set a single interior cell to dirichlet and remove the average divergence
 	if (!hasDirichletCell)
 	{
-		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(0), parallelCellCount(0);
+		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(SolveReal(0)), parallelCellCount(SolveReal(0));
 
 		tbb::parallel_for(tbb::blocked_range<int>(0, baseDomainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{

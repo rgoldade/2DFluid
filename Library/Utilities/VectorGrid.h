@@ -184,7 +184,7 @@ T VectorGrid<T>::maxMagnitude() const
 {
 	T magnitude(0);
 
-	tbb::enumerable_thread_specific<T> parallelMax(0);
+	tbb::enumerable_thread_specific<T> parallelMax(T(0));
 
 	if (mySampleType == SampleType::CENTER || mySampleType == SampleType::NODE)
 	{

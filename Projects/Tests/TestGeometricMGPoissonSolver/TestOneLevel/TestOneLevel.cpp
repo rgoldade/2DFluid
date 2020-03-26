@@ -83,7 +83,7 @@ int main(int argc, char** argv)
 	{
 		assert(grid.size() == domainCellLabels.size());
 
-		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedValue(0);
+		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedValue(SolveReal(0));
 		tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			auto& localAccumulatedValue = parallelAccumulatedValue.local();
