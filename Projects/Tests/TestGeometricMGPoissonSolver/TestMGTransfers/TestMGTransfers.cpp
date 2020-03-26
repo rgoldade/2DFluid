@@ -1,16 +1,20 @@
+#include <iostream>
 #include <memory>
 #include <random>
 #include <string>
 
-#include "Eigen/Sparse"
+#include <Eigen/Sparse>
 
-#include "Common.h"
 #include "GeometricMultigridOperators.h"
 #include "InitialMultigridTestDomains.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "UniformGrid.h"
+#include "Utilities.h"
+
+using namespace FluidSim2D::RenderTools;
+using namespace FluidSim2D::SimTools;
 
 std::unique_ptr<Renderer> renderer;
 
@@ -59,19 +63,18 @@ int main(int argc, char** argv)
 
 	UniformGrid<StoreReal> solutionGrid(domainCellLabels.size(), 0);
 
-	int totalVoxels = domainCellLabels.size()[0] * domainCellLabels.size()[1];
-	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(),tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
-		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			Vec2i cell = domainCellLabels.unflatten(flatIndex);
+			Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 			{
-				Vec2R point = dx * Vec2R(cell);
-				solutionGrid(cell) = 4. * (std::sin(2 * Util::PI * point[0]) * std::sin(2 * Util::PI * point[1]) +
-											std::sin(4 * Util::PI * point[0]) * std::sin(4 * Util::PI * point[1]));
+				Vec2f point(dx * Vec2f(cell));
+				solutionGrid(cell) = 4. * (std::sin(2 * PI * point[0]) * std::sin(2 * PI * point[1]) +
+											std::sin(4 * PI * point[0]) * std::sin(4 * PI * point[1]));
 			}
 		}
 	});
@@ -158,11 +161,11 @@ int main(int argc, char** argv)
 			
 			Vector rhsVector = Vector::Zero(interiorCellCount);
 
-			tbb::parallel_for(tbb::blocked_range<int>(0, coarseCellLabels.size()[0] * coarseCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = interiorCellIndices.unflatten(flatIndex);
+					Vec2i cell = interiorCellIndices.unflatten(cellIndex);
 
 					if (coarseCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 						coarseCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -182,7 +185,7 @@ int main(int argc, char** argv)
 			// Build rows
 			std::vector<Eigen::Triplet<SolveReal>> sparseElements;
 
-			SolveReal gridScalar = 1. / Util::sqr(coarseDx);
+			SolveReal gridScalar = 1. / sqr(coarseDx);
 			forEachVoxelRange(Vec2i(0), coarseCellLabels.size(), [&](const Vec2i &cell)
 			{
 				if (coarseCellLabels(cell) == CellLabels::INTERIOR_CELL)
@@ -201,10 +204,10 @@ int main(int argc, char** argv)
 							int adjacentIndex = interiorCellIndices(adjacentCell);
 							assert(adjacentIndex >= 0);
 
-							sparseElements.push_back(Eigen::Triplet<double>(index, adjacentIndex, -gridScalar));
+							sparseElements.emplace_back(index, adjacentIndex, -gridScalar);
 						}
 
-					sparseElements.push_back(Eigen::Triplet<double>(index, index, 4. * gridScalar));
+					sparseElements.emplace_back(index, index, 4. * gridScalar);
 				}
 				else if (coarseCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 				{
@@ -223,7 +226,7 @@ int main(int argc, char** argv)
 								int adjacentIndex = interiorCellIndices(adjacentCell);
 								assert(adjacentIndex >= 0);
 
-								sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScalar));
+								sparseElements.emplace_back(index, adjacentIndex, -gridScalar);
 								++diagonal;
 							}
 							else
@@ -234,7 +237,7 @@ int main(int argc, char** argv)
 							}
 						}
 
-					sparseElements.push_back(Eigen::Triplet<SolveReal>(index, index, diagonal * gridScalar));
+					sparseElements.emplace_back(index, index, diagonal * gridScalar);
 				}
 			});
 
@@ -259,11 +262,11 @@ int main(int argc, char** argv)
 			    return 0;
 			}
 
-			tbb::parallel_for(tbb::blocked_range<int>(0, coarseCellLabels.size()[0] * coarseCellLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = interiorCellIndices.unflatten(flatIndex);
+					Vec2i cell = interiorCellIndices.unflatten(cellIndex);
 
 					if (coarseCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 						coarseCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -307,21 +310,21 @@ int main(int argc, char** argv)
 		// Print domain labels to make sure they are set up correctly
 		int pixelHeight = 1080;
 		int pixelWidth = pixelHeight;
-		renderer = std::make_unique<Renderer>("MG Error Correction and Transfer Test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
+		renderer = std::make_unique<Renderer>("MG Error Correction and Transfer Test", Vec2i(pixelWidth, pixelHeight), Vec2f(0), 1, &argc, argv);
 
-		ScalarGrid<Real> tempGrid(Transform(dx, Vec2R(0)), domainCellLabels.size());
+		ScalarGrid<float> tempGrid(Transform(dx, Vec2f(0)), domainCellLabels.size());
 
-		tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
-			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
-				Vec2i cell = domainCellLabels.unflatten(flatIndex);
+				Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
-				tempGrid(cell) = Real(domainCellLabels(cell));
+				tempGrid(cell) = float(domainCellLabels(cell));
 			}
 		});
 
-		tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR_CELL), Real(CellLabels::BOUNDARY_CELL));
+		tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), float(CellLabels::INTERIOR_CELL), float(CellLabels::BOUNDARY_CELL));
 
 		renderer->run();
 	}

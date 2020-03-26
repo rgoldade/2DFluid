@@ -1,53 +1,63 @@
+#include <iostream>
 #include <memory>
 
-#include "Common.h"
 #include "EdgeMesh.h"
-#include "EulerianLiquid.h"
+#include "EulerianLiquidSimulator.h"
 #include "InitialGeometry.h"
 #include "Integrator.h"
 #include "LevelSet.h"
 #include "Renderer.h"
+#include "Transform.h"
 #include "TestVelocityFields.h"
+#include "Utilities.h"
+#include "Vec.h"
+
+using namespace FluidSim2D::RegularGridSim;
+using namespace FluidSim2D::RenderTools;
+using namespace FluidSim2D::SurfaceTrackers;
+using namespace FluidSim2D::SimTools;
+using namespace FluidSim2D::Utilities;
 
 static std::unique_ptr<Renderer> renderer;
-static std::unique_ptr<EulerianLiquid> simulator;
-static std::unique_ptr<CircularSim2D> solidSimulator;
 
+static std::unique_ptr<EulerianLiquidSimulator> simulator;
+static std::unique_ptr<CircularField> solidVelocityField;
+
+static int frameCount = 0;
 static bool runSimulation = false;
-static bool runSingleStep = false;
+static bool runSingleTimestep = false;
 static bool isDisplayDirty = true;
 
-static constexpr Real dt = 1. / 30;
+static constexpr float dt = 1. / 30;
+
+static constexpr float cfl = 5.;
 
 static Transform xform;
 static Vec2i gridSize;
 
-static EdgeMesh seedLiquidMesh;
 static EdgeMesh movingSolidsMesh;
 static EdgeMesh staticSolidsMesh;
 
 static LevelSet seedLiquidSurface;
 
-static int frameCount = 0;
-
 void display()
 {
-	if (runSimulation || runSingleStep)
+	if (runSimulation || runSingleTimestep)
 	{
-		Real frameTime = 0.;
+		float frameTime = 0.;
 		std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
 
 		while (frameTime < dt)
 		{
 			// Set CFL condition
-			Real speed = simulator->maxVelocityMagnitude();
+			float speed = simulator->maxVelocityMagnitude();
 
-			Real localDt = dt - frameTime;
+			float localDt = dt - frameTime;
 			assert(localDt >= 0);
 
 			if (speed > 1E-6)
 			{
-				Real cflDt = 3. * xform.dx() / speed;
+				float cflDt = cfl * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
 					localDt = cflDt;
@@ -55,48 +65,55 @@ void display()
 				}
 			}
 
+			if (localDt <= 0)
+				break;
+
 			// Add gravity
-			simulator->addForce(localDt, Vec2R(0., -9.8));
+			simulator->addForce(localDt, Vec2f(0., -9.8));
 
 			// Update moving solid
-			movingSolidsMesh.advect(localDt, *solidSimulator, IntegrationOrder::FORWARDEULER);
+			movingSolidsMesh.advectMesh(localDt, *solidVelocityField, IntegrationOrder::RK3);
 
 			// Need moving solid volume to build sampled velocity
-			LevelSet movindSolidsSurface = LevelSet(xform, gridSize, 10);
-			movindSolidsSurface.initFromMesh(movingSolidsMesh, false);
+			LevelSet movingSolidSurface(xform, gridSize, 5);
+			movingSolidSurface.initFromMesh(movingSolidsMesh, false);
 
-			VectorGrid<Real> movingSolidVelocity(xform, gridSize, 0, VectorGridSettings::SampleType::STAGGERED);
+			VectorGrid<float> movingSolidVelocity(xform, gridSize, 0, VectorGridSettings::SampleType::STAGGERED);
 	
 			// Set moving solid velocity
 			for (int axis : {0, 1})
 			{
-				forEachVoxelRange(Vec2i(0), movingSolidVelocity.size(axis), [&](const Vec2i& face)
+				tbb::parallel_for(tbb::blocked_range<int>(0, movingSolidVelocity.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 				{
-					Vec2R worldPosition = movingSolidVelocity.indexToWorld(Vec2R(face), axis);
-					
-					if (movindSolidsSurface.interp(worldPosition) < xform.dx())
-						movingSolidVelocity(face, axis) = (*solidSimulator)(0, worldPosition)[axis];
+					for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
+					{
+						Vec2i face = movingSolidVelocity.grid(axis).unflatten(faceIndex);
+
+						Vec2f worldPosition = movingSolidVelocity.indexToWorld(Vec2f(face), axis);
+
+						if (movingSolidSurface.biLerp(worldPosition) < xform.dx())
+							movingSolidVelocity(face, axis) = (*solidVelocityField)(0, worldPosition)[axis];
+					}
 				});
 			}
 
-			LevelSet combinedSolidSurface = LevelSet(xform, gridSize, 10);
+			LevelSet combinedSolidSurface(xform, gridSize, 5);
 			combinedSolidSurface.setBackgroundNegative();
 			combinedSolidSurface.initFromMesh(staticSolidsMesh, false);
-			combinedSolidSurface.unionSurface(movindSolidsSurface);
+			combinedSolidSurface.unionSurface(movingSolidSurface);
 
 			simulator->setSolidSurface(combinedSolidSurface);
 			simulator->setSolidVelocity(movingSolidVelocity);
 
-			simulator->setViscosity(30.);
 			// Projection set unfortunately includes viscosity at the moment
-			simulator->runTimestep(localDt, *renderer);
+			simulator->runTimestep(localDt);
 
 			simulator->unionLiquidSurface(seedLiquidSurface);
 
 			frameTime += localDt;
 		}
 
-		runSingleStep = false;
+		runSingleTimestep = false;
 		isDisplayDirty = true;
 
 	}
@@ -119,51 +136,53 @@ void keyboard(unsigned char key, int x, int y)
 	if (key == ' ')
 		runSimulation = !runSimulation;
 	else if (key == 'n')
-		runSingleStep = true;
+		runSingleTimestep = true;
 }
 
 int main(int argc, char** argv)
 {
 	// Scene settings
-	Real dx = .025;
-	Vec2R topRightCorner(2.5);
-	Vec2R bottomLeftCorner(-2.5);
+	float dx = .025;
+	Vec2f topRightCorner(2.5);
+	Vec2f bottomLeftCorner(-2.5);
 	gridSize = Vec2i((topRightCorner - bottomLeftCorner) / dx);
 	xform = Transform(dx, bottomLeftCorner);
-	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
+	Vec2f center = .5 * (topRightCorner + bottomLeftCorner);
 
 	renderer = std::make_unique<Renderer>("Viscous Liquid Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	movingSolidsMesh = InitialGeometry::makeCircleMesh(center + Vec2R(1.2, 0), .25, 20);
+	movingSolidsMesh = makeCircleMesh(center + Vec2f(1.2, 0), .25, 20);
 	
-	staticSolidsMesh = InitialGeometry::makeSquareMesh(center, Vec2R(2));
+	staticSolidsMesh = makeSquareMesh(center, Vec2f(2));
 	staticSolidsMesh.reverse();
 	assert(staticSolidsMesh.unitTestMesh());
 	
-	EdgeMesh beamLiquidMesh = InitialGeometry::makeSquareMesh(center - Vec2R(.8, 0), Vec2R(1.5, .2));
+	EdgeMesh beamLiquidMesh = makeSquareMesh(center - Vec2f(.8, 0), Vec2f(1.5, .2));
 	assert(beamLiquidMesh.unitTestMesh());
 
-	LevelSet beamLiquidSurface = LevelSet(xform, gridSize, 10);
+	LevelSet beamLiquidSurface(xform, gridSize, 5);
 	beamLiquidSurface.initFromMesh(beamLiquidMesh, false);
 
-	seedLiquidMesh = InitialGeometry::makeSquareMesh(center + Vec2R(0, .6), Vec2R(.075, .25));
+	EdgeMesh seedLiquidMesh = makeSquareMesh(center + Vec2f(0, .6), Vec2f(.075, .25));
 	assert(seedLiquidMesh.unitTestMesh());
 
-	seedLiquidSurface = LevelSet(xform, gridSize, 10);
+	seedLiquidSurface = LevelSet(xform, gridSize, 5);
 	seedLiquidSurface.initFromMesh(seedLiquidMesh, false);
 
-	LevelSet solidSurface(xform, gridSize, 10);
+	LevelSet solidSurface(xform, gridSize, 5);
 	solidSurface.setBackgroundNegative();
 	solidSurface.initFromMesh(staticSolidsMesh, false);
 
 	// Set up simulation
-	simulator = std::unique_ptr<EulerianLiquid>(new EulerianLiquid(xform, gridSize, 10));
+	simulator = std::make_unique<EulerianLiquidSimulator>(xform, gridSize, 10);
 	simulator->setLiquidSurface(beamLiquidSurface);
 	simulator->unionLiquidSurface(seedLiquidSurface);
 	simulator->setSolidSurface(solidSurface);
 
+	simulator->setViscosity(30);
+
 	// Set up simulation
-	solidSimulator = std::unique_ptr<CircularSim2D>(new CircularSim2D(center, .5));
+	solidVelocityField = std::make_unique<CircularField>(center, .5);
 
 	std::function<void()> displayFunc = display;
 	renderer->setUserDisplay(displayFunc);

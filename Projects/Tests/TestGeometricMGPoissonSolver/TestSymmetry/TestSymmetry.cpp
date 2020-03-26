@@ -1,10 +1,10 @@
+#include <iostream>
 #include <memory>
 #include <random>
 #include <string>
 
-#include "Eigen/Sparse"
+#include <Eigen/Sparse>
 
-#include "Common.h"
 #include "GeometricMultigridOperators.h"
 #include "GeometricMultigridPoissonSolver.h"
 #include "InitialMultigridTestDomains.h"
@@ -12,6 +12,10 @@
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "UniformGrid.h"
+#include "Utilities.h"
+
+using namespace FluidSim2D::RenderTools;
+using namespace FluidSim2D::SimTools;
 
 std::unique_ptr<Renderer> renderer;
 
@@ -59,28 +63,25 @@ int main(int argc, char** argv)
 	UniformGrid<StoreReal> rhsA(domainCellLabels.size(), 0);
 	UniformGrid<StoreReal> rhsB(domainCellLabels.size(), 0);
 	
-	int totalVoxels = domainCellLabels.size()[0] * domainCellLabels.size()[1];
-
-	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
 		std::default_random_engine generator;
-		std::uniform_real_distribution<Real> distribution(0, 1);
+		std::uniform_real_distribution<StoreReal> distribution(0, 1);
 
-		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			Vec2i cell = domainCellLabels.unflatten(flatIndex);
+			Vec2i cell = domainCellLabels.unflatten(cellIndex);
 			
 			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 			{
-				Vec2R point = dx * Vec2R(cell);
 				rhsA(cell) = distribution(generator);
 				rhsB(cell) = distribution(generator);
 			}
 		}
 	});
 
-	Transform xform(dx, Vec2R(0));
+	Transform xform(dx, Vec2f(0));
 	std::cout.precision(10);
 	{
 		UniformGrid<StoreReal> solutionA(domainCellLabels.size(), 0);
@@ -123,7 +124,7 @@ int main(int argc, char** argv)
 			// Build rows
 			std::vector<Eigen::Triplet<SolveReal>> sparseElements;
 
-			Real gridScale = 1. / Util::sqr(dx);
+			SolveReal gridScale = 1. / sqr(dx);
 			forEachVoxelRange(Vec2i(0), domainCellLabels.size(), [&](const Vec2i &cell)
 			{
 				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL)
@@ -144,9 +145,9 @@ int main(int argc, char** argv)
 							int adjacentIndex = directSolverIndices(adjacentCell);
 							assert(adjacentIndex >= 0);
 
-							sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScale));
+							sparseElements.emplace_back(index, adjacentIndex, -gridScale);
 						}
-					sparseElements.push_back(Eigen::Triplet<SolveReal>(index, index, 4. * gridScale));
+					sparseElements.emplace_back(index, index, 4. * gridScale);
 				}
 				else if (domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 				{
@@ -168,7 +169,7 @@ int main(int argc, char** argv)
 								Vec2i face = cellToFace(cell, axis, direction);
 								assert(boundaryWeights(face, axis) == 1);
 
-								sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScale));
+								sparseElements.emplace_back(index, adjacentIndex, -gridScale);
 								++diagonal;
 							}
 							else if (domainCellLabels(adjacentCell) == CellLabels::BOUNDARY_CELL)
@@ -179,7 +180,7 @@ int main(int argc, char** argv)
 								Vec2i face = cellToFace(cell, axis, direction);
 								SolveReal weight = boundaryWeights(face, axis);
 
-								sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScale * weight));
+								sparseElements.emplace_back(index, adjacentIndex, -gridScale * weight);
 								diagonal += weight;
 							}
 							else if (domainCellLabels(adjacentCell) == CellLabels::DIRICHLET_CELL)
@@ -203,7 +204,7 @@ int main(int argc, char** argv)
 							}
 						}
 
-					sparseElements.push_back(Eigen::Triplet<SolveReal>(index, index, gridScale * diagonal));
+					sparseElements.emplace_back(index, index, gridScale * diagonal);
 				}
 			});
 
@@ -222,11 +223,11 @@ int main(int argc, char** argv)
 		{
 			Vector coarseRHSVector = Vector::Zero(interiorCellCount);
 			// Copy to Eigen and direct solve
-			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = domainCellLabels.unflatten(flatIndex);
+					Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -242,11 +243,11 @@ int main(int argc, char** argv)
 			Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 			// Copy solution back
-			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = domainCellLabels.unflatten(flatIndex);
+					Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -265,11 +266,11 @@ int main(int argc, char** argv)
 		{
 			Vector coarseRHSVector = Vector::Zero(interiorCellCount);
 			// Copy to Eigen and direct solve
-			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = domainCellLabels.unflatten(flatIndex);
+					Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -285,11 +286,11 @@ int main(int argc, char** argv)
 			Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 			// Copy solution back
-			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = domainCellLabels.unflatten(flatIndex);
+					Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -367,7 +368,7 @@ int main(int argc, char** argv)
 			// Build rows
 			std::vector<Eigen::Triplet<SolveReal>> sparseElements;
 
-			SolveReal gridScale = 1. / Util::sqr(2. * dx);
+			SolveReal gridScale = 1. / sqr(2. * dx);
 			forEachVoxelRange(Vec2i(0), coarseDomainLabels.size(), [&](const Vec2i &cell)
 			{
 				if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL)
@@ -386,10 +387,10 @@ int main(int argc, char** argv)
 							int adjacentIndex = directSolverIndices(adjacentCell);
 							assert(adjacentIndex >= 0);
 
-							sparseElements.push_back(Eigen::Triplet<double>(index, adjacentIndex, -gridScale));
+							sparseElements.emplace_back(index, adjacentIndex, -gridScale);
 						}
 
-					sparseElements.push_back(Eigen::Triplet<double>(index, index, 4. * gridScale));
+					sparseElements.emplace_back(index, index, 4. * gridScale);
 				}
 				else if (coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
 				{
@@ -408,14 +409,14 @@ int main(int argc, char** argv)
 								int adjacentIndex = directSolverIndices(adjacentCell);
 								assert(adjacentIndex >= 0);
 
-								sparseElements.push_back(Eigen::Triplet<double>(index, adjacentIndex, -gridScale));
+								sparseElements.emplace_back(index, adjacentIndex, -gridScale);
 								++diagonal;
 							}
 							else if (cellLabels == CellLabels::DIRICHLET_CELL)
 								++diagonal;
 						}
 
-					sparseElements.push_back(Eigen::Triplet<double>(index, index, diagonal * gridScale));
+					sparseElements.emplace_back(index, index, diagonal * gridScale);
 				}
 			});
 
@@ -454,11 +455,11 @@ int main(int argc, char** argv)
 			Vector coarseRHSVector = Vector::Zero(interiorCellCount);
 			
 			// Copy to Eigen and direct solve
-			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.size()[0] * coarseDomainLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = coarseDomainLabels.unflatten(flatIndex);
+					Vec2i cell = coarseDomainLabels.unflatten(cellIndex);
 
 					if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
 						coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -476,11 +477,11 @@ int main(int argc, char** argv)
 			Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 			// Copy solution back
-			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.size()[0] * coarseDomainLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = coarseDomainLabels.unflatten(flatIndex);
+					Vec2i cell = coarseDomainLabels.unflatten(cellIndex);
 
 					if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
 						coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -529,11 +530,11 @@ int main(int argc, char** argv)
 			Vector coarseRHSVector = Vector::Zero(interiorCellCount);
 
 			// Copy to Eigen and direct solve
-			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.size()[0] * coarseDomainLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = coarseDomainLabels.unflatten(flatIndex);
+					Vec2i cell = coarseDomainLabels.unflatten(cellIndex);
 
 					if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
 						coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -551,11 +552,11 @@ int main(int argc, char** argv)
 			Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 			// Copy solution back
-			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.size()[0] * coarseDomainLabels.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseDomainLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = coarseDomainLabels.unflatten(flatIndex);
+					Vec2i cell = coarseDomainLabels.unflatten(cellIndex);
 
 					if (coarseDomainLabels(cell) == CellLabels::INTERIOR_CELL ||
 						coarseDomainLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -612,21 +613,21 @@ int main(int argc, char** argv)
 	// Print domain labels to make sure they are set up correctly
 	int pixelHeight = 1080;
 	int pixelWidth = pixelHeight;
-	renderer = std::make_unique<Renderer>("MG Symmetry Test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
+	renderer = std::make_unique<Renderer>("MG Symmetry Test", Vec2i(pixelWidth, pixelHeight), Vec2f(0), 1, &argc, argv);
 
-	ScalarGrid<Real> tempGrid(Transform(dx, Vec2R(0)), domainCellLabels.size());
+	ScalarGrid<float> tempGrid(Transform(dx, Vec2f(0)), domainCellLabels.size());
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.size()[0] * tempGrid.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
-		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			Vec2i cell = tempGrid.unflatten(flatIndex);
+			Vec2i cell = tempGrid.unflatten(cellIndex);
 
-			tempGrid(cell) = Real(domainCellLabels(cell));
+			tempGrid(cell) = float(domainCellLabels(cell));
 		}
 	});
 
-	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR_CELL), Real(CellLabels::BOUNDARY_CELL));
+	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), float(CellLabels::INTERIOR_CELL), float(CellLabels::BOUNDARY_CELL));
 
 	renderer->run();
 }

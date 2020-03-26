@@ -1,4 +1,5 @@
 #include "AnalyticalPoissonSolver.h"
+
 #include "Renderer.h"
 
 void AnalyticalPoissonSolver::drawGrid(Renderer &renderer) const
@@ -8,5 +9,5 @@ void AnalyticalPoissonSolver::drawGrid(Renderer &renderer) const
 
 void AnalyticalPoissonSolver::drawValues(Renderer &renderer) const
 {
-	myPoissonGrid.drawSuperSampledValues(renderer);
+	myPoissonGrid.drawSupersampledValues(renderer);
 }

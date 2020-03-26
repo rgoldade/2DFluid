@@ -15,7 +15,7 @@ void AnalyticalViscositySolver::drawActiveVelocity(Renderer& renderer) const
 		{
 			if (myVelocityIndex(face, axis) >= 0)
 			{
-				Vec2R worldPosition = myVelocityIndex.indexToWorld(Vec2R(face), axis);
+				Vec2f worldPosition = myVelocityIndex.indexToWorld(Vec2f(face), axis);
 
 				renderer.addPoint(worldPosition, colours[axis], 5);
 			}

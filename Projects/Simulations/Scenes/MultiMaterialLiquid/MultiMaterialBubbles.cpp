@@ -1,60 +1,64 @@
+#include <iostream>
 #include <memory>
 
-#include "Common.h"
 #include "EdgeMesh.h"
 #include "InitialGeometry.h"
-#include "Integrator.h"
 #include "LevelSet.h"
-#include "MultiMaterialLiquid.h"
+#include "MultiMaterialLiquidSimulator.h"
 #include "Renderer.h"
-#include "ScalarGrid.h"
+#include "Transform.h"
+#include "Utilities.h"
+#include "Vec.h"
 
-std::unique_ptr<MultiMaterialLiquid> multiMaterialSimulator;
+using namespace FluidSim2D::RegularGridSim;
+using namespace FluidSim2D::RenderTools;
+using namespace FluidSim2D::SurfaceTrackers;
+using namespace FluidSim2D::SimTools;
+using namespace FluidSim2D::Utilities;
+
+std::unique_ptr<MultiMaterialLiquidSimulator> multiMaterialSimulator;
 std::unique_ptr<Renderer> renderer;
 
+static int frameCount = 0;
 static bool runSimulation = false;
-static bool runSingleStep = false;
+static bool runSingleTimestep = false;
 static bool isDisplayDirty = true;
-static constexpr Real dt = 1. / 60.;
 
-static constexpr Real cfl = 5;
+static constexpr float dt = 1. / 60.;
+
+static constexpr float cfl = 5;
 
 static bool printFrame = false;
 
-static unsigned liquidMaterialCount;
-static unsigned currentMaterial = 0;
+static int liquidMaterialCount;
+static int currentMaterial = 0;
 
 static Transform xform;
 static Vec2i gridSize;
 
-static int frameCount = 0;
-static const Real bubbleDensity = 10;
-static const Real liquidDensity = 1000;
+static const float bubbleDensity = 1;
+static const float liquidDensity = 1000;
 
 void display()
 {
-    if (runSimulation || runSingleStep)
-    {
-		Real frameTime = 0.;
+	if (runSimulation || runSingleTimestep)
+	{
+		float frameTime = 0.;
 		std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
 
 		while (frameTime < dt)
 		{
 			// Set CFL condition
-			Real speed = multiMaterialSimulator->maxVelocityMagnitude();
-
-			Real localDt = dt - frameTime;
+			float speed = multiMaterialSimulator->maxVelocityMagnitude();
+			float localDt = dt - frameTime;
 			assert(localDt >= 0);
 
 			if (speed > 1E-6)
 			{
-				Real cflDt = cfl * xform.dx() / speed;
+				float cflDt = cfl * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
-					if (cflDt < dt / 20.)
-						localDt = dt / 20.;
-					else
-						localDt = cflDt;
+					localDt = cflDt;
 					std::cout << "\n  Throttling frame with substep: " << localDt << "\n" << std::endl;
 				}
 			}
@@ -63,27 +67,32 @@ void display()
 				break;
 
 			for (int material = 0; material < liquidMaterialCount; ++material)
-				multiMaterialSimulator->addForce(localDt, material, Vec2R(0., -9.8));
+				multiMaterialSimulator->addForce(localDt, material, Vec2f(0., -9.8));
 
 			multiMaterialSimulator->runTimestep(localDt, *renderer, frameCount);
 
 			// Store accumulated substep times
 			frameTime += localDt;
 		}
-
+		std::cout << "\n\nEnd of frame: " << frameCount << "\n" << std::endl;
 		++frameCount;
 
-		runSingleStep = false;
+		runSingleTimestep = false;
 		isDisplayDirty = true;
     }
     if (isDisplayDirty)
     {
 		renderer->clear();
-		multiMaterialSimulator->drawMaterialSurface(*renderer, currentMaterial);
+		for (int material = 0; material < liquidMaterialCount; ++material)
+			multiMaterialSimulator->drawMaterialSurface(*renderer, material);
+
 		multiMaterialSimulator->drawSolidSurface(*renderer);
 
 		for (int material = 0; material < liquidMaterialCount; ++material)
-			multiMaterialSimulator->drawMaterialVelocity(*renderer, .25, material);
+		{
+			if (currentMaterial == material)
+				multiMaterialSimulator->drawMaterialVelocity(*renderer, .25, material);
+		}
 		
 		if (printFrame)
 		{
@@ -103,10 +112,10 @@ void keyboard(unsigned char key, int x, int y)
 	if (key == ' ')
 		runSimulation = !runSimulation;
 	else if (key == 'n')
-		runSingleStep = true;
+		runSingleTimestep = true;
 	else if (key == 'm')
 	{
-		currentMaterial = (currentMaterial + 1) % 2;
+		currentMaterial = (currentMaterial + 1) % liquidMaterialCount;
 		isDisplayDirty = true;
 	}
 	else if (key == 'p')
@@ -119,40 +128,41 @@ void keyboard(unsigned char key, int x, int y)
 int main(int argc, char** argv)
 {
 	// Scene settings
-	Real dx = .015;
-	Real boundaryPadding = 10.;
+	float dx = .015;
+	float boundaryPadding = 10.;
 
-	Vec2R topRightCorner(1.5, 2.5);
+	Vec2f topRightCorner(1.5, 2.5);
 	topRightCorner += dx * boundaryPadding;
 
-	Vec2R bottomLeftCorner(-1.5, -2.5);
+	Vec2f bottomLeftCorner(-1.5, -2.5);
 	bottomLeftCorner -= dx * boundaryPadding;
 
-	Vec2R simulationSize = topRightCorner - bottomLeftCorner;
+	Vec2f simulationSize = topRightCorner - bottomLeftCorner;
 	gridSize = Vec2i(simulationSize / dx);
 
 	xform = Transform(dx, bottomLeftCorner);
-	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
+	Vec2f center = .5 * (topRightCorner + bottomLeftCorner);
 
-	unsigned pixelHeight = 1080;
-	unsigned pixelWidth = pixelHeight * (topRightCorner[0] - bottomLeftCorner[0]) / (topRightCorner[1] - bottomLeftCorner[1]);
+	int pixelHeight = 1080;
+	int pixelWidth = pixelHeight * (topRightCorner[0] - bottomLeftCorner[0]) / (topRightCorner[1] - bottomLeftCorner[1]);
 	renderer = std::make_unique<Renderer>("Multimaterial Liquid Simulator", Vec2i(pixelWidth, pixelHeight), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
 	// Build outer boundary grid.
-	EdgeMesh solidMesh = InitialGeometry::makeSquareMesh(center, .5 * simulationSize - Vec2R(boundaryPadding * xform.dx()));
+	EdgeMesh solidMesh = makeSquareMesh(center, .5 * simulationSize - Vec2f(boundaryPadding * xform.dx()));
 	solidMesh.reverse();
 	assert(solidMesh.unitTestMesh());
 
-	LevelSet solidSurface = LevelSet(xform, gridSize, 10);
+	LevelSet solidSurface(xform, gridSize, 5);
 	solidSurface.setBackgroundNegative();
 	solidSurface.initFromMesh(solidMesh, false);
 
-	// Build two-material level set.
-	// Circle centered in the grid.
+	multiMaterialSimulator = std::make_unique<MultiMaterialLiquidSimulator>(xform, gridSize, 2, 5);
 
-	EdgeMesh bubbleMesh = InitialGeometry::makeCircleMesh(center, .75, 40);
+	multiMaterialSimulator->setSolidSurface(solidSurface);
 
-	LevelSet bubbleSurface = LevelSet(xform, gridSize, 10);
+	EdgeMesh bubbleMesh = makeCircleMesh(center, .75, 40);
+
+	LevelSet bubbleSurface = LevelSet(xform, gridSize, 5);
 	bubbleSurface.initFromMesh(bubbleMesh, false);
 	bubbleMesh.reverse();
 
@@ -160,12 +170,8 @@ int main(int argc, char** argv)
 	liquidMesh.reverse();
 	liquidMesh.insertMesh(bubbleMesh);
 
-	LevelSet liquidSurface = LevelSet(xform, gridSize, 10);
+	LevelSet liquidSurface = LevelSet(xform, gridSize, 5);
 	liquidSurface.initFromMesh(liquidMesh, false);
-
-	multiMaterialSimulator = std::make_unique<MultiMaterialLiquid>(xform, gridSize, 2, 5);
-
-	multiMaterialSimulator->setSolidSurface(solidSurface);
 
 	multiMaterialSimulator->setMaterial(liquidSurface, liquidDensity, 0);
 	multiMaterialSimulator->setMaterial(bubbleSurface, bubbleDensity, 1);

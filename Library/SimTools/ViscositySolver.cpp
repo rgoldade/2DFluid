@@ -1,193 +1,295 @@
 #include "ViscositySolver.h"
 
+#include <iostream>
+
+#include <Eigen/Sparse>
+
 #include "ComputeWeights.h"
 #include "LevelSet.h"
-#include "Solver.h"
 
-void ViscositySolver(const Real dt,
-	const LevelSet& surface,
-	VectorGrid<Real>& velocity,
-	const LevelSet& solidSurface,
-	const VectorGrid<Real>& solidVelocity,
-	const ScalarGrid<Real>& viscosity)
+namespace FluidSim2D::SimTools
+{
+
+using SolveReal = double;
+using Vector = Eigen::VectorXd;
+
+void ViscositySolver(float dt,
+						const LevelSet& surface,
+						VectorGrid<float>& velocity,
+						const LevelSet& solidSurface,
+						const VectorGrid<float>& solidVelocity,
+						const ScalarGrid<float>& viscosity)
 {
 	// For efficiency sake, this should only take in velocity on a staggered grid
 	// that matches the center sampled surface and collision
 	assert(surface.isGridMatched(solidSurface));
 	assert(surface.isGridMatched(viscosity));
+	assert(velocity.isGridMatched(solidVelocity));
 
-	// For efficiency sake, this should only take in velocity on a staggered grid
-	// that matches the center sampled surface and collision
-	assert(velocity.size(0)[0] - 1 == surface.size()[0] &&
-			velocity.size(0)[1] == surface.size()[1] &&
-			velocity.size(1)[0] == surface.size()[0] &&
-			velocity.size(1)[1] - 1 == surface.size()[1]);
+	for (int axis : {0, 1})
+	{
+		Vec2i faceSize = velocity.size(axis);
+		--faceSize[axis];
 
-	assert(solidVelocity.size(0)[0] - 1 == surface.size()[0] &&
-			solidVelocity.size(0)[1] == surface.size()[1] &&
-			solidVelocity.size(1)[0] == surface.size()[0] &&
-			solidVelocity.size(1)[1] - 1 == surface.size()[1]);
+		assert(faceSize == surface.size());
+	}
 
 	int samples = 3;
 
-	ScalarGrid<Real> centerAreas = computeSuperSampledAreas(surface, ScalarGridSettings::SampleType::CENTER, 3);
-	ScalarGrid<Real> nodeAreas = computeSuperSampledAreas(surface, ScalarGridSettings::SampleType::NODE, 3);
-	VectorGrid<Real> faceAreas = computeSuperSampledFaceAreas(surface, 3);
+	ScalarGrid<float> centerAreas = computeSupersampledAreas(surface, ScalarGridSettings::SampleType::CENTER, 3);
+	ScalarGrid<float> nodeAreas = computeSupersampledAreas(surface, ScalarGridSettings::SampleType::NODE, 3);
+	VectorGrid<float> faceAreas = computeSupersampledFaceAreas(surface, 3);
 
-	VectorGrid<int> liquidFaces(surface.xform(), surface.size(), ViscosityCellLabels::UNSOLVED_CELL, VectorGridSettings::SampleType::STAGGERED);
+	SolveReal discreteScalar = dt / sqr(surface.dx());
 
-	// Build solvable faces. Assumes the grid limits are solid boundaries and left out
-	// of the system.
+	// Pre-scale all the control volumes with coefficients to reduce
+	// redundant operations when building the linear system.
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, centerAreas.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		{
+			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
+			{
+				Vec2i cell = centerAreas.unflatten(cellIndex);
+
+				if (centerAreas(cell) > 0)
+					centerAreas(cell) *= 2. * discreteScalar * viscosity(cell);
+			}
+		});
+
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, nodeAreas.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		{
+			for (int nodeIndex = range.begin(); nodeIndex != range.end(); ++nodeIndex)
+			{
+				Vec2i node = nodeAreas.unflatten(nodeIndex);
+
+				if (nodeAreas(node) > 0)
+					nodeAreas(node) *= discreteScalar * viscosity.biLerp(nodeAreas.indexToWorld(Vec2f(node)));
+			}
+		});
+
+	enum class MaterialLabels { SOLID_FACE, LIQUID_FACE, AIR_FACE };
+
+	VectorGrid<MaterialLabels> materialFaceLabels(surface.xform(), surface.size(), MaterialLabels::AIR_FACE, VectorGridSettings::SampleType::STAGGERED);
+
+	// Set material labels for each grid face. We assume faces along the simulation boundary
+	// are solid.
+
+	for (int faceAxis : {0, 1})
+	{
+		tbb::parallel_for(tbb::blocked_range<int>(0, materialFaceLabels.grid(faceAxis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+			{
+				for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
+				{
+					Vec2i face = materialFaceLabels.grid(faceAxis).unflatten(faceIndex);
+
+					if (face[faceAxis] == 0 || face[faceAxis] == materialFaceLabels.size(faceAxis)[faceAxis] - 1)
+						continue;
+
+					bool isFaceInSolve = false;
+
+					for (int direction : {0, 1})
+					{
+						Vec2i cell = faceToCell(face, faceAxis, direction);
+						if (centerAreas(cell) > 0) isFaceInSolve = true;
+					}
+
+					if (!isFaceInSolve)
+					{
+						for (int direction : {0, 1})
+						{
+							Vec2i node = faceToNode(face, faceAxis, direction);
+							if (nodeAreas(node) > 0) isFaceInSolve = true;
+						}
+					}
+
+					if (isFaceInSolve)
+					{
+						if (solidSurface.biLerp(materialFaceLabels.indexToWorld(Vec2f(face), faceAxis)) <= 0.)
+							materialFaceLabels(face, faceAxis) = MaterialLabels::SOLID_FACE;
+						else
+							materialFaceLabels(face, faceAxis) = MaterialLabels::LIQUID_FACE;
+					}
+				}
+			});
+	}
 
 	int liquidDOFCount = 0;
 
+	constexpr int UNLABELLED_CELL = -1;
+
+	VectorGrid<int> liquidFaceIndices(surface.xform(), surface.size(), UNLABELLED_CELL, VectorGridSettings::SampleType::STAGGERED);
+
 	for (int axis : {0, 1})
 	{
-		Vec2i size = liquidFaces.size(axis);
-
-		Vec2i start(0); ++start[axis];
-		Vec2i end(size); --end[axis];
-
-		forEachVoxelRange(start, end, [&](const Vec2i& face)
-		{
-			bool inSolve = false;
-
-			for (int direction : {0, 1})
+		forEachVoxelRange(Vec2i(0), materialFaceLabels.size(axis), [&](const Vec2i& face)
 			{
-				Vec2i cell = faceToCell(face, axis, direction);
-				if (centerAreas(cell) > 0.) inSolve = true;
-			}
-
-			if (!inSolve)
-			{
-				for (int direction : {0, 1})
-				{
-					Vec2i node = faceToNode(face, axis, direction);
-					if (nodeAreas(node) > 0.) inSolve = true;
-				}
-			}
-
-			if (inSolve)
-			{
-				if (solidSurface.interp(liquidFaces.indexToWorld(Vec2R(face), axis)) <= 0.)
-					liquidFaces(face, axis) = ViscosityCellLabels::SOLID_CELL;
-				else
-					liquidFaces(face, axis) = liquidDOFCount++;
-			}
-		});
+				if (materialFaceLabels(face, axis) == MaterialLabels::LIQUID_FACE)
+					liquidFaceIndices(face, axis) = liquidDOFCount++;
+			});
 	}
 
-	// Build a single container of the viscosity weights (liquid volumes, gf weights, viscosity coefficients)
-	Real invDx2 = 1. / Util::sqr(surface.dx());
-	forEachVoxelRange(Vec2i(0), centerAreas.size(), [&](const Vec2i& cell)
-	{
-		centerAreas(cell) *= dt * invDx2;
-		centerAreas(cell) *= viscosity(cell);
-	});
-	
-	forEachVoxelRange(Vec2i(0), nodeAreas.size(), [&](const Vec2i& node)
-	{
-		nodeAreas(node) *= dt * invDx2;
-		nodeAreas(node) *= viscosity.interp(nodeAreas.indexToWorld(Vec2R(node)));
-	});
+	std::vector<Eigen::Triplet<SolveReal>> sparseElements;
+	Vector initialGuessVector = Vector::Zero(liquidDOFCount);
+	Vector rhsVector = Vector::Zero(liquidDOFCount);
 
-	Solver<true> solver(liquidDOFCount, liquidDOFCount * 9);
-
-	for (int axis : {0, 1})
 	{
-		Vec2i faceGridSize = velocity.size(axis);
+		tbb::enumerable_thread_specific<std::vector<Eigen::Triplet<SolveReal>>> parallelSparseElements;
 
-		forEachVoxelRange(Vec2i(0), faceGridSize, [&](const Vec2i& face)
+		for (int faceAxis : {0, 1})
 		{
-			int index = liquidFaces(face, axis);
-			if (index >= 0)
-			{
-				Real volume = faceAreas(face, axis);
-
-				// Build RHS with weight velocities
-				solver.addToRhs(index, velocity(face, axis) * volume);
-				solver.addToGuess(index, velocity(face, axis));
-
-				// Add control volume weight on the diagonal.
-				solver.addToElement(index, index, volume);
-
-				// Build cell-centered stresses.
-				for (int cellDirection : {0, 1})
+			tbb::parallel_for(tbb::blocked_range<int>(0, materialFaceLabels.grid(faceAxis).voxelCount(), materialFaceLabels.grid(faceAxis).voxelCount() + 1/*tbbLightGrainSize*/), [&](const tbb::blocked_range<int>& range)
 				{
-					Vec2i cell = faceToCell(face, axis, cellDirection);
+					auto& localSparseElements = parallelSparseElements.local();
 
-					Real coeff = 2. * centerAreas(cell);
-					Real centerSign = (cellDirection == 0) ? -1. : 1.;
-
-					for (int faceDirection : {0, 1})
+					for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 					{
-						// Since we've assumed grid boundaries are static solids
-						// we don't have any solveable faces with adjacent cells
-						// out of the grid bounds. We can skip that check here.
+						Vec2i face = materialFaceLabels.grid(faceAxis).unflatten(faceIndex);
 
-						Vec2i adjacentFace = cellToFace(cell, axis, faceDirection);
+						int liquidFaceIndex = liquidFaceIndices(face, faceAxis);
 
-						Real faceSign = (faceDirection == 0) ? -1. : 1.;
+						if (liquidFaceIndex >= 0)
+						{
+							assert(materialFaceLabels(face, faceAxis) == MaterialLabels::LIQUID_FACE);
 
-						int faceIndex = liquidFaces(adjacentFace, axis);
-						if (faceIndex >= 0)
-							solver.addToElement(index, faceIndex, -centerSign * faceSign * coeff);
-						else if (faceIndex == ViscosityCellLabels::SOLID_CELL)
-							solver.addToRhs(index, centerSign * faceSign * coeff * solidVelocity(adjacentFace, axis));
+							// Use old velocity as an initial guess since we're solving for a new
+							// velocity field with viscous forces applied to the old velocity field.
+							initialGuessVector(liquidFaceIndex) = velocity(face, faceAxis);
+
+							// Build RHS with volume weights
+							SolveReal localFaceArea = faceAreas(face, faceAxis);
+
+							rhsVector(liquidFaceIndex) = localFaceArea * velocity(face, faceAxis);
+
+							// Add volume weight to diagonal
+							SolveReal diagonal = localFaceArea;
+
+							// Build cell centered stress terms
+							for (int divergenceDirection : {0, 1})
+							{
+								Vec2i cell = faceToCell(face, faceAxis, divergenceDirection);
+
+								assert(cell[faceAxis] >= 0 && cell[faceAxis] < centerAreas.size()[faceAxis]);
+
+								if (centerAreas(cell) > 0)
+								{
+									SolveReal divergenceSign = (divergenceDirection == 0) ? -1 : 1;
+
+									for (int gradientDirection : {0, 1})
+									{
+										Vec2i adjacentFace = cellToFace(cell, faceAxis, gradientDirection);
+
+										SolveReal gradientSign = (gradientDirection == 0) ? -1. : 1.;
+
+										SolveReal coefficient = divergenceSign * gradientSign * centerAreas(cell);
+
+										int adjacentFaceIndex = liquidFaceIndices(adjacentFace, faceAxis);
+										if (adjacentFaceIndex >= 0)
+										{
+											if (adjacentFaceIndex == liquidFaceIndex)
+												diagonal -= coefficient;
+											else
+												localSparseElements.emplace_back(liquidFaceIndex, adjacentFaceIndex, -coefficient);
+										}
+										else if (materialFaceLabels(adjacentFace, faceAxis) == MaterialLabels::SOLID_FACE)
+											rhsVector(liquidFaceIndex) += coefficient * solidVelocity(adjacentFace, faceAxis);
+										else
+											assert(materialFaceLabels(adjacentFace, faceAxis) == MaterialLabels::AIR_FACE);
+									}
+								}
+							}
+
+							// Build node stresses.
+							for (int divergenceDirection : {0, 1})
+							{
+								Vec2i node = faceToNode(face, faceAxis, divergenceDirection);
+
+								if (nodeAreas(node) > 0)
+								{
+									SolveReal divergenceSign = (divergenceDirection == 0) ? -1. : 1.;
+
+									for (int gradientAxis : {0, 1})
+									{
+										int gradientFaceAxis = (gradientAxis + 1) % 2;
+										for (int gradientDirection : {0, 1})
+										{
+											SolveReal gradientSign = gradientDirection == 0 ? -1. : 1.;
+
+											Vec2i localGradientFace = nodeToFace(node, gradientAxis, gradientDirection);
+
+											int gradientFaceIndex = liquidFaceIndices(localGradientFace, gradientFaceAxis);
+
+											SolveReal coefficient = divergenceSign * gradientSign * nodeAreas(node);
+
+											if (gradientFaceIndex >= 0)
+											{
+												if (gradientFaceIndex == liquidFaceIndex)
+													diagonal -= coefficient;
+												else
+													localSparseElements.emplace_back(liquidFaceIndex, gradientFaceIndex, -coefficient);
+											}
+											else if (materialFaceLabels(localGradientFace, gradientFaceAxis) == MaterialLabels::SOLID_FACE)
+												rhsVector(liquidFaceIndex) += coefficient * solidVelocity(localGradientFace, gradientFaceAxis);
+											else assert(materialFaceLabels(localGradientFace, gradientFaceAxis) == MaterialLabels::AIR_FACE);
+										}
+									}
+								}
+							}
+
+							assert(diagonal > 0);
+							localSparseElements.emplace_back(liquidFaceIndex, liquidFaceIndex, diagonal);
+						}
+						else assert(materialFaceLabels(face, faceAxis) != MaterialLabels::LIQUID_FACE);
+					}
+				});
+		}
+
+		mergeLocalThreadVectors(sparseElements, parallelSparseElements);
+	}
+
+	Eigen::SparseMatrix<SolveReal> sparseMatrix(liquidDOFCount, liquidDOFCount);
+	sparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
+
+	Eigen::ConjugateGradient<Eigen::SparseMatrix<SolveReal>, Eigen::Upper | Eigen::Lower> solver;
+	solver.compute(sparseMatrix);
+	solver.setTolerance(1E-3);
+
+	if (solver.info() != Eigen::Success)
+	{
+		std::cout << "   Solver failed to build" << std::endl;
+		return;
+	}
+
+	Vector solutionVector = solver.solveWithGuess(rhsVector, initialGuessVector);
+
+	if (solver.info() != Eigen::Success)
+	{
+		std::cout << "   Solver failed to converge" << std::endl;
+		return;
+	}
+	else
+	{
+		std::cout << "    Solver iterations:     " << solver.iterations() << std::endl;
+		std::cout << "    Solver error: " << solver.error() << std::endl;
+	}
+
+	for (int faceAxis : {0, 1})
+	{
+		tbb::parallel_for(tbb::blocked_range<int>(0, materialFaceLabels.grid(faceAxis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+			{
+				for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
+				{
+					Vec2i face = materialFaceLabels.grid(faceAxis).unflatten(faceIndex);
+
+					int liquidFaceIndex = liquidFaceIndices(face, faceAxis);
+					if (liquidFaceIndex >= 0)
+					{
+						assert(materialFaceLabels(face, faceAxis) == MaterialLabels::LIQUID_FACE);
+						velocity(face, faceAxis) = solutionVector(liquidFaceIndex);
 					}
 				}
-
-				// Build node stresses.
-				for (int nodeDirection : {0, 1})
-				{
-					Vec2i node = faceToNode(face, axis, nodeDirection);
-
-					Real nodeSign = (nodeDirection == 0) ? -1. : 1.;
-					Real coeff = nodeAreas(node);
-
-					for (int gradientAxis : {0, 1})
-						for (int faceDirection : {0, 1})
-						{
-							Vec2i adjacentFace = nodeToFace(node, gradientAxis, faceDirection);
-
-							Real faceSign = faceDirection == 0 ? -1. : 1.;
-
-							if (adjacentFace[gradientAxis] >= 0 && adjacentFace[gradientAxis] < faceGridSize[gradientAxis])
-							{
-								int faceAxis = (gradientAxis + 1) % 2;
-								int faceIndex = liquidFaces(adjacentFace, faceAxis);
-
-								if (faceIndex >= 0)
-									solver.addToElement(index, faceIndex, -nodeSign * faceSign * coeff);
-								else if (faceIndex == ViscosityCellLabels::SOLID_CELL)
-									solver.addToRhs(index, nodeSign * faceSign * coeff * solidVelocity(adjacentFace, faceAxis));
-							}
-						}
-				}
-			}
-		});
+			});
 	}
+}
 
-	bool solved = solver.solveIterative();
-
-	if (!solved)
-	{
-		std::cout << "Viscosity failed to solve" << std::endl;
-		assert(false);
-	}
-
-	// Update velocity
-	for (int axis : {0, 1})
-	{
-		Vec2i size = velocity.size(axis);
-
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
-		{
-			int index = liquidFaces(face, axis);
-			if (index >= 0)
-				velocity(face, axis) = solver.solution(index);
-			else if (index == ViscosityCellLabels::SOLID_CELL)
-				velocity(face, axis) = solidVelocity(face, axis);
-		});
-	}
 }

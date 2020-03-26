@@ -1,52 +1,63 @@
+#include <iostream>
 #include <memory>
 
-#include "Common.h"
 #include "EdgeMesh.h"
-#include "EulerianLiquid.h"
+#include "EulerianLiquidSimulator.h"
 #include "InitialGeometry.h"
-#include "Integrator.h"
 #include "LevelSet.h"
 #include "Renderer.h"
+#include "Transform.h"
+#include "Utilities.h"
+#include "Vec.h"
+
+using namespace FluidSim2D::RegularGridSim;
+using namespace FluidSim2D::RenderTools;
+using namespace FluidSim2D::SurfaceTrackers;
+using namespace FluidSim2D::SimTools;
+using namespace FluidSim2D::Utilities;
 
 static std::unique_ptr<Renderer> renderer;
-static std::unique_ptr<EulerianLiquid> simulator;
+static std::unique_ptr<EulerianLiquidSimulator> simulator;
 
+static int frameCount = 0;
 static bool runSimulation = false;
-static bool runSingleStep = false;
+static bool runSingleTimestep = false;
 static bool isDisplayDirty = true;
 
-static bool drawVelocities = false;
+static bool drawLiquidVelocities = false;
 
-static constexpr Real dt = 1. / 60.;
+static LevelSet seedSurface;
 
 static bool printFrame = false;
 
-static Real cfl = 5.;
+static float seedTime = 0;
+static constexpr float seedPeriod = 2;
+static constexpr float dt = 1. / 60;
 
-static Real seedTime = 0;
+static constexpr float cfl = 5;
 
 static Transform xform;
-static Vec2i gridSize;
-static int frameCount = 0;
+
+static LevelSet testLevelSet;
 
 void display()
 {
-	if (runSimulation || runSingleStep)
+	if (runSimulation || runSingleTimestep)
 	{
-		Real frameTime = 0.;
+		float frameTime = 0.;
 		std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
 
 		while (frameTime < dt)
 		{
 			// Set CFL condition
-			Real speed = simulator->maxVelocityMagnitude();
+			float speed = simulator->maxVelocityMagnitude();
 			
-			Real localDt = dt - frameTime;
+			float localDt = dt - frameTime;
 			assert(localDt >= 0);
 
 			if (speed > 1E-6)
 			{
-				Real cflDt = cfl * xform.dx() / speed;
+				float cflDt = cfl * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
 					localDt = cflDt;
@@ -57,20 +68,15 @@ void display()
 			if (localDt <= 0)
 				break;
 
-			if (seedTime > 2.)
+			if (seedTime > seedPeriod)
 			{
-				Vec2R center = xform.offset() + Vec2R(xform.dx()) * Vec2R(gridSize / 2) + Vec2R(.8);
-				EdgeMesh seedMesh = InitialGeometry::makeSquareMesh(center, Vec2R(.5));
-
-				LevelSet seedSurface = LevelSet(xform, gridSize, 5);
-				seedSurface.initFromMesh(seedMesh, false);
 				simulator->unionLiquidSurface(seedSurface);
-				seedTime = 0.;
+				seedTime = 0;
 			}
 			
-			simulator->addForce(localDt, Vec2R(0., -9.8));
+			simulator->addForce(localDt, Vec2f(0., -9.8));
 
-			simulator->runTimestep(localDt, *renderer);
+			simulator->runTimestep(localDt);
 
 			seedTime += localDt;
 			
@@ -79,7 +85,8 @@ void display()
 		}
 		std::cout << "\n\nEnd of frame: " << frameCount << "\n" << std::endl;
 		++frameCount;
-		runSingleStep = false;
+
+		runSingleTimestep = false;
 		isDisplayDirty = true;
 	}
 	if (isDisplayDirty)
@@ -90,7 +97,7 @@ void display()
 		simulator->drawLiquidSurface(*renderer);
 		simulator->drawSolidSurface(*renderer);
 
-		if (drawVelocities)
+		if (drawLiquidVelocities)
 			simulator->drawLiquidVelocity(*renderer, .5);
 
 		isDisplayDirty = false;
@@ -111,46 +118,57 @@ void keyboard(unsigned char key, int x, int y)
 	if (key == ' ')
 		runSimulation = !runSimulation;
 	else if (key == 'n')
-		runSingleStep = true;
+		runSingleTimestep = true;
 	else if (key == 'p')
 	{
 		printFrame = !printFrame;
 		isDisplayDirty = true;
 	}
 	else if (key == 'v')
-		drawVelocities = !drawVelocities;
+	{
+		drawLiquidVelocities = !drawLiquidVelocities;
+		isDisplayDirty = true;
+	}
 }
 
 int main(int argc, char** argv)
 {
 	// Scene settings
-	Real dx = .0125;
-	Vec2R topRightCorner(2.5);
-	Vec2R bottomLeftCorner(-2.5);
-	gridSize = Vec2i((topRightCorner - bottomLeftCorner) / dx);
+	float dx = .0125;
+	Vec2f topRightCorner(2.5);
+	Vec2f bottomLeftCorner(-2.5);
+	Vec2i gridSize((topRightCorner - bottomLeftCorner) / dx);
 	xform = Transform(dx, bottomLeftCorner);
-	Vec2R center = .5 * (topRightCorner + bottomLeftCorner);
+	Vec2f center = .5 * (topRightCorner + bottomLeftCorner);
 
 	renderer = std::make_unique<Renderer>("Levelset Liquid Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	EdgeMesh liquidMesh = InitialGeometry::makeCircleMesh(center - Vec2R(0,.65), 1, 100);
-	
+	EdgeMesh liquidMesh = makeCircleMesh(center - Vec2f(0,.65), 1, 100);
 	assert(liquidMesh.unitTestMesh());
 
-	EdgeMesh solidMesh = InitialGeometry::makeCircleMesh(center, 2, 100);
+	EdgeMesh solidMesh = makeCircleMesh(center, 2, 100);
 	solidMesh.reverse();
 	assert(solidMesh.unitTestMesh());
 	
-	LevelSet liquidSurface = LevelSet(xform, gridSize, 10);
+	LevelSet liquidSurface(xform, gridSize, 5);
 	liquidSurface.initFromMesh(liquidMesh, false);
 
-	LevelSet solidSurface = LevelSet(xform, gridSize, 10);
+	testLevelSet = liquidSurface;
+
+	LevelSet solidSurface(xform, gridSize, 5);
 	solidSurface.setBackgroundNegative();
 	solidSurface.initFromMesh(solidMesh, false);
 	
+	Vec2f seedCenter = xform.offset() + Vec2f(xform.dx()) * Vec2f(gridSize / 2) + Vec2f(.8);
+	EdgeMesh seedMesh = makeSquareMesh(seedCenter, Vec2f(.5));
+
+	seedSurface = LevelSet(xform, gridSize, 5);
+	seedSurface.initFromMesh(seedMesh, false);
+
 	// Set up simulation
-	simulator = std::unique_ptr<EulerianLiquid>(new EulerianLiquid(xform, gridSize, 10));
-	simulator->unionLiquidSurface(liquidSurface);
+
+	simulator = std::make_unique<EulerianLiquidSimulator>(xform, gridSize, 5);
+	simulator->setLiquidSurface(liquidSurface);
 	simulator->setSolidSurface(solidSurface);
 
 	std::function<void()> displayFunc = display;

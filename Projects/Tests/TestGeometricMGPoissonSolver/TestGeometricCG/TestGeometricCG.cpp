@@ -1,8 +1,8 @@
+#include <iostream>
 #include <memory>
 #include <random>
 #include <string>
 
-#include "Common.h"
 #include "GeometricConjugateGradientSolver.h"
 #include "GeometricMultigridOperators.h"
 #include "GeometricMultigridPoissonSolver.h"
@@ -11,6 +11,10 @@
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "UniformGrid.h"
+#include "Utilities.h"
+
+using namespace FluidSim2D::RenderTools;
+using namespace FluidSim2D::SimTools;
 
 std::unique_ptr<Renderer> renderer;
 
@@ -24,7 +28,7 @@ static constexpr bool useRandomGuess = true;
 static constexpr bool doGeometricSolve = true;
 
 static constexpr int maxIterations = 5000;
-static constexpr Real solverTolerance = 1E-10;
+static constexpr float solverTolerance = 1E-10;
 
 static constexpr double deltaAmplitude = 1000;
 
@@ -72,17 +76,16 @@ int main(int argc, char** argv)
 	UniformGrid<StoreReal> solutionGrid(domainCellLabels.size(), 0);
 	UniformGrid<StoreReal> residualGrid(domainCellLabels.size(), 0);
 
-	int totalVoxels = domainCellLabels.size()[0] * domainCellLabels.size()[1];
 	if (useRandomGuess)
 	{
 		std::default_random_engine generator;
 		std::uniform_real_distribution<StoreReal> distribution(0, 1);
 
-		tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
-				Vec2i cell = domainCellLabels.unflatten(flatIndex);
+				Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 					domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -95,7 +98,7 @@ int main(int argc, char** argv)
 
 	// Set delta function
 	StoreReal deltaPercent = .1;
-	Vec2i deltaPoint = Vec2i(deltaPercent * Vec2R(gridSize)) + exteriorOffset;
+	Vec2i deltaPoint = Vec2i(deltaPercent * Vec2f(gridSize)) + exteriorOffset;
 
 	forEachVoxelRange(deltaPoint - Vec2i(1), deltaPoint + Vec2i(2), [&](const Vec2i &cell)
 	{
@@ -172,12 +175,12 @@ int main(int argc, char** argv)
 		{
 			UniformGrid<StoreReal> diagonalPrecondGrid(domainCellLabels.size(), 0);
 
-			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
-				const SolveReal gridScalar = 1. / Util::sqr(dx);
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				const SolveReal gridScalar = 1. / sqr(dx);
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = domainCellLabels.unflatten(flatIndex);
+					Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL)
 					{
@@ -230,17 +233,17 @@ int main(int argc, char** argv)
 				}
 			});
 
-			auto DiagonalPreconditioner = [&domainCellLabels, &diagonalPrecondGrid, totalVoxels](UniformGrid<StoreReal> &destinationGrid,
+			auto DiagonalPreconditioner = [&domainCellLabels, &diagonalPrecondGrid](UniformGrid<StoreReal> &destinationGrid,
 																									const UniformGrid<StoreReal> &sourceGrid)
 			{
 				assert(destinationGrid.size() == sourceGrid.size() &&
 						sourceGrid.size() == domainCellLabels.size());
 
-				tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+				tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 				{
-					for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+					for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 					{
-						Vec2i cell = domainCellLabels.unflatten(flatIndex);
+						Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 						if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 							domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -279,7 +282,7 @@ int main(int argc, char** argv)
 		// Build rows
 		std::vector<Eigen::Triplet<SolveReal>> sparseElements;
 
-		SolveReal gridScalar = 1. / Util::sqr(dx);
+		SolveReal gridScalar = 1. / sqr(dx);
 		forEachVoxelRange(Vec2i(0), domainCellLabels.size(), [&](const Vec2i &cell)
 		{
 			int index = solverIndices(cell);
@@ -304,10 +307,10 @@ int main(int argc, char** argv)
 						Vec2i face = cellToFace(cell, axis, direction);
 						assert(boundaryWeights(face, axis) == 1);
 
-						sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScalar));
+						sparseElements.emplace_back(index, adjacentIndex, -gridScalar);
 					}
 
-				sparseElements.push_back(Eigen::Triplet<SolveReal>(index, index, 4. * gridScalar));
+				sparseElements.emplace_back(index, index, 4. * gridScalar);
 			}
 			else if (domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 			{
@@ -330,7 +333,7 @@ int main(int argc, char** argv)
 							Vec2i face = cellToFace(cell, axis, direction);
 							assert(boundaryWeights(face, axis) == 1);
 
-							sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScalar));
+							sparseElements.emplace_back(index, adjacentIndex, -gridScalar);
 							++diagonal;
 						}
 						else if (cellLabel == CellLabels::BOUNDARY_CELL)
@@ -341,7 +344,7 @@ int main(int argc, char** argv)
 							Vec2i face = cellToFace(cell, axis, direction);
 							SolveReal weight = boundaryWeights(face, axis);
 
-							sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -weight * gridScalar));
+							sparseElements.emplace_back(index, adjacentIndex, -weight * gridScalar);
 							diagonal += weight;
 						}
 						else if (cellLabel == CellLabels::DIRICHLET_CELL)
@@ -362,7 +365,7 @@ int main(int argc, char** argv)
 						}
 					}
 
-				sparseElements.push_back(Eigen::Triplet<SolveReal>(index, index, diagonal * gridScalar));
+				sparseElements.emplace_back(index, index, diagonal * gridScalar);
 			}
 			else assert(index == -1);
 		});
@@ -377,11 +380,11 @@ int main(int argc, char** argv)
 		// Build RHS
 		Vector rhsVector = Vector::Zero(interiorCellCount);
 
-		tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
-			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
-				Vec2i cell = domainCellLabels.unflatten(flatIndex);
+				Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 					domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -396,11 +399,11 @@ int main(int argc, char** argv)
 		Vector initialGuessVector = Vector::Zero(interiorCellCount);
 		if (useRandomGuess)
 		{
-			tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 			{
-				for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
-					Vec2i cell = domainCellLabels.unflatten(flatIndex);
+					Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 					if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 						domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -429,21 +432,21 @@ int main(int argc, char** argv)
 	// Print domain labels to make sure they are set up correctly
 	int pixelHeight = 1080;
 	int pixelWidth = pixelHeight;
-	renderer = std::make_unique<Renderer>("Geometric CG and MG Preconditioner Test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
+	renderer = std::make_unique<Renderer>("Geometric CG and MG Preconditioner Test", Vec2i(pixelWidth, pixelHeight), Vec2f(0), 1, &argc, argv);
 	
-	ScalarGrid<Real> tempGrid(Transform(dx, Vec2R(0)), domainCellLabels.size());
+	ScalarGrid<float> tempGrid(Transform(dx, Vec2f(0)), domainCellLabels.size());
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
-		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			Vec2i cell = domainCellLabels.unflatten(flatIndex);
+			Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
-			tempGrid(cell) = Real(domainCellLabels(cell));
+			tempGrid(cell) = float(domainCellLabels(cell));
 		}
 	});
 
-	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR_CELL), Real(CellLabels::BOUNDARY_CELL));
+	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), float(CellLabels::INTERIOR_CELL), float(CellLabels::BOUNDARY_CELL));
 
 	renderer->run();
 }

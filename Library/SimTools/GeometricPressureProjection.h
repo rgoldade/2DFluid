@@ -1,12 +1,11 @@
 #ifndef LIBRARY_GEOMETRIC_PRESSURE_PROJECTION_H
 #define LIBRARY_GEOMETRIC_PRESSURE_PROJECTION_H
 
-#include "Common.h"
-#include "ComputeWeights.h"
 #include "GeometricConjugateGradientSolver.h"
 #include "LevelSet.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
+#include "Utilities.h"
 #include "VectorGrid.h"
 
 ///////////////////////////////////
@@ -16,43 +15,26 @@
 //
 ////////////////////////////////////
 
+namespace FluidSim2D::SimTools
+{
+
+using namespace SurfaceTrackers;
+using namespace Utilities;
+
 class GeometricPressureProjection
 {
-	using CellLabels = GeometricMultigridOperators::CellLabels;
-
 	using StoreReal = double;
 	using SolveReal = double;
 
 public:
 	GeometricPressureProjection(const LevelSet& surface,
-								const VectorGrid<Real>& cutCellWeights,
-								const VectorGrid<Real>& ghostFluidWeights,
-								const VectorGrid<Real>& solidVelocity)
-		: mySurface(surface)
-		, myCutCellWeights(cutCellWeights)
-		, myGhostFluidWeights(ghostFluidWeights)
-		, mySolidVelocity(solidVelocity)
-		, myUseInitialGuessPressure(false)
-		, myInitialGuessPressure(nullptr)
-	{
-		assert(solidVelocity.size(0)[0] - 1 == surface.size()[0] &&
-				solidVelocity.size(0)[1] == surface.size()[1] &&
-				solidVelocity.size(1)[0] == surface.size()[0] &&
-				solidVelocity.size(1)[1] - 1 == surface.size()[1]);
+								const VectorGrid<float>& cutCellWeights,
+								const VectorGrid<float>& ghostFluidWeights,
+								const VectorGrid<float>& solidVelocity);
 
-		assert(solidVelocity.sampleType() == VectorGridSettings::SampleType::STAGGERED);
+	void project(VectorGrid<float>& velocity, bool useMGPreconditioner);
 
-		assert(solidVelocity.isGridMatched(cutCellWeights) &&
-				solidVelocity.isGridMatched(ghostFluidWeights));
-
-		myPressure = ScalarGrid<Real>(surface.xform(), surface.size(), 0);
-		myValidFaces = VectorGrid<MarkedCells>(surface.xform(), surface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
-	}
-
-	void project(VectorGrid<Real>& velocity,
-					const bool useMGPreconditioner);
-
-	void setInitialGuess(const ScalarGrid<Real>& initialGuessPressure)
+	void setInitialGuess(const ScalarGrid<float>& initialGuessPressure)
 	{
 		assert(mySurface.isGridMatched(initialGuessPressure));
 		myUseInitialGuessPressure = true;
@@ -64,12 +46,12 @@ public:
 		myUseInitialGuessPressure = false;
 	}
 
-	ScalarGrid<Real> getPressureGrid()
+	ScalarGrid<float> getPressureGrid()
 	{
 		return myPressure;
 	}
 
-	const VectorGrid<MarkedCells>& getValidFaces()
+	const VectorGrid<VisitedCellLabels>& getValidFaces()
 	{
 		return myValidFaces;
 	}
@@ -78,17 +60,21 @@ public:
 
 private:
 
-	const VectorGrid<Real> &mySolidVelocity;
+	const VectorGrid<float>& mySolidVelocity;
+	const VectorGrid<float>& myGhostFluidWeights;
+	const VectorGrid<float>& myCutCellWeights;
 
-	VectorGrid<MarkedCells> myValidFaces; // Store solved faces
+	// Store flags for solved faces
+	VectorGrid<VisitedCellLabels> myValidFaces;
 
-	const LevelSet &mySurface;
+	const LevelSet& mySurface;
 
-	ScalarGrid<Real> myPressure;
+	ScalarGrid<float> myPressure;
 
-	const ScalarGrid<Real> *myInitialGuessPressure;
+	const ScalarGrid<float> *myInitialGuessPressure;
 	bool myUseInitialGuessPressure;
-	const VectorGrid<Real>& myGhostFluidWeights, &myCutCellWeights;
 };
+
+}
 
 #endif

@@ -1,11 +1,10 @@
-#ifndef LIBRARY_VISCOSITYSOLVER_H
-#define LIBRARY_VISCOSITYSOLVER_H
+#ifndef LIBRARY_VISCOSITY_SOLVER_H
+#define LIBRARY_VISCOSITY_SOLVER_H
 
-#include "Common.h"
+#include "LevelSet.h"
 #include "ScalarGrid.h"
+#include "Utilities.h"
 #include "VectorGrid.h"
-
-class LevelSet;
 
 ///////////////////////////////////
 //
@@ -20,17 +19,17 @@ class LevelSet;
 //
 ////////////////////////////////////
 
-namespace ViscosityCellLabels
+namespace FluidSim2D::SimTools
 {
-	constexpr int UNSOLVED_CELL = -2;
-	constexpr int SOLID_CELL = -1;
-}
+using namespace SurfaceTrackers;
+using namespace Utilities;
 
-void ViscositySolver(const Real dt,
+void ViscositySolver(float dt,
 						const LevelSet& surface,
-						VectorGrid<Real>& velocity,
+						VectorGrid<float>& velocity,
 						const LevelSet& solidSurface,
-						const VectorGrid<Real>& solidVelocity,
-						const ScalarGrid<Real>& viscosity);
+						const VectorGrid<float>& solidVelocity,
+						const ScalarGrid<float>& viscosity);
+}
 
 #endif

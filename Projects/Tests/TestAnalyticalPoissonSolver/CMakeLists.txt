@@ -2,10 +2,10 @@ add_executable(TestAnalyticalPoissonSolver AnalyticalPoissonSolver.cpp TestAnaly
 
 target_link_libraries(TestAnalyticalPoissonSolver
 						PRIVATE
-						2DFluidTrackers
-						2DFluidSimTools
-						2DFluidCommon
-						2DFluidRenderer)
+						RenderTools
+						SimTools
+						SurfaceTrackers
+						Utilities)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 

@@ -1,26 +1,34 @@
-#ifndef TESTS_ANALYTICALPOISSON_H
-#define TESTS_ANALYTICALPOISSON_H
+#ifndef TESTS_ANALYTICAL_POISSON_H
+#define TESTS_ANALYTICAL_POISSON_H
 
-#include "Common.h"
+#include <Eigen/Sparse>
+
 #include "Integrator.h"
 #include "LevelSet.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
-#include "Solver.h"
 #include "Transform.h"
+#include "Utilities.h"
 #include "VectorGrid.h"
+
+using namespace FluidSim2D::RenderTools;
+using namespace FluidSim2D::SurfaceTrackers;
+using namespace FluidSim2D::Utilities;
 
 class AnalyticalPoissonSolver
 {
+	using SolveReal = double;
+	using Vector = Eigen::VectorXd;
+
 public:
 	AnalyticalPoissonSolver(const Transform& xform, const Vec2i& size)
 		: myXform(xform)
 	{
-		myPoissonGrid = ScalarGrid<Real>(myXform, size, 0);
+		myPoissonGrid = ScalarGrid<float>(myXform, size, 0);
 	}
 
 	template<typename RHS, typename Solution>
-	Real solve(const RHS& rhsFunction, const Solution& solutionFunction);
+	float solve(const RHS& rhsFunction, const Solution& solutionFunction);
 
 	void drawGrid(Renderer& renderer) const;
 	void drawValues(Renderer& renderer) const;
@@ -28,11 +36,11 @@ public:
 private:
 	
 	Transform myXform;
-	ScalarGrid<Real> myPoissonGrid;
+	ScalarGrid<float> myPoissonGrid;
 };
 
 template<typename RHS, typename Solution>
-Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solutionFunction)
+float AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solutionFunction)
 {
 	UniformGrid<int> solvableCells(myPoissonGrid.size(), -1);
 
@@ -45,10 +53,12 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 		solvableCells(cell) = solutionDOFCount++;
 	});
 
-	Solver<true> solver(solutionDOFCount, solutionDOFCount * 5);
+	std::vector<Eigen::Triplet<SolveReal>> sparseMatrixElements;
 
-	Real dx = myPoissonGrid.dx();
-	Real coeff = Util::sqr(dx);
+	Vector rhsVector = Vector::Zero(solutionDOFCount);
+
+	float dx = myPoissonGrid.dx();
+	float coeff = sqr(dx);
 
 	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
 	{
@@ -57,9 +67,9 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 		assert(row >= 0);
 
 		// Build RHS
-		Vec2R gridPoint = myPoissonGrid.indexToWorld(Vec2R(cell));
+		Vec2f gridPoint = myPoissonGrid.indexToWorld(Vec2f(cell));
 
-		solver.addToRhs(row, coeff * rhsFuction(gridPoint));
+		rhsVector(row) = coeff * rhsFuction(gridPoint);
 
 		for (auto axis : { 0, 1 })
 			for (auto direction : { 0,1 })
@@ -70,8 +80,8 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 				if ((direction == 0 && adjacentCell[axis] < 0) ||
 					(direction == 1 && adjacentCell[axis] >= gridSize[axis]))
 				{
-					Vec2R adjacentPoint = myPoissonGrid.indexToWorld(Vec2R(adjacentCell));
-					solver.addToRhs(row, -solutionFunction(adjacentPoint));
+					Vec2f adjacentPoint = myPoissonGrid.indexToWorld(Vec2f(adjacentCell));
+					rhsVector(row) -= solutionFunction(adjacentPoint);
 				}
 				else
 				{
@@ -79,22 +89,33 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 					int adjacentRow = solvableCells(adjacentCell);
 					assert(adjacentRow >= 0);
 
-					solver.addToElement(row, adjacentRow, 1.);
+					sparseMatrixElements.emplace_back(row, adjacentRow, 1);
 				}
 			}
-
-		solver.addToElement(row, row, -4.);
+		sparseMatrixElements.emplace_back(row, row, -4);
 	});
 
-	bool solved = solver.solveDirect();
+	Eigen::SparseMatrix<SolveReal> sparseMatrix(solutionDOFCount, solutionDOFCount);
+	sparseMatrix.setFromTriplets(sparseMatrixElements.begin(), sparseMatrixElements.end());
 
-	if (!solved)
+	Eigen::SimplicialLDLT<Eigen::SparseMatrix<SolveReal>> solver;
+	solver.compute(sparseMatrix);
+
+	if (solver.info() != Eigen::Success)
 	{
-		std::cout << "Analytical poisson test failed to solve" << std::endl;
+		std::cout << "   Solver failed to build" << std::endl;
+		return - 1;
+	}
+
+	Vector solutionVector = solver.solve(rhsVector);
+
+	if (solver.info() != Eigen::Success)
+	{
+		std::cout << "   Solver failed to converge" << std::endl;
 		return -1;
 	}
 
-	Real error = 0;
+	float error = 0;
 
 	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
 	{
@@ -102,12 +123,12 @@ Real AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solut
 
 		assert(row >= 0);
 
-		Vec2R gridPoint = myPoissonGrid.indexToWorld(Vec2R(cell));
-		Real localError = fabs(solver.solution(row) - solutionFunction(gridPoint));
+		Vec2f gridPoint = myPoissonGrid.indexToWorld(Vec2f(cell));
+		float localError = fabs(solutionVector(row) - solutionFunction(gridPoint));
 
 		if (error < localError) error = localError;
 
-		myPoissonGrid(cell) = solver.solution(row);
+		myPoissonGrid(cell) = solutionVector(row);
 	});
 
 	return error;

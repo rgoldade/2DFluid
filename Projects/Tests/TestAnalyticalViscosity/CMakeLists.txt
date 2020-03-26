@@ -2,10 +2,10 @@ add_executable(TestAnalyticalViscosity AnalyticalViscositySolver.cpp TestAnalyti
 
 target_link_libraries(TestAnalyticalViscosity
 						PRIVATE
-						2DFluidTrackers
-						2DFluidSimTools
-						2DFluidCommon
-						2DFluidRenderer)
+						RenderTools
+						SimTools
+						SurfaceTrackers
+						Utilities)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 

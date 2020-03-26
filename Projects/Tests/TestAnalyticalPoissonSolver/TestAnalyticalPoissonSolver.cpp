@@ -2,17 +2,18 @@
 
 #include "AnalyticalPoissonSolver.h"
 
-#include "Common.h"
 #include "Integrator.h"
+#include "Utilities.h"
+
 
 int main(int argc, char** argv)
 {
-	auto rhs = [](const Vec2R& pos) -> Real
+	auto rhs = [](const Vec2f& pos) -> float
 	{
 		return 2. * std::exp(-pos[0] - pos[1]);
 	};
 
-	auto solution = [](const Vec2R& pos) -> Real
+	auto solution = [](const Vec2f& pos) -> float
 	{
 		return std::exp(-pos[0] - pos[1]);
 	};
@@ -22,13 +23,13 @@ int main(int argc, char** argv)
 	
 	for (; baseGrid < maxBaseGrid; baseGrid *= 2)
 	{
-		Real dx = Util::PI / Real(baseGrid);
-		Vec2R origin(0);
-		Vec2i size(round(Util::PI / dx));
+		float dx = PI / float(baseGrid);
+		Vec2f origin(0);
+		Vec2i size(round(PI / dx));
 		Transform xform(dx, origin);
 
 		AnalyticalPoissonSolver solver(xform, size);
-		Real error = solver.solve(rhs, solution);
+		float error = solver.solve(rhs, solution);
 
 		std::cout << "L-infinity error at " << baseGrid << "^2: " << error << std::endl;
 	}

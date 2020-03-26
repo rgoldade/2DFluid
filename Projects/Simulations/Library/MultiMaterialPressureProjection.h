@@ -1,12 +1,14 @@
-#ifndef SIMULATIONS_MULTIMATERIALPRESSUREPROJECTION_H
-#define SIMULATIONS_MULTIMATERIALPRESSUREPROJECTION_H
+#ifndef MULTI_MATERIAL_PRESSURE_PROJECTION_H
+#define MULTI_MATERIAL_PRESSURE_PROJECTION_H
 
-#include "Common.h"
+#include <Eigen/Sparse>
+
 #include "ComputeWeights.h"
+#include "GeometricMultigridOperators.h"
 #include "LevelSet.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
-#include "UniformGrid.h"
+#include "Utilities.h"
 #include "VectorGrid.h"
 
 ///////////////////////////////////
@@ -16,145 +18,129 @@
 //
 ////////////////////////////////////
 
-namespace PressureCellLabels
+namespace FluidSim2D::RegularGridSim
 {
-	constexpr int UNSOLVED_CELL = -1;
-	constexpr int FLUID_CELL = 0;
-}
+
+using namespace FluidSim2D::SimTools;
+using namespace FluidSim2D::SurfaceTrackers;
+using namespace FluidSim2D::Utilities;
 
 class MultiMaterialPressureProjection
 {
+	using MGCellLabels = GeometricMultigridOperators::CellLabels;
+	using SolveReal = double;
+	using Vector = Eigen::VectorXd;
+
+	const int UNSOLVED_CELL = -1;
+
 public:
-    MultiMaterialPressureProjection(const std::vector<LevelSet> &surfaces,
-									const std::vector<Real> &densities,
-									const LevelSet &solidSurface)
-    : myFluidSurfaces(surfaces)
-    , myFluidDensities(densities)
-    , mySolidSurface(solidSurface)
-    , myMaterialsCount(surfaces.size())
-    {
-		assert(myFluidSurfaces.size() == myFluidDensities.size());
+	MultiMaterialPressureProjection(const std::vector<LevelSet>& surfaces,
+									const std::vector<float>& densities,
+									const LevelSet& solidSurface);
 
-		for (int material = 1; material < myMaterialsCount; ++material)
-			assert(myFluidSurfaces[material - 1].isGridMatched(myFluidSurfaces[material]));
-
-		assert(myFluidSurfaces[0].isGridMatched(mySolidSurface));
-
-		myPressure = ScalarGrid<Real>(mySolidSurface.xform(), mySolidSurface.size(), 0);
-		myValidFaces = VectorGrid<MarkedCells>(mySolidSurface.xform(), mySolidSurface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
-
-		myValidMaterialFaces.resize(myMaterialsCount);
-		for (int material = 0; material < myMaterialsCount; ++material)
-			myValidMaterialFaces[material] = VectorGrid<MarkedCells>(mySolidSurface.xform(), mySolidSurface.size(), MarkedCells::UNVISITED, VectorGridSettings::SampleType::STAGGERED);
-		
-		// Compute cut-cell weights
-		mySolidCutCellWeights = computeCutCellWeights(solidSurface);
-		
-		myMaterialCutCellWeights.resize(myMaterialsCount);
-
-		for (int material = 0; material < myMaterialsCount; ++material)
-			myMaterialCutCellWeights[material] = computeCutCellWeights(surfaces[material]);
-
-		// Now normalize the weights, removing the solid boundary contribution first.
-		for (int axis : {0, 1})
-		{
-			forEachVoxelRange(Vec2i(0), myValidFaces.size(axis), [&](const Vec2i& face)
-			{
-				Real weight = 1;
-				weight -= mySolidCutCellWeights(face, axis);
-				weight = Util::clamp(weight, Real(0.), weight);
-
-				if (weight > 0)
-				{
-					Real accumulatedWeight = 0;
-					for (int material = 0; material < myMaterialsCount; ++material)
-						accumulatedWeight += myMaterialCutCellWeights[material](face, axis);
-
-					if (accumulatedWeight > 0)
-					{
-						weight /= accumulatedWeight;
-
-						for (int material = 0; material < myMaterialsCount; ++material)
-							myMaterialCutCellWeights[material](face, axis) *= weight;
-					}
-				}
-				else
-				{
-					for (int material = 0; material < myMaterialsCount; ++material)
-						myMaterialCutCellWeights[material](face, axis) = 0;
-				}
-
-				// Debug check
-				Real totalWeight = mySolidCutCellWeights(face, axis);
-
-				for (int material = 0; material < myMaterialsCount; ++material)
-					totalWeight += myMaterialCutCellWeights[material](face, axis);
-
-				if (totalWeight == 0)
-				{
-					// If there is a zero total weight it is likely due to a fluid-fluid boundary
-					// falling exactly across a grid face. There should never be a zero weight
-					// along a fluid-solid boundary.
-
-					std::vector<int> faceAlignedSurfaces;
-
-					int otherAxis = (axis + 1) % 2;
-
-					Vec2R offset(0); offset[otherAxis] = .5;
-
-					for (int material = 0; material < myMaterialsCount; ++material)
-					{
-						Vec2R pos0 = myMaterialCutCellWeights[material].indexToWorld(Vec2R(face) - offset, axis);
-						Vec2R pos1 = myMaterialCutCellWeights[material].indexToWorld(Vec2R(face) + offset, axis);
-
-						Real weight = lengthFraction(surfaces[material].interp(pos0), surfaces[material].interp(pos1));
-
-						if (weight == 0)
-							faceAlignedSurfaces.push_back(material);
-					}
-
-					if (!(faceAlignedSurfaces.size() > 1))
-					{
-						std::cout << "Zero weight problems!!" << std::endl;
-						exit(-1);
-					}
-					assert(faceAlignedSurfaces.size() > 1);
-
-					myMaterialCutCellWeights[faceAlignedSurfaces[0]](face, axis) = 1.;
-				}
-			});
-		}
-    }
-
-	const VectorGrid<MarkedCells>& getValidFaces(int material)
+	const VectorGrid<VisitedCellLabels>& getValidFaces(int material)
 	{
-		assert(material < myMaterialsCount);
+		assert(material < myMaterialCount);
 		return myValidMaterialFaces[material];
 	}
 
-    void project(std::vector<VectorGrid<Real>> &velocities);
+	void project(std::vector<VectorGrid<float>>& velocities);
 
-	void drawPressure(Renderer &renderer) const;
+	void setInitialGuess(const ScalarGrid<float>& initialGuessPressure)
+	{
+		assert(myFluidSurfaces[0].isGridMatched(initialGuessPressure));
+		myUseInitialGuessPressure = true;
+		myInitialGuessPressure = &initialGuessPressure;
+	}
 
-	void printPressure(const std::string &filename) const
+	void disableInitialGuess()
+	{
+		myUseInitialGuessPressure = false;
+	}
+
+	ScalarGrid<float> getPressureGrid()
+	{
+		return myPressure;
+	}
+
+	void drawPressure(Renderer& renderer) const;
+
+	void printPressure(const std::string& filename) const
 	{
 		myPressure.printAsOBJ(filename + ".obj");
 	}
 
 private:
 
-    ScalarGrid<Real> myPressure;
-    VectorGrid<MarkedCells> myValidFaces;
+	//
+	// Helper functions for multigrid preconditioner
+	//
 
-    const std::vector<LevelSet> &myFluidSurfaces;
-    const std::vector<Real> &myFluidDensities;
+	void copyToPreconditionerGrids(std::vector<UniformGrid<SolveReal>>& mgSourceGrid,
+		UniformGrid<SolveReal>& smootherSourceGrid,
+		const std::vector<UniformGrid<MGCellLabels>>& mgDomainCellLabels,
+		const UniformGrid<int>& materialCellLabels,
+		const UniformGrid<int>& solvableCellIndices,
+		const Vector& sourceVector,
+		const std::vector<Vec2i>& mgExpandedOffset) const;
 
-	VectorGrid<Real> mySolidCutCellWeights;
-	std::vector<VectorGrid<Real>> myMaterialCutCellWeights;
-	std::vector<VectorGrid<MarkedCells>> myValidMaterialFaces;
+	void applyBoundarySmoothing(std::vector<SolveReal>& tempDestinationVector,
+		const std::vector<Vec2i>& boundarySmootherCells,
+		const std::vector<UniformGrid<MGCellLabels>>& mgDomainCellLabels,
+		const UniformGrid<int>& materialCellLabels,
+		const UniformGrid<SolveReal>& smootherDestinationGrid,
+		const UniformGrid<SolveReal>& smootherSourceGrid,
+		const std::vector<Vec2i>& mgExpandedOffset) const;
 
-    const LevelSet &mySolidSurface;
-    const int myMaterialsCount;
+	void updateDestinationGrid(UniformGrid<SolveReal>& smootherDestinationGrid,
+		const UniformGrid<int>& materialCellLabels,
+		const std::vector<Vec2i>& boundarySmootherCells,
+		const std::vector<SolveReal>& tempDestinationVector) const;
+
+	void applyDirichletToMG(std::vector<UniformGrid<SolveReal>>& mgSourceGrid,
+		std::vector<UniformGrid<SolveReal>>& mgDestinationGrid,
+		const UniformGrid<SolveReal>& smootherDestinationGrid,
+		const std::vector<UniformGrid<MGCellLabels>>& mgDomainCellLabels,
+		const UniformGrid<int>& materialCellLabels,
+		const UniformGrid<int>& solvableCellIndices,
+		const Vector& sourceVector,
+		const std::vector<Vec2i>& boundarySmootherCells,
+		const std::vector<Vec2i>& mgExpandedOffset) const;
+
+	void updateSmootherGrid(UniformGrid<SolveReal>& smootherDestinationGrid,
+		const std::vector<UniformGrid<SolveReal>>& mgDestinationGrid,
+		const UniformGrid<int>& materialCellLabels,
+		const std::vector<UniformGrid<MGCellLabels>>& mgDomainCellLabels,
+		const std::vector<Vec2i>& mgExpandedOffset) const;
+
+	void copyMGSolutionToVector(Vector& destinationVector,
+		const UniformGrid<int>& materialCellLabels,
+		const UniformGrid<int>& solvableCellIndices,
+		const std::vector<UniformGrid<MGCellLabels>>& mgDomainCellLabels,
+		const std::vector<UniformGrid<SolveReal>>& mgDestinationGrid,
+		const std::vector<Vec2i>& mgExpandedOffset) const;
+
+	void copyBoundarySolutionToVector(Vector& destinationVector,
+		const UniformGrid<int>& materialCellLabels,
+		const UniformGrid<int>& solvableCellIndices,
+		const UniformGrid<SolveReal>& smootherDestinationGrid,
+		const std::vector<Vec2i>& boundarySmootherCells) const;
+
+	ScalarGrid<float> myPressure;
+
+	const std::vector<LevelSet>& myFluidSurfaces;
+	const std::vector<float>& myFluidDensities;
+
+	VectorGrid<float> mySolidCutCellWeights;
+	std::vector<VectorGrid<float>> myMaterialCutCellWeights;
+	std::vector<VectorGrid<VisitedCellLabels>> myValidMaterialFaces;
+
+	const LevelSet& mySolidSurface;
+	const int myMaterialCount;
+
+	const ScalarGrid<float>* myInitialGuessPressure;
+	bool myUseInitialGuessPressure;
 };
 
+}
 #endif

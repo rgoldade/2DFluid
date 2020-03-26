@@ -2,12 +2,11 @@ add_executable(TestMGSmoother TestSmoother.cpp)
 
 target_link_libraries(TestMGSmoother
 						PRIVATE
-						2DGeometricMGUtilities
-						2DFluidLibrary
-						2DFluidTrackers
-						2DFluidSimTools
-						2DFluidCommon
-						2DFluidRenderer)
+						GeometricMGUtilities
+						RenderTools
+						SurfaceTrackers
+						SimTools
+						Utilities)
 
 file(RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
 

@@ -1,15 +1,31 @@
-add_executable(MultiMaterialLiquids MultiMaterialBubbles.cpp)
+add_executable(MultiMaterialBubbles MultiMaterialBubbles.cpp)
 
-target_link_libraries(MultiMaterialLiquids
+target_link_libraries(MultiMaterialBubbles
 						PRIVATE
-						2DFluidLibrary
-						2DFluidTrackers
-						2DFluidSimTools
-						2DFluidCommon
-						2DFluidRenderer)
+						RegularGridSimLibrary
+						RenderTools
+						SimTools
+						SurfaceTrackers
+						Utilities)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
-install(TARGETS MultiMaterialLiquids RUNTIME DESTINATION ${REL})
+install(TARGETS MultiMaterialBubbles RUNTIME DESTINATION ${REL})
 
-set_target_properties(MultiMaterialLiquids PROPERTIES FOLDER ${REGULAR_FOLDER})
+set_target_properties(MultiMaterialBubbles PROPERTIES FOLDER ${REGULAR_FOLDER})
+
+add_executable(MultiMaterialLayers MultiMaterialLayers.cpp)
+
+target_link_libraries(MultiMaterialLayers
+						PRIVATE
+						RegularGridSimLibrary
+						RenderTools
+						SimTools
+						SurfaceTrackers
+						Utilities)
+
+file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
+
+install(TARGETS MultiMaterialLayers RUNTIME DESTINATION ${REL})
+
+set_target_properties(MultiMaterialLayers PROPERTIES FOLDER ${REGULAR_FOLDER})

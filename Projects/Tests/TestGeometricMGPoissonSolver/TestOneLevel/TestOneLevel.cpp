@@ -1,10 +1,10 @@
+#include <iostream>
 #include <memory>
 #include <random>
 #include <string>
 
-#include "Eigen/Sparse"
+#include <Eigen/Sparse>
 
-#include "Common.h"
 #include "GeometricMultigridOperators.h"
 #include "GeometricMultigridPoissonSolver.h"
 #include "InitialMultigridTestDomains.h"
@@ -12,6 +12,10 @@
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "UniformGrid.h"
+#include "Utilities.h"
+
+using namespace FluidSim2D::RenderTools;
+using namespace FluidSim2D::SimTools;
 
 std::unique_ptr<Renderer> renderer;
 
@@ -59,19 +63,18 @@ int main(int argc, char** argv)
 
 	UniformGrid<StoreReal> solutionGrid(domainCellLabels.size(), 0);
 
-	int totalVoxels = domainCellLabels.size()[0] * domainCellLabels.size()[1];
-	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
-		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			Vec2i cell = domainCellLabels.unflatten(flatIndex);
+			Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 			{
-				Vec2R point = dx * Vec2R(cell);
-				solutionGrid(cell) = 4. * (std::sin(2 * Util::PI * point[0]) * std::sin(2 * Util::PI * point[1]) +
-										std::sin(4 * Util::PI * point[0]) * std::sin(4 * Util::PI * point[1]));
+				Vec2f point(dx * Vec2f(cell));
+				solutionGrid(cell) = 4. * (std::sin(2 * PI * point[0]) * std::sin(2 * PI * point[1]) +
+											std::sin(4 * PI * point[0]) * std::sin(4 * PI * point[1]));
 			}
 		}
 	});
@@ -80,15 +83,14 @@ int main(int argc, char** argv)
 	{
 		assert(grid.size() == domainCellLabels.size());
 
-		using ParallelReal = tbb::enumerable_thread_specific<SolveReal>;
-		ParallelReal parallelAccumulatedValue(0);
-		tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedValue(0);
+		tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
-			auto &localAccumulatedValue = parallelAccumulatedValue.local();
+			auto& localAccumulatedValue = parallelAccumulatedValue.local();
 
-			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
-				Vec2i cell = domainCellLabels.unflatten(flatIndex);
+				Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
 				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 					domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -128,21 +130,21 @@ int main(int argc, char** argv)
 	// Print domain labels to make sure they are set up correctly
 	int pixelHeight = 1080;
 	int pixelWidth = pixelHeight;
-	renderer = std::make_unique<Renderer>("One level correction test", Vec2i(pixelWidth, pixelHeight), Vec2R(0), 1, &argc, argv);
+	renderer = std::make_unique<Renderer>("One level correction test", Vec2i(pixelWidth, pixelHeight), Vec2f(0), 1, &argc, argv);
 
-	ScalarGrid<Real> tempGrid(Transform(dx, Vec2R(0)), domainCellLabels.size());
+	ScalarGrid<float> tempGrid(Transform(dx, Vec2f(0)), domainCellLabels.size());
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.size()[0] * tempGrid.size()[1], tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
 			Vec2i cell = tempGrid.unflatten(flatIndex);
 
-			tempGrid(cell) = Real(domainCellLabels(cell));
+			tempGrid(cell) = float(domainCellLabels(cell));
 		}
 	});
 
-	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), Real(CellLabels::INTERIOR_CELL), Real(CellLabels::BOUNDARY_CELL));
+	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), float(CellLabels::INTERIOR_CELL), float(CellLabels::BOUNDARY_CELL));
 
 	renderer->run();
 }

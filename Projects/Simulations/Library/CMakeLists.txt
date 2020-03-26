@@ -1,14 +1,14 @@
-add_library(2DFluidLibrary EulerianLiquid.cpp EulerianSmoke.cpp MultiMaterialLiquid.cpp MultiMaterialPressureProjection.cpp)
+add_library(RegularGridSimLibrary EulerianLiquidSimulator.cpp EulerianSmokeSimulator.cpp MultiMaterialLiquidSimulator.cpp MultiMaterialPressureProjection.cpp)
 
-target_link_libraries(2DFluidLibrary
+target_link_libraries(RegularGridSimLibrary
 						PRIVATE
-						2DFluidTrackers
-						2DFluidSimTools
-						2DFluidCommon
-						2DFluidRenderer)
+						RenderTools
+						SimTools
+						SurfaceTrackers
+						Utilities)
 
-target_include_directories(2DFluidLibrary PUBLIC
+target_include_directories(RegularGridSimLibrary PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 							  $<INSTALL_INTERFACE:include>)
 
-set_target_properties(2DFluidLibrary PROPERTIES FOLDER ${REGULAR_FOLDER}/Library)
+set_target_properties(RegularGridSimLibrary PROPERTIES FOLDER ${REGULAR_FOLDER}/Library)

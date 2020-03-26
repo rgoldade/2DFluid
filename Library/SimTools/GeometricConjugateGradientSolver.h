@@ -1,10 +1,15 @@
-#ifndef LIBRARY_GEOMETRIC_CONJUGATE_GRADIENT_SOLVER
-#define LIBRARY_GEOMETRIC_CONJUGATE_GRADIENT_SOLVER
+#ifndef LIBRARY_GEOMETRIC_CONJUGATE_GRADIENT_SOLVER_H
+#define LIBRARY_GEOMETRIC_CONJUGATE_GRADIENT_SOLVER_H
 
-#include "Common.h"
 #include "GeometricMultigridOperators.h"
 #include "UniformGrid.h"
+#include "Utilities.h"
 #include "VectorGrid.h"
+
+namespace FluidSim2D::SimTools
+{
+
+using namespace Utilities;
 
 template<typename MatrixVectorMultiplyFunctor,
 			typename PreconditionerFunctor,
@@ -13,14 +18,14 @@ template<typename MatrixVectorMultiplyFunctor,
 			typename AddToVectorFunctor,
 			typename AddScaledVectorFunctor,
 			typename StoreReal>
-void solveGeometricConjugateGradient(UniformGrid<StoreReal> &solutionGrid,
-										const UniformGrid<StoreReal> &rhsGrid,
-										const MatrixVectorMultiplyFunctor &matrixVectorMultiplyFunctor,
-										const PreconditionerFunctor &preconditionerFunctor,
-										const DotProductFunctor &dotProductFunctor,
-										const SquaredL2NormFunctor &squaredNormFunctor,
-										const AddToVectorFunctor &addToVectorFunctor,
-										const AddScaledVectorFunctor &addScaledVectorFunctor,
+void solveGeometricConjugateGradient(UniformGrid<StoreReal>& solutionGrid,
+										const UniformGrid<StoreReal>& rhsGrid,
+										const MatrixVectorMultiplyFunctor& matrixVectorMultiplyFunctor,
+										const PreconditionerFunctor& preconditionerFunctor,
+										const DotProductFunctor& dotProductFunctor,
+										const SquaredL2NormFunctor& squaredNormFunctor,
+										const AddToVectorFunctor& addToVectorFunctor,
+										const AddScaledVectorFunctor& addScaledVectorFunctor,
 										const StoreReal tolerance,
 										const int maxIterations)
 {
@@ -52,7 +57,7 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal> &solutionGrid,
 
 	// Apply preconditioner for initial search direction
 	UniformGrid<StoreReal> pGrid(solutionGrid.size(), 0);
-	
+
 	preconditionerFunctor(pGrid, residualGrid);
 
 	SolveReal absNew;
@@ -78,8 +83,6 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal> &solutionGrid,
 		// Update residual
 		addToVectorFunctor(residualGrid, tempGrid, -alpha);
 
-		residualGrid.printAsOBJ("geometricResidual" + std::to_string(iteration));
-		
 		residualNorm2 = squaredNormFunctor(residualGrid);
 
 		std::cout << "    Relative error: " << std::sqrt(residualNorm2 / rhsNorm2) << std::endl;
@@ -91,7 +94,7 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal> &solutionGrid,
 
 		SolveReal absOld = absNew;
 		SolveReal beta;
-		
+
 		absNew = dotProductFunctor(zGrid, residualGrid);
 		beta = absNew / absOld;
 
@@ -109,4 +112,5 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal> &solutionGrid,
 	std::cout << "Recomputed relative L2 Error: " << error << std::endl;
 }
 
+}
 #endif

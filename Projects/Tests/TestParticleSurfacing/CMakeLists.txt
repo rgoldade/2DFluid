@@ -1,10 +1,10 @@
 add_executable(TestParticleSurfacing TestParticleSurfacing.cpp)
 
 target_link_libraries(TestParticleSurfacing PRIVATE
-						2DFluidTrackers
-						2DFluidSimTools
-						2DFluidCommon
-						2DFluidRenderer)
+						RenderTools
+						SimTools
+						SurfaceTrackers
+						Utilities)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 

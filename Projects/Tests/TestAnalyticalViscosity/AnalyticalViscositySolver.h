@@ -1,13 +1,12 @@
-#ifndef TESTS_ANALYTICALVISCOSITY_H
-#define TESTS_ANALYTICALVISCOSITY_H
+#ifndef TESTS_ANALYTICAL_VISCOSITY_H
+#define TESTS_ANALYTICAL_VISCOSITY_H
 
-#include "Eigen/Sparse"
+#include <Eigen/Sparse>
 
-#include "Common.h"
 #include "Renderer.h"
 #include "ScalarGrid.h"
-#include "Solver.h"
 #include "Transform.h"
+#include "Utilities.h"
 #include "VectorGrid.h"
 
 ///////////////////////////////////
@@ -24,9 +23,16 @@
 //
 ////////////////////////////////////
 
+using namespace FluidSim2D::Utilities;
+using namespace FluidSim2D::RenderTools;
+
+
 class AnalyticalViscositySolver
 {
 	static constexpr int UNASSIGNED = -1;
+
+	using SolveReal = double;
+	using Vector = Eigen::VectorXd;
 
 public:
 	AnalyticalViscositySolver(const Transform& xform, const Vec2i& size)
@@ -37,10 +43,10 @@ public:
 
 	// Returns the infinity-norm error of the numerical solution
 	template<typename Initial, typename Solution, typename Viscosity>
-	Real solve(const Initial& initial, const Solution& solution, const Viscosity& viscosity, const Real dt);
+	float solve(const Initial& initial, const Solution& solution, const Viscosity& viscosity, const float dt);
 
-	Vec2R cellIndexToWorld(const Vec2R& index) const { return myXform.indexToWorld(index + Vec2R(.5)); }
-	Vec2R nodeIndexToWorld(const Vec2R& index) const { return myXform.indexToWorld(index); }
+	Vec2f cellIndexToWorld(const Vec2f& index) const { return myXform.indexToWorld(index + Vec2f(.5)); }
+	Vec2f nodeIndexToWorld(const Vec2f& index) const { return myXform.indexToWorld(index); }
 	
 	void drawGrid(Renderer& renderer) const;
 	void drawActiveVelocity(Renderer& renderer) const;
@@ -53,10 +59,10 @@ private:
 };
 
 template<typename Initial, typename Solution, typename Viscosity>
-Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
+float AnalyticalViscositySolver::solve(const Initial& initialFunction,
 										const Solution& solutionFunction,
 										const Viscosity& viscosityFunction,
-										const Real dt)
+										const float dt)
 {
 	int velocityDOFCount = setVelocityIndex();
 
@@ -64,10 +70,12 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 	// (Note we don't need control volumes since the cells are the same size and there is no free surface).
 	// (I - dt * mu * D^T K D) u(n+1) = u(n)
 
-	Solver<false> solver(velocityDOFCount, velocityDOFCount * 9);
+	std::vector<Eigen::Triplet<SolveReal>> sparseMatrixElements;
 
-	Real dx = myVelocityIndex.dx();
-	Real baseCoeff = dt / Util::sqr(dx);
+	Vector rhsVector = Vector::Zero(velocityDOFCount);
+
+	float dx = myVelocityIndex.dx();
+	float baseCoeff = dt / sqr(dx);
 
 	for (int axis : { 0,1 })
 	{
@@ -79,30 +87,31 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 			if (velocityIndex >= 0)
 			{
-				Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(face), axis);
+				Vec2f facePosition = myVelocityIndex.indexToWorld(Vec2f(face), axis);
 
-				solver.addToRhs(velocityIndex, initialFunction(facePosition, axis));
-				solver.addToElement(velocityIndex, velocityIndex, 1.);
+				rhsVector(velocityIndex) += initialFunction(facePosition, axis);
+
+				sparseMatrixElements.emplace_back(velocityIndex, velocityIndex, 1.);
 
 				// Build cell-centered stresses.
 				for (int cellDirection : { 0,1 })
 				{
 					Vec2i cell = faceToCell(Vec2i(face), axis, cellDirection);
 
-					Vec2R cellPosition = cellIndexToWorld(Vec2R(cell));
-					Real cellCoeff = 2. * viscosityFunction(cellPosition) * baseCoeff;
+					Vec2f cellPosition = cellIndexToWorld(Vec2f(cell));
+					float cellCoeff = 2. * viscosityFunction(cellPosition) * baseCoeff;
 
-					Real cellSign = (cellDirection == 0) ? -1. : 1.;
+					float cellSign = (cellDirection == 0) ? -1. : 1.;
 
 					for (int faceDirection : { 0,1 })
 					{
 						Vec2i adjacentFace = cellToFace(cell, axis, faceDirection);
 
-						Real faceSign = (faceDirection == 0) ? -1. : 1.;
+						float faceSign = (faceDirection == 0) ? -1. : 1.;
 
 						int faceRow = myVelocityIndex(adjacentFace, axis);
 						if (faceRow >= 0)
-							solver.addToElement(velocityIndex, faceRow, -cellSign * faceSign * cellCoeff);
+							sparseMatrixElements.emplace_back(velocityIndex, faceRow, -cellSign * faceSign * cellCoeff);
 						// No solid boundary to deal with since faces on the boundary
 						// are not included.
 					}
@@ -113,10 +122,10 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 				{
 					Vec2i node = faceToNode(face, axis, nodeDirection);
 
-					Real nodeSign = (nodeDirection == 0) ? -1. : 1.;
+					float nodeSign = (nodeDirection == 0) ? -1. : 1.;
 
-					Vec2R nodePosition = nodeIndexToWorld(Vec2R(node));
-					Real nodeCoeff = viscosityFunction(nodePosition) * baseCoeff;
+					Vec2f nodePosition = nodeIndexToWorld(Vec2f(node));
+					float nodeCoeff = viscosityFunction(nodePosition) * baseCoeff;
 
 					for (int gradientAxis : {0, 1})
 						for (int faceDirection : {0, 1})
@@ -125,29 +134,29 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 							int faceAxis = (gradientAxis + 1) % 2;
 
-							Real faceSign = (faceDirection == 0) ? -1. : 1.;
+							float faceSign = (faceDirection == 0) ? -1. : 1.;
 
 							// Check for out of bounds
 							if ((faceDirection == 0 && adjacentFace[gradientAxis] < 0) ||
 								(faceDirection == 1 && adjacentFace[gradientAxis] >= size[gradientAxis]))
 							{
-								Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(adjacentFace), faceAxis);
-								solver.addToRhs(velocityIndex, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
+								Vec2f facePosition = myVelocityIndex.indexToWorld(Vec2f(adjacentFace), faceAxis);
+								rhsVector(velocityIndex) += nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis);
 							}
 							// Check for on the bounds
 							else if ((nodeDirection == 0 && adjacentFace[faceAxis] == 0) ||
 										(nodeDirection == 1 &&
 										adjacentFace[faceAxis] == myVelocityIndex.size(faceAxis)[faceAxis] - 1))
 							{
-								Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(adjacentFace), faceAxis);
-								solver.addToRhs(velocityIndex, nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis));
+								Vec2f facePosition = myVelocityIndex.indexToWorld(Vec2f(adjacentFace), faceAxis);
+								rhsVector(velocityIndex) += nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis);
 							}
 							else
 							{
 								int adjacentRow = myVelocityIndex(adjacentFace, faceAxis);
 								assert(adjacentRow >= 0);
 
-								solver.addToElement(velocityIndex, adjacentRow, -nodeSign * faceSign * nodeCoeff);
+								sparseMatrixElements.emplace_back(velocityIndex, adjacentRow, -nodeSign * faceSign * nodeCoeff);
 							}
 						}
 				}
@@ -155,9 +164,27 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 		});
 	}
 
-	bool solved = solver.solveDirect();
+	Eigen::SparseMatrix<SolveReal> sparseMatrix(velocityDOFCount, velocityDOFCount);
+	sparseMatrix.setFromTriplets(sparseMatrixElements.begin(), sparseMatrixElements.end());
 
-	Real error = 0;
+	Eigen::SimplicialLDLT<Eigen::SparseMatrix<SolveReal>> solver;
+	solver.compute(sparseMatrix);
+
+	if (solver.info() != Eigen::Success)
+	{
+		std::cout << "   Solver failed to build" << std::endl;
+		return -1;
+	}
+
+	Vector solutionVector = solver.solve(rhsVector);
+
+	if (solver.info() != Eigen::Success)
+	{
+		std::cout << "   Solver failed" << std::endl;
+		return -1;
+	}
+
+	float error = 0;
 
 	for (int axis : {0, 1})
 	{
@@ -169,8 +196,8 @@ Real AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 			if (velocityIndex >= 0)
 			{
-				Vec2R facePosition = myVelocityIndex.indexToWorld(Vec2R(face), axis);
-				Real localError = fabs(solver.solution(velocityIndex) - solutionFunction(facePosition, axis));
+				Vec2f facePosition = myVelocityIndex.indexToWorld(Vec2f(face), axis);
+				float localError = fabs(solutionVector(velocityIndex) - solutionFunction(facePosition, axis));
 
 				if (error < localError) error = localError;
 			}

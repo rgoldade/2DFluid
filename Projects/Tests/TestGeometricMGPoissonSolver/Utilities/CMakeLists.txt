@@ -1,10 +1,10 @@
-add_library(2DGeometricMGUtilities INTERFACE)
+add_library(GeometricMGUtilities INTERFACE)
 
-target_include_directories(2DGeometricMGUtilities INTERFACE
+target_include_directories(GeometricMGUtilities INTERFACE
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 							  $<INSTALL_INTERFACE:include>)
 
-target_link_libraries(2DGeometricMGUtilities
+target_link_libraries(GeometricMGUtilities
 						INTERFACE
-						2DFluidCommon
-						2DFluidSimTools)
+						SimTools
+						Utilities)

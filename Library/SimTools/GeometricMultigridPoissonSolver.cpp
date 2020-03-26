@@ -4,124 +4,111 @@
 
 #include "GeometricMultigridOperators.h"
 
-using GeometricMultigridOperators::CellLabels;
+namespace FluidSim2D::SimTools
+{
+
+using MGCellLabels = GeometricMultigridOperators::CellLabels;
 
 template<typename Vector, typename StoreReal>
-void copyGridToVector(Vector &vector,
-						const UniformGrid<StoreReal> &vectorGrid,
-						const UniformGrid<int> &solverIndices,
-						const UniformGrid<CellLabels> &cellLabels)
+void copyGridToVector(Vector& vector,
+						const UniformGrid<StoreReal>& vectorGrid,
+						const UniformGrid<int>& solverIndices,
+						const UniformGrid<MGCellLabels>& cellLabels)
 {
-	using GeometricMultigridOperators::CellLabels;
+	assert(vectorGrid.size() == solverIndices.size() && solverIndices.size() == cellLabels.size());
 
-	assert(vectorGrid.size() == solverIndices.size() &&
-		solverIndices.size() == cellLabels.size());
-
-	int totalVoxels = cellLabels.size()[0] * cellLabels.size()[1];
-
-	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, cellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
-		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			Vec2i cell = cellLabels.unflatten(flatIndex);
+			Vec2i cell = cellLabels.unflatten(cellIndex);
 
 			int index = solverIndices(cell);
 
 			if (index >= 0)
 			{
-				assert(cellLabels(cell) == CellLabels::INTERIOR_CELL ||
-					cellLabels(cell) == CellLabels::BOUNDARY_CELL);
+				assert(cellLabels(cell) == MGCellLabels::INTERIOR_CELL ||
+					cellLabels(cell) == MGCellLabels::BOUNDARY_CELL);
 
 				vector(index) = vectorGrid(cell);
 			}
 			else
 			{
-				assert(cellLabels(cell) != CellLabels::INTERIOR_CELL &&
-						cellLabels(cell) != CellLabels::BOUNDARY_CELL);
+				assert(cellLabels(cell) != MGCellLabels::INTERIOR_CELL &&
+					cellLabels(cell) != MGCellLabels::BOUNDARY_CELL);
 			}
 		}
 	});
 }
 
 template<typename Vector, typename StoreReal>
-void copyVectorToGrid(UniformGrid<StoreReal> &vectorGrid,
-						const Vector &vector,
-						const UniformGrid<int> &solverIndices,
-						const UniformGrid<CellLabels> &cellLabels)
+void copyVectorToGrid(UniformGrid<StoreReal>& vectorGrid,
+						const Vector& vector,
+						const UniformGrid<int>& solverIndices,
+						const UniformGrid<MGCellLabels>& cellLabels)
 {
-	using GeometricMultigridOperators::CellLabels;
-
 	assert(vectorGrid.size() == solverIndices.size() &&
-			solverIndices.size() == cellLabels.size());
+		solverIndices.size() == cellLabels.size());
 
-	int totalVoxels = cellLabels.size()[0] * cellLabels.size()[1];
-
-	tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, cellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
-		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			Vec2i cell = cellLabels.unflatten(flatIndex);
+			Vec2i cell = cellLabels.unflatten(cellIndex);
 
 			int index = solverIndices(cell);
 
 			if (index >= 0)
 			{
-				assert(cellLabels(cell) == CellLabels::INTERIOR_CELL ||
-					cellLabels(cell) == CellLabels::BOUNDARY_CELL);
+				assert(cellLabels(cell) == MGCellLabels::INTERIOR_CELL ||
+					cellLabels(cell) == MGCellLabels::BOUNDARY_CELL);
 
 				vectorGrid(cell) = vector(index);
 			}
 			else
 			{
-				assert(cellLabels(cell) != CellLabels::INTERIOR_CELL &&
-					cellLabels(cell) != CellLabels::BOUNDARY_CELL);
+				assert(cellLabels(cell) != MGCellLabels::INTERIOR_CELL &&
+					cellLabels(cell) != MGCellLabels::BOUNDARY_CELL);
 			}
 		}
 	});
 }
 
-GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGrid<CellLabels> &initialDomainLabels,
-																	const VectorGrid<StoreReal> &boundaryWeights,
-																	const int mgLevels,
-																	const SolveReal dx)
-	: myMGLevels(mgLevels)
-	, myBoundarySmootherWidth(3)
-	, myBoundarySmootherIterations(3)
+GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGrid<MGCellLabels>& initialDomainLabels,
+																	const VectorGrid<StoreReal>& boundaryWeights,
+																	int mgLevels,
+																	SolveReal dx)
+																	: myMGLevels(mgLevels)
+																	, myBoundarySmootherWidth(3)
+																	, myBoundarySmootherIterations(3)
 {
 	assert(mgLevels > 0 && dx > 0);
 
-	assert(initialDomainLabels.size()[0] % 2 == 0 &&
-			initialDomainLabels.size()[1] % 2 == 0);
+	assert(initialDomainLabels.size()[0] % 2 == 0 && initialDomainLabels.size()[1] % 2 == 0);
 
-	assert(int(std::log2(initialDomainLabels.size()[0])) + 1 >= mgLevels &&
-			int(std::log2(initialDomainLabels.size()[1])) + 1 >= mgLevels);
+	assert(int(std::log2(initialDomainLabels.size()[0])) + 1 >= mgLevels && int(std::log2(initialDomainLabels.size()[1])) + 1 >= mgLevels);
 
 	myDomainLabels.resize(myMGLevels);
 	myDomainLabels[0] = initialDomainLabels;
 
-	assert(boundaryWeights.size(0)[0] - 1 == myDomainLabels[0].size()[0] &&
-			boundaryWeights.size(0)[1] == myDomainLabels[0].size()[1] &&
-		
-			boundaryWeights.size(1)[0] == myDomainLabels[0].size()[0] &&
-			boundaryWeights.size(1)[1] - 1 == myDomainLabels[0].size()[1]);
+	assert(boundaryWeights.size(0)[0] - 1 == myDomainLabels[0].size()[0] && boundaryWeights.size(0)[1] == myDomainLabels[0].size()[1] &&
+			boundaryWeights.size(1)[0] == myDomainLabels[0].size()[0] && boundaryWeights.size(1)[1] - 1 == myDomainLabels[0].size()[1]);
 
 	myFineBoundaryWeights = boundaryWeights;
 
-	auto checkSolvableCell = [](const UniformGrid<CellLabels> &testGrid) -> bool
+	auto checkSolvableCell = [](const UniformGrid<MGCellLabels>& testGrid) -> bool
 	{
 		bool hasSolvableCell = false;
 
-		int totalVoxels = testGrid.size()[0] * testGrid.size()[1];
-
-		tbb::parallel_for(tbb::blocked_range<int>(0, totalVoxels, tbbGrainSize), [&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, testGrid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			if (hasSolvableCell) return;
-			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
-				Vec2i cell = testGrid.unflatten(flatIndex);
+				Vec2i cell = testGrid.unflatten(cellIndex);
 
-				if (testGrid(cell) == CellLabels::INTERIOR_CELL ||
-					testGrid(cell) == CellLabels::BOUNDARY_CELL)
+				if (testGrid(cell) == MGCellLabels::INTERIOR_CELL ||
+					testGrid(cell) == MGCellLabels::BOUNDARY_CELL)
 					hasSolvableCell = true;
 			}
 		});
@@ -178,45 +165,46 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 
 		myDirectSolverIndices = UniformGrid<int>(coarsestSize, -1 /* unlabelled cell marker */);
 
-		forEachVoxelRange(Vec2i(0), coarsestSize, [&](const Vec2i &cell)
+		forEachVoxelRange(Vec2i(0), coarsestSize, [&](const Vec2i& cell)
 		{
-			if (myDomainLabels[myMGLevels - 1](cell) == CellLabels::INTERIOR_CELL ||
-				myDomainLabels[myMGLevels - 1](cell) == CellLabels::BOUNDARY_CELL)
+			if (myDomainLabels[myMGLevels - 1](cell) == MGCellLabels::INTERIOR_CELL ||
+				myDomainLabels[myMGLevels - 1](cell) == MGCellLabels::BOUNDARY_CELL)
 				myDirectSolverIndices(cell) = interiorCellCount++;
 		});
 
 		// Build rows
 		std::vector<Eigen::Triplet<SolveReal>> sparseElements;
 
-		SolveReal gridScale = 1. / Util::sqr(myDx[myMGLevels - 1]);
-		forEachVoxelRange(Vec2i(0), coarsestSize, [&](const Vec2i &cell)
+		SolveReal gridScale = 1. / sqr(myDx[myMGLevels - 1]);
+		forEachVoxelRange(Vec2i(0), coarsestSize, [&](const Vec2i& cell)
 		{
-			if (myDomainLabels[myMGLevels - 1](cell) == CellLabels::INTERIOR_CELL ||
-				myDomainLabels[myMGLevels - 1](cell) == CellLabels::BOUNDARY_CELL)
+			if (myDomainLabels[myMGLevels - 1](cell) == MGCellLabels::INTERIOR_CELL ||
+				myDomainLabels[myMGLevels - 1](cell) == MGCellLabels::BOUNDARY_CELL)
 			{
 				int diagonal = 0;
 				int index = myDirectSolverIndices(cell);
 				assert(index >= 0);
+
 				for (int axis : {0, 1})
 					for (int direction : {0, 1})
 					{
 						Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
 						auto cellLabels = myDomainLabels[myMGLevels - 1](adjacentCell);
-						if (cellLabels == CellLabels::INTERIOR_CELL ||
-							cellLabels == CellLabels::BOUNDARY_CELL)
+						if (cellLabels == MGCellLabels::INTERIOR_CELL ||
+							cellLabels == MGCellLabels::BOUNDARY_CELL)
 						{
 							int adjacentIndex = myDirectSolverIndices(adjacentCell);
 							assert(adjacentIndex >= 0);
 
-							sparseElements.push_back(Eigen::Triplet<SolveReal>(index, adjacentIndex, -gridScale));
+							sparseElements.emplace_back(index, adjacentIndex, -gridScale);
 							++diagonal;
 						}
-						else if (cellLabels == CellLabels::DIRICHLET_CELL)
+						else if (cellLabels == MGCellLabels::DIRICHLET_CELL)
 							++diagonal;
 					}
 
-				sparseElements.push_back(Eigen::Triplet<double>(index, index, gridScale * diagonal));
+				sparseElements.emplace_back(index, index, gridScale * diagonal);
 			}
 		});
 
@@ -230,14 +218,13 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 	}
 }
 
-void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal> &fineSolutionGrid,
-													const UniformGrid<StoreReal> &fineRHSGrid,
-													const bool useInitialGuess)
+void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal>& fineSolutionGrid,
+													const UniformGrid<StoreReal>& fineRHSGrid,
+													bool useInitialGuess)
 {
 	using namespace GeometricMultigridOperators;
 
-	assert(fineSolutionGrid.size() == fineRHSGrid.size() &&
-			fineRHSGrid.size() == myDomainLabels[0].size());
+	assert(fineSolutionGrid.size() == fineRHSGrid.size() && fineRHSGrid.size() == myDomainLabels[0].size());
 
 	// If there is an initial guess in the solution vector, copy it locally
 	if (!useInitialGuess)
@@ -336,6 +323,7 @@ void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal> &fine
 	}
 
 	Vector coarseRHSVector = Vector::Zero(mySparseMatrix.rows());
+	
 	copyGridToVector(coarseRHSVector,
 						myRHSGrids[myMGLevels - 1],
 						myDirectSolverIndices,
@@ -344,6 +332,7 @@ void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal> &fine
 	Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 	mySolutionGrids[myMGLevels - 1].reset(0);
+	
 	copyVectorToGrid(mySolutionGrids[myMGLevels - 1],
 						directSolution,
 						myDirectSolverIndices,
@@ -407,11 +396,13 @@ void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal> &fine
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations; ++boundaryIteration)
 		{
 			boundaryJacobiPoissonSmoother<SolveReal>(fineSolutionGrid,
-				fineRHSGrid,
-				myDomainLabels[0],
-				myBoundaryCells[0],
-				myDx[0],
-				&myFineBoundaryWeights);
+														fineRHSGrid,
+														myDomainLabels[0],
+														myBoundaryCells[0],
+														myDx[0],
+														&myFineBoundaryWeights);
 		}
 	}
+}
+
 }

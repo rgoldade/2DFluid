@@ -1,21 +1,23 @@
 #include "ComputeWeights.h"
 
+#include <array>
+
 #include "tbb/tbb.h"
 
-#include "LevelSet.h"
-
-VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface)
+namespace FluidSim2D::SimTools
 {
-	VectorGrid<Real> ghostFluidWeights(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
-	
+
+VectorGrid<float> computeGhostFluidWeights(const LevelSet& surface)
+{
+	VectorGrid<float> ghostFluidWeights(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+
 	for (int axis : {0, 1})
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, ghostFluidWeights.size(axis)[0] * ghostFluidWeights.size(axis)[1], tbbGrainSize),
-		[&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, ghostFluidWeights.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
-				Vec2i face = ghostFluidWeights.grid(axis).unflatten(flatIndex);
+				Vec2i face = ghostFluidWeights.grid(axis).unflatten(faceIndex);
 
 				Vec2i backwardCell = faceToCell(face, axis, 0);
 				Vec2i forwardCell = faceToCell(face, axis, 1);
@@ -24,12 +26,10 @@ VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface)
 					continue;
 				else
 				{
-					Real phiBackward = surface(backwardCell);
-					Real phiForward = surface(forwardCell);
+					float phiBackward = surface(backwardCell);
+					float phiForward = surface(forwardCell);
 
-					Real theta = lengthFraction<Real>(phiBackward, phiForward);
-					theta = Util::clamp(theta, Real(MINTHETA), Real(1));
-					ghostFluidWeights(face, axis) = theta;
+					ghostFluidWeights(face, axis) = lengthFraction(phiBackward, phiForward);
 				}
 			}
 		});
@@ -38,34 +38,32 @@ VectorGrid<Real> computeGhostFluidWeights(const LevelSet& surface)
 	return ghostFluidWeights;
 }
 
-VectorGrid<Real> computeCutCellWeights(const LevelSet& surface, bool invert)
+VectorGrid<float> computeCutCellWeights(const LevelSet& surface, bool invert)
 {
-	VectorGrid<Real> cutCellWeights(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+	VectorGrid<float> cutCellWeights(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 
-	for (unsigned axis : {0, 1})
+	for (int axis : {0, 1})
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, cutCellWeights.size(axis)[0] * cutCellWeights.size(axis)[1], tbbGrainSize),
-		[&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, cutCellWeights.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
-			for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
+			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
-				Vec2i face = cutCellWeights.grid(axis).unflatten(flatIndex);
+				Vec2i face = cutCellWeights.grid(axis).unflatten(faceIndex);
 
 				int otherAxis = (axis + 1) % 2;
 
-				Vec2R offset(0); offset[otherAxis] = .5;
+				Vec2f offset(0); offset[otherAxis] = .5;
 
-				Vec2R pos0 = cutCellWeights.indexToWorld(Vec2R(face) - offset, axis);
-				Vec2R pos1 = cutCellWeights.indexToWorld(Vec2R(face) + offset, axis);
+				Vec2f backwardNodePoint = cutCellWeights.indexToWorld(Vec2f(face) - offset, axis);
+				Vec2f forwardNodePoint = cutCellWeights.indexToWorld(Vec2f(face) + offset, axis);
 
-				Real weight = lengthFraction<Real>(surface.interp(pos0), surface.interp(pos1));
+				float weight = lengthFraction(surface.biLerp(backwardNodePoint), surface.biLerp(forwardNodePoint));
 
-				if (invert) weight = 1. - weight;
+				if (invert)
+					weight = 1. - weight;
 
-				// Clamp weight down to zero if the cut-cell size is small
-				if (weight < MINTHETA) weight = 0;
-
-				cutCellWeights(face, axis) = weight;
+				if (weight > 0)
+					cutCellWeights(face, axis) = weight;
 			}
 		});
 	}
@@ -77,73 +75,113 @@ VectorGrid<Real> computeCutCellWeights(const LevelSet& surface, bool invert)
 // we're computing weights for centers, faces, nodes, etc. that each
 // have their internal index space cell offsets. We can't make any
 // easy general assumptions about indices between grids anymore.
-ScalarGrid<Real> computeSuperSampledAreas(const LevelSet& surface, ScalarGridSettings::SampleType sampleType, int samples)
+ScalarGrid<float> computeSupersampledAreas(const LevelSet& surface, ScalarGridSettings::SampleType sampleType, int samples)
 {
-	ScalarGrid<Real> areas(surface.xform(), surface.size(), 0, sampleType);
+	assert(samples > 0);
 
-	Real dx = 1. / Real(samples);
-	Real sampleArea = Util::sqr(dx);
+	ScalarGrid<float> areas(surface.xform(), surface.size(), 0, sampleType);
 
-	// Loop over each cell in the grid
-	forEachVoxelRange(Vec2i(0), areas.size(), [&](const Vec2i& cell)
+	float dx = 1. / float(samples);
+	float sampleArea = sqr(dx);
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, areas.voxelCount(), tbbHeavyGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
-		if (surface.interp(areas.indexToWorld(Vec2R(cell))) > 2. * surface.dx())
-			return;
+		for (int sampleIndex = range.begin(); sampleIndex != range.end(); ++sampleIndex)
+		{
+			Vec2i sampleCoord = areas.unflatten(sampleIndex);
 
-		// Loop over super samples internally. i -.5 is the index space boundary of the sample. The 
-		// first sample point is the .5 * sample_dx closer to (i,j).
-		int sampleCount = 0;
-		Vec2R start = Vec2R(cell) - Vec2R(.5 - .5 * dx);
-		Vec2R end = Vec2R(cell) + Vec2R(.5);
+			float sdf = surface.biLerp(areas.indexToWorld(Vec2f(sampleCoord)));
+			
+			if (sdf > 2. * surface.dx())
+				continue;
 
-		Vec2R sample;
-
-		for (sample[0] = start[0]; sample[0] < end[0]; sample[0] += dx)
-			for (sample[1] = start[1]; sample[1] < end[1]; sample[1] += dx)
+			if (sdf <= -2. * surface.dx())
 			{
-				Vec2R worldPosition = areas.indexToWorld(sample);
-				if (surface.interp(worldPosition) <= 0.) ++sampleCount;
+				areas(sampleCoord) = 1;
+				continue;
 			}
 
-		areas(cell) = Real(sampleCount * sampleArea);
+			Vec2f start = Vec2f(sampleCoord) - Vec2f(.5) + Vec2f(.5 * dx);
+			Vec2f end = Vec2f(sampleCoord) + Vec2f(.5) - Vec2f(.5 * dx);
+
+			Vec2f sample;
+			float insideMaterialCount = 0;
+
+			for (sample[0] = start[0]; sample[0] <= end[0]; sample[0] += dx)
+				for (sample[1] = start[1]; sample[1] <= end[1]; sample[1] += dx)
+				{
+					Vec2f worldSamplePoint = areas.indexToWorld(sample);
+
+					if (surface.biLerp(worldSamplePoint) <= 0.)
+						++insideMaterialCount;
+				}
+
+			if (insideMaterialCount > 0)
+			{
+				float supersampledArea = insideMaterialCount * sampleArea;
+				supersampledArea = clamp(supersampledArea, float(0), float(1));
+				areas(sampleCoord) = supersampledArea;
+			}
+		}
 	});
 
 	return areas;
 }
 
-VectorGrid<Real> computeSuperSampledFaceAreas(const LevelSet& surface, int samples)
+VectorGrid<float> computeSupersampledFaceAreas(const LevelSet& surface, int samples)
 {
-	VectorGrid<Real> areas(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
+	assert(samples > 0);
 
-	Real dx = 1. / Real(samples);
-	Real sampleArea = Util::sqr(dx);
+	VectorGrid<float> areas(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 
-	for (auto axis : { 0,1 })
+	float dx = 1. / float(samples);
+	float sampleArea = sqr(dx);
+
+	for (int axis : {0, 1})
 	{
-		// Loop over each cell in the grid
-		forEachVoxelRange(Vec2i(0), areas.size(axis), [&](const Vec2i& face)
+		tbb::parallel_for(tbb::blocked_range<int>(0, areas.grid(axis).voxelCount(), tbbHeavyGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
-			if (surface.interp(areas.indexToWorld(Vec2R(face), axis)) > 2. * surface.dx())
-				return;
+			for (int sampleIndex = range.begin(); sampleIndex != range.end(); ++sampleIndex)
+			{
+				Vec2i sampleCoord = areas.grid(axis).unflatten(sampleIndex);
 
-			// Loop over super samples internally. i -.5 is the index space boundary of the sample. The 
-			// first sample point is the .5 * sample_dx closer to (i,j).
-			int sampleCount = 0;
-			Vec2R start = Vec2R(face) - Vec2R(.5 - .5 * dx);
-			Vec2R end = Vec2R(face) + Vec2R(.5);
+				float sdf = surface.biLerp(areas.indexToWorld(Vec2f(sampleCoord), axis));
 
-			Vec2R sample;
+				if (sdf > 2. * surface.dx())
+					continue;
 
-			for (sample[0] = start[0]; sample[0] < end[0]; sample[0] += dx)
-				for (sample[1] = start[1]; sample[1] < end[1]; sample[1] += dx)
+				if (sdf <= -2. * surface.dx())
 				{
-					Vec2R worldPosition = areas.indexToWorld(sample, axis);
-					if (surface.interp(worldPosition) <= 0.) ++sampleCount;
+					areas(sampleCoord, axis) = 1;
+					continue;
 				}
 
-			areas(face, axis) = Real(sampleCount * sampleArea);
+				Vec2f start = Vec2f(sampleCoord) - Vec2f(.5) + Vec2f(.5 * dx);
+				Vec2f end = Vec2f(sampleCoord) + Vec2f(.5) - Vec2f(.5 * dx);
+
+				Vec2f sample;
+				float insideMaterialCount = 0;
+
+				for (sample[0] = start[0]; sample[0] <= end[0]; sample[0] += dx)
+					for (sample[1] = start[1]; sample[1] <= end[1]; sample[1] += dx)
+					{
+						Vec2f worldSamplePoint = areas.indexToWorld(sample, axis);
+
+						if (surface.biLerp(worldSamplePoint) <= 0.)
+							++insideMaterialCount;
+					}
+
+				if (insideMaterialCount > 0)
+				{
+					float supersampledArea = insideMaterialCount * sampleArea;
+					supersampledArea = clamp(supersampledArea, float(0), float(1));
+					areas(sampleCoord, axis) = supersampledArea;
+				}
+			}
 		});
 	}
 
 	return areas;
+}
+
 }

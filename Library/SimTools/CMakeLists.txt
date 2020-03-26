@@ -1,4 +1,4 @@
-add_library(2DFluidSimTools
+add_library(SimTools
 				ComputeWeights.cpp
 				GeometricMultigridOperators.cpp
 				GeometricMultigridPoissonSolver.cpp
@@ -7,13 +7,13 @@ add_library(2DFluidSimTools
 				ViscositySolver.cpp
 				Noise.cpp)
 
-target_link_libraries(2DFluidSimTools
+target_link_libraries(SimTools
 						PRIVATE
-						2DFluidCommon
-						2DFluidTrackers)
+						SurfaceTrackers
+						Utilities)
 
-target_include_directories(2DFluidSimTools PUBLIC
+target_include_directories(SimTools PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 							  $<INSTALL_INTERFACE:include>)
 
-set_target_properties(2DFluidSimTools PROPERTIES FOLDER ${SOURCE_FOLDER})
+set_target_properties(SimTools PROPERTIES FOLDER ${SOURCE_FOLDER})
