@@ -3,7 +3,7 @@ BasedOnStyle: Google
 DerivePointerAlignment: false
 PointerAlignment: Left
 BreakBeforeBraces: Allman
-ColumnLimit: 120
+ColumnLimit: 240
 IndentWidth: 4
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
