@@ -60,6 +60,42 @@ void EdgeMesh::insertMesh(const EdgeMesh& mesh)
 	});
 }
 
+std::vector<Vec2f> EdgeMesh::vertexNormals() const
+{
+    std::vector<Vec2f> edgeWeightedNormals(myEdges.size());
+
+    tbb::parallel_for(tbb::blocked_range<int>(0, myEdges.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range) {
+        for (int edgeIndex = range.begin(); edgeIndex != range.end(); ++edgeIndex)
+        {
+            Vec2f edgeNormal = normal(edgeIndex);
+            float edgeLength = dist(myVertices[myEdges[edgeIndex].vertex(0)].point(), myVertices[myEdges[edgeIndex].vertex(1)].point());
+
+            edgeWeightedNormals[edgeIndex] = edgeLength * edgeNormal;
+        }
+    });
+
+    std::vector<Vec2f> vertexNormals(myVertices.size(), Vec2f(0));
+
+    tbb::parallel_for(tbb::blocked_range<int>(0, myVertices.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range) {
+        for (int vertexIndex = range.begin(); vertexIndex != range.end(); ++vertexIndex)
+        {
+            Vec2f localVertexNormal(0);
+
+            for (int neighbourEdgeIndex = 0; neighbourEdgeIndex < myVertices[vertexIndex].valence(); ++neighbourEdgeIndex)
+            {
+                int edgeIndex = myVertices[vertexIndex].edge(neighbourEdgeIndex);
+                assert(edgeIndex >= 0 && edgeIndex < myEdges.size());
+
+                localVertexNormal += edgeWeightedNormals[edgeIndex];
+            }
+
+            vertexNormals[vertexIndex] = normalize(localVertexNormal);
+        }
+    });
+
+    return vertexNormals;
+}
+
 void EdgeMesh::drawMesh(Renderer& renderer,
 						Vec3f edgeColour,
 						float edgeWidth,

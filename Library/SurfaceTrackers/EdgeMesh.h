@@ -264,6 +264,8 @@ public:
 		return normalize(scaledNormal(edgeIndex));
 	}
 
+	std::vector<Vec2f> vertexNormals() const;
+
 	//Reverse winding order
 	void reverse()
 	{
