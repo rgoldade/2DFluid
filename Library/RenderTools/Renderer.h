@@ -1,5 +1,5 @@
-#ifndef LIBRARY_RENDERER_H
-#define LIBRARY_RENDERER_H
+#ifndef FLUIDSIM2D_RENDERER_H
+#define FLUIDSIM2D_RENDERER_H
 
 #include <functional>
 #include <vector>
@@ -11,7 +11,6 @@
 #endif
 
 #include "Utilities.h"
-#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -25,16 +24,14 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::RenderTools
+namespace FluidSim2D
 {
-
-using namespace Utilities;
 
 class Renderer
 {
 public:
-	Renderer(const char *title, Vec2i windowSize, Vec2f screenOrigin,
-				float screenHeight, int *argc, char **argv);
+	Renderer(const char *title, Vec2i windowSize, Vec2d screenOrigin,
+				double screenHeight, int *argc, char **argv);
 
 	void display();
 	void mouse(int button, int state, int x, int y);
@@ -47,14 +44,14 @@ public:
 	void setUserMouseDrag(const std::function<void(int, int)>& mouseDragFunction);
 	void setUserDisplay(const std::function<void()>& displayFunction);
 
-	void addPoint(const Vec2f& point, const Vec3f& colour = Vec3f(0, 0, 0), float size = 1.);
-	void addPoints(const std::vector<Vec2f>& points, const Vec3f& colour = Vec3f(0), float size = 1.);
+	void addPoint(const Vec2d& point, const Vec3d& colour = Vec3d(0, 0, 0), double size = 1.);
+	void addPoints(const VecVec2d& points, const Vec3d& colour = Vec3d(0), double size = 1.);
 
-	void addLine(const Vec2f& startingPoint, const Vec2f& endingPoint, const Vec3f& colour = Vec3f(0), float lineWidth = 1);
-	void addLines(const std::vector<Vec2f>& startingPoints, const std::vector<Vec2f>& endingPoints, const Vec3f& colour, float lineWidth = 1);
+	void addLine(const Vec2d& startingPoint, const Vec2d& endingPoint, const Vec3d& colour = Vec3d(0), double lineWidth = 1);
+	void addLines(const VecVec2d& startingPoints, const VecVec2d& endingPoints, const Vec3d& colour, double lineWidth = 1);
 
-	void addTriFaces(const std::vector<Vec2f>& vertices, const std::vector<Vec3i>& faces, const std::vector<Vec3f>& faceColours);
-	void addQuadFaces(const std::vector<Vec2f>& vertices, const std::vector<Vec4i>& faces, const std::vector<Vec3f>& faceColours);
+	void addTriFaces(const VecVec2d& vertices, const VecVec3i& faces, const VecVec3d& faceColours);
+	void addQuadFaces(const VecVec2d& vertices, const VecVec4i& faces, const VecVec3d& faceColours);
 
 	void drawPrimitives() const;
 
@@ -65,31 +62,31 @@ public:
 
 private:
 
-	std::vector<std::vector<Vec2f>> myPoints;
-	std::vector<Vec3f> myPointColours;
-	std::vector<float> myPointSizes;
+	std::vector<VecVec2d> myPoints;
+	VecVec3d myPointColours;
+	std::vector<double> myPointSizes;
 
-	std::vector<std::vector<Vec2f>> myLineStartingPoints;
-	std::vector<std::vector<Vec2f>> myLineEndingPoints;
-	std::vector<Vec3f> myLineColours;
-	std::vector<float> myLineWidths;
+	std::vector<VecVec2d> myLineStartingPoints;
+	std::vector<VecVec2d> myLineEndingPoints;
+	VecVec3d myLineColours;
+	std::vector<double> myLineWidths;
 
-	std::vector<std::vector<Vec2f>> myTriVertices;
-	std::vector<std::vector<Vec3i>> myTriFaces;
-	std::vector<std::vector<Vec3f>> myTriFaceColours;
+	std::vector<VecVec2d> myTriVertices;
+	std::vector<VecVec3i> myTriFaces;
+	std::vector<VecVec3d> myTriFaceColours;
 
-	std::vector<std::vector<Vec2f>> myQuadVertices;
-	std::vector<std::vector<Vec4i>> myQuadFaces;
-	std::vector<std::vector<Vec3f>> myQuadFaceColours;
+	std::vector<VecVec2d> myQuadVertices;
+	std::vector<VecVec4i> myQuadFaces;
+	std::vector<VecVec3d> myQuadFaceColours;
 
 	// width, height
 	Vec2i myWindowSize;
 
-	Vec2f myCurrentScreenOrigin;
-	float myCurrentScreenHeight;
+	Vec2d myCurrentScreenOrigin;
+	double myCurrentScreenHeight;
 
-	Vec2f myDefaultScreenOrigin;
-	float myDefaultScreenHeight;
+	Vec2d myDefaultScreenOrigin;
+	double myDefaultScreenHeight;
 
 	// Mouse specific state
 	Vec2i myMousePosition;

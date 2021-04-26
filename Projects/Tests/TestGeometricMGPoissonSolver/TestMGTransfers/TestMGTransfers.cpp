@@ -13,44 +13,40 @@
 #include "UniformGrid.h"
 #include "Utilities.h"
 
-using namespace FluidSim2D::RenderTools;
-using namespace FluidSim2D::SimTools;
+using namespace FluidSim2D;
 
-std::unique_ptr<Renderer> renderer;
+std::unique_ptr<Renderer> gRenderer;
 
-static constexpr int gridSize = 256;
-static constexpr bool useComplexDomain = true;
-static constexpr bool useSolidSphere = true;
+static constexpr int gGridSize = 256;
+static constexpr bool gUseComplexDomain = true;
+static constexpr bool gUseSolidSphere = true;
 
 int main(int argc, char** argv)
 {
 	using namespace GeometricMultigridOperators;
 
-	using StoreReal = double;
-	using SolveReal = double;
-
-	using Vector = std::conditional<std::is_same<SolveReal, float>::value, Eigen::VectorXf, Eigen::VectorXd>::type;
+	using Vector = Eigen::VectorXd;
 
 	UniformGrid<CellLabels> domainCellLabels;
-	VectorGrid<StoreReal> boundaryWeights;
+	VectorGrid<double> boundaryWeights;
 
 	int mgLevels;
 	{
 		UniformGrid<CellLabels> baseDomainCellLabels;
-		VectorGrid<StoreReal> baseBoundaryWeights;
+		VectorGrid<double> baseBoundaryWeights;
 
 		// Complex domain set up
-		if (useComplexDomain)
+		if (gUseComplexDomain)
 			buildComplexDomain(baseDomainCellLabels,
 								baseBoundaryWeights,
-								gridSize,
-								useSolidSphere);
+								gGridSize,
+								gUseSolidSphere);
 
 		// Simple domain set up
 		else
 			buildSimpleDomain(baseDomainCellLabels,
 								baseBoundaryWeights,
-								gridSize,
+								gGridSize,
 								1 /*dirichlet band*/);
 
 		// Build expanded domain
@@ -59,11 +55,11 @@ int main(int argc, char** argv)
 		mgLevels = mgSettings.second;
 	}
 
-	SolveReal dx = boundaryWeights.dx();
+	double dx = boundaryWeights.dx();
 
-	UniformGrid<StoreReal> solutionGrid(domainCellLabels.size(), 0);
+	UniformGrid<double> solutionGrid(domainCellLabels.size(), 0);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(),tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -72,7 +68,7 @@ int main(int argc, char** argv)
 			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 			{
-				Vec2f point(dx * Vec2f(cell));
+				Vec2d point(dx * cell.cast<double>());
 				solutionGrid(cell) = 4. * (std::sin(2 * PI * point[0]) * std::sin(2 * PI * point[1]) +
 											std::sin(4 * PI * point[0]) * std::sin(4 * PI * point[1]));
 			}
@@ -84,11 +80,11 @@ int main(int argc, char** argv)
 
 	UniformGrid<CellLabels> coarseCellLabels = buildCoarseCellLabels(domainCellLabels);
 
-	assert(unitTestBoundaryCells<StoreReal>(domainCellLabels, &boundaryWeights) && unitTestBoundaryCells<StoreReal>(coarseCellLabels));
+	assert(unitTestBoundaryCells(domainCellLabels, &boundaryWeights) && unitTestBoundaryCells(coarseCellLabels));
 	assert(unitTestExteriorCells(domainCellLabels) && unitTestExteriorCells(coarseCellLabels));
 	assert(unitTestCoarsening(coarseCellLabels, domainCellLabels));
 
-	SolveReal coarseDx = 2 * dx;
+	double coarseDx = 2 * dx;
 
 	{
 		//
@@ -96,15 +92,15 @@ int main(int argc, char** argv)
 		//
 
 		// Test a simple tansfer to the coarse grid and a transfer back
-		UniformGrid<StoreReal> coarseInitialGuess(coarseCellLabels.size(), 0);
+		UniformGrid<double> coarseInitialGuess(coarseCellLabels.size(), 0);
 
-		downsample<SolveReal>(coarseInitialGuess, solutionGrid, coarseCellLabels, domainCellLabels);
+		downsample(coarseInitialGuess, solutionGrid, coarseCellLabels, domainCellLabels);
 	
 		coarseInitialGuess.printAsOBJ("downsampledGrid");
 
 		// Transfer back
-		UniformGrid<StoreReal> transferGrid(domainCellLabels.size(), 0);
-		upsampleAndAdd<SolveReal>(transferGrid, coarseInitialGuess, domainCellLabels, coarseCellLabels);
+		UniformGrid<double> transferGrid(domainCellLabels.size(), 0);
+		upsampleAndAdd(transferGrid, coarseInitialGuess, domainCellLabels, coarseCellLabels);
 
 		transferGrid.printAsOBJ("upsampledGrid");
 	}
@@ -117,10 +113,10 @@ int main(int argc, char** argv)
 		// Compute residual
 		//
 
-		UniformGrid<StoreReal> residualGrid(domainCellLabels.size(), 0);
-		UniformGrid<StoreReal> rhsGrid(domainCellLabels.size(), 0);
+		UniformGrid<double> residualGrid(domainCellLabels.size(), 0);
+		UniformGrid<double> rhsGrid(domainCellLabels.size(), 0);
 
-		computePoissonResidual<SolveReal>(residualGrid, solutionGrid, rhsGrid, domainCellLabels, dx, &boundaryWeights);
+		computePoissonResidual(residualGrid, solutionGrid, rhsGrid, domainCellLabels, dx, &boundaryWeights);
 
 		residualGrid.printAsOBJ("residualGrid");
 
@@ -128,8 +124,8 @@ int main(int argc, char** argv)
 		// Restrict residual to coarse RHS
 		//
 
-		UniformGrid<StoreReal> coarseRHSGrid(coarseCellLabels.size(), 0);
-		downsample<SolveReal>(coarseRHSGrid, residualGrid, coarseCellLabels, domainCellLabels);
+		UniformGrid<double> coarseRHSGrid(coarseCellLabels.size(), 0);
+		downsample(coarseRHSGrid, residualGrid, coarseCellLabels, domainCellLabels);
 
 		coarseRHSGrid.printAsOBJ("downsampledResidual");
 
@@ -137,11 +133,11 @@ int main(int argc, char** argv)
 		// Apply direct solver
 		//
 
-		UniformGrid<StoreReal> coarseSolution(coarseCellLabels.size(), 0);
+		UniformGrid<double> coarseSolution(coarseCellLabels.size(), 0);
 
 		{
 
-			UniformGrid<StoreReal> coarseResidualGrid(coarseCellLabels.size(), 0);
+			UniformGrid<double> coarseResidualGrid(coarseCellLabels.size(), 0);
 
 			//
 			// Solver with direct solver
@@ -152,7 +148,7 @@ int main(int argc, char** argv)
 
 			UniformGrid<int> interiorCellIndices(coarseCellLabels.size(), -1);
 
-			forEachVoxelRange(Vec2i(0), coarseCellLabels.size(), [&](const Vec2i &cell)
+			forEachVoxelRange(Vec2i::Zero(), coarseCellLabels.size(), [&](const Vec2i &cell)
 			{
 				if (coarseCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 					coarseCellLabels(cell) == CellLabels::BOUNDARY_CELL)
@@ -161,7 +157,7 @@ int main(int argc, char** argv)
 			
 			Vector rhsVector = Vector::Zero(interiorCellCount);
 
-			tbb::parallel_for(tbb::blocked_range<int>(0, coarseCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, coarseCellLabels.voxelCount()), [&](const tbb::blocked_range<int> &range)
 			{
 				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
@@ -183,14 +179,13 @@ int main(int argc, char** argv)
 			});
 
 			// Build rows
-			std::vector<Eigen::Triplet<SolveReal>> sparseElements;
+			std::vector<Eigen::Triplet<double>> sparseElements;
 
-			SolveReal gridScalar = 1. / sqr(coarseDx);
-			forEachVoxelRange(Vec2i(0), coarseCellLabels.size(), [&](const Vec2i &cell)
+			double gridScalar = 1. / std::pow(coarseDx, 2);
+			forEachVoxelRange(Vec2i::Zero(), coarseCellLabels.size(), [&](const Vec2i &cell)
 			{
 				if (coarseCellLabels(cell) == CellLabels::INTERIOR_CELL)
 				{
-					int diagonal = 0;
 					int index = interiorCellIndices(cell);
 					assert(index >= 0);
 
@@ -211,7 +206,7 @@ int main(int argc, char** argv)
 				}
 				else if (coarseCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 				{
-					int diagonal = 0;
+					double diagonal = 0;
 					int index = interiorCellIndices(cell);
 					assert(index >= 0);
 
@@ -242,11 +237,11 @@ int main(int argc, char** argv)
 			});
 
 			// Solve system
-			Eigen::SparseMatrix<SolveReal> sparseMatrix(interiorCellCount, interiorCellCount);
+			Eigen::SparseMatrix<double> sparseMatrix(interiorCellCount, interiorCellCount);
 			sparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
 			sparseMatrix.makeCompressed();
 
-			Eigen::SimplicialCholesky<Eigen::SparseMatrix<SolveReal>> solver;
+			Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> solver;
 			solver.compute(sparseMatrix);
 
 			if (solver.info() != Eigen::Success)
@@ -290,9 +285,9 @@ int main(int argc, char** argv)
 		// Prolongate solution
 		//
 
-		UniformGrid<StoreReal> correctionGrid(domainCellLabels.size(), 0);
+		UniformGrid<double> correctionGrid(domainCellLabels.size(), 0);
 
-		upsampleAndAdd<SolveReal>(correctionGrid, coarseSolution, domainCellLabels, coarseCellLabels);
+		upsampleAndAdd(correctionGrid, coarseSolution, domainCellLabels, coarseCellLabels);
 
 		correctionGrid.printAsOBJ("prolongatedCorrectio");
 
@@ -300,7 +295,7 @@ int main(int argc, char** argv)
 		// Apply correction
 		//
 
-		upsampleAndAdd<SolveReal>(solutionGrid, coarseSolution, domainCellLabels, coarseCellLabels);
+		upsampleAndAdd(solutionGrid, coarseSolution, domainCellLabels, coarseCellLabels);
 		solutionGrid.printAsOBJ("solutionGrid");
 
 		//
@@ -310,22 +305,22 @@ int main(int argc, char** argv)
 		// Print domain labels to make sure they are set up correctly
 		int pixelHeight = 1080;
 		int pixelWidth = pixelHeight;
-		renderer = std::make_unique<Renderer>("MG Error Correction and Transfer Test", Vec2i(pixelWidth, pixelHeight), Vec2f(0), 1, &argc, argv);
+		gRenderer = std::make_unique<Renderer>("MG Error Correction and Transfer Test", Vec2i(pixelWidth, pixelHeight), Vec2d::Zero(), 1, &argc, argv);
 
-		ScalarGrid<float> tempGrid(Transform(dx, Vec2f(0)), domainCellLabels.size());
+		ScalarGrid<double> tempGrid(Transform(dx, Vec2d::Zero()), domainCellLabels.size());
 
-		tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
 				Vec2i cell = domainCellLabels.unflatten(cellIndex);
 
-				tempGrid(cell) = float(domainCellLabels(cell));
+				tempGrid(cell) = double(domainCellLabels(cell));
 			}
 		});
 
-		tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), float(CellLabels::INTERIOR_CELL), float(CellLabels::BOUNDARY_CELL));
+		tempGrid.drawVolumetric(*gRenderer, Vec3d::Zero(), Vec3d::Ones(), double(CellLabels::INTERIOR_CELL), double(CellLabels::BOUNDARY_CELL));
 
-		renderer->run();
+		gRenderer->run();
 	}
 }

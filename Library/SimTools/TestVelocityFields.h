@@ -1,5 +1,5 @@
-#ifndef LIBRARY_TEST_VELOCITY_FIELD_H
-#define LIBRARY_TEST_VELOCITY_FIELD_H
+#ifndef FLUIDSIM2D_TEST_VELOCITY_FIELD_H
+#define FLUIDSIM2D_TEST_VELOCITY_FIELD_H
 
 #include "Noise.h"
 #include "Renderer.h"
@@ -12,7 +12,7 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
 
 ////////////////////////////////////
@@ -28,21 +28,21 @@ public:
 	SingleVortexField() : mySimTime(0), myDeformationPeriod(6)
 	{}
 
-	SingleVortexField(float startTime, float deformationPeriod)
+	SingleVortexField(double startTime, double deformationPeriod)
 		: mySimTime(startTime)
 		, myDeformationPeriod(deformationPeriod)
 	{}
 
-	void drawSimVectors(Renderer& renderer, float dt = 1., float radius = 10., const Vec3f& colour = Vec3f(0))
+	void drawSimVectors(Renderer& renderer, double dt = 1, double radius = 10, const Vec3d& colour = Vec3d::Zero())
 	{
-		std::vector<Vec2f> startPoints;
-		std::vector<Vec2f> endPoints;
+		VecVec2d startPoints;
+		VecVec2d endPoints;
 
-		for (float drawRadius = 0.; drawRadius <= radius; drawRadius += radius / 10.)
-			for (float theta = 0.; theta < 2 * PI; theta += PI / 16.)
+		for (double drawRadius = 0.; drawRadius <= radius; drawRadius += radius / 10.)
+			for (double theta = 0.; theta < 2. * PI; theta += PI / 16.)
 			{
-				Vec2f start(drawRadius * std::cos(theta), drawRadius * std::sin(theta));
-				Vec2f end = start + dt * (*this)(dt, start);
+				Vec2d start(drawRadius * std::cos(theta), drawRadius * std::sin(theta));
+				Vec2d end = start + dt * (*this)(dt, start);
 
 				startPoints.push_back(start);
 				endPoints.push_back(end);
@@ -57,22 +57,22 @@ public:
 	}
 
 	// Sample positions given in world space
-	Vec2f operator()(float dt, const Vec2f& pos) const
+	Vec2d operator()(double dt, const Vec2d& pos) const
 	{
-		float sinX = sin(PI * pos[0]);
-		float sinY = sin(PI * pos[1]);
+		double sinX = sin(PI * pos[0]);
+		double sinY = sin(PI * pos[1]);
 
-		float cosX = cos(PI * pos[0]);
-		float cosY = cos(PI * pos[1]);
+		double cosX = cos(PI * pos[0]);
+		double cosY = cos(PI * pos[1]);
 
-		double u = 2.0 * sinY * cosY * sinX * sinX;
-		double v = -2.0 * sinX * cosX * sinY * sinY;
+		double u = 2. * sinY * cosY * sinX * sinX;
+		double v = -2. * sinX * cosX * sinY * sinY;
 
-		return Vec2f(u, v) * cos(PI * (mySimTime + dt) / myDeformationPeriod);
+		return Vec2d(u, v) * cos(PI * (mySimTime + dt) / myDeformationPeriod);
 	}
 
 private:
-	float mySimTime, myDeformationPeriod;
+	double mySimTime, myDeformationPeriod;
 };
 
 ///////////////////////////////////
@@ -95,9 +95,9 @@ public:
 		myNoiseGain[0] = 1.3;
 	}
 
-	Vec2f getVelocity(const Vec2f& x) const
+	Vec2d getVelocity(const Vec2d& x) const
 	{
-		Vec2f vel;
+		Vec2d vel;
 		vel[0] = ((potential(x[0], x[1] + myDx)[2] - potential(x[0], x[1] - myDx)[2])
 			- (potential(x[0], x[1], myDx)[1] - potential(x[0], x[1], -myDx)[1])) / (2 * myDx);
 		vel[1] = ((potential(x[0], x[1], myDx)[0] - potential(x[0], x[1], -myDx)[0])
@@ -106,31 +106,31 @@ public:
 		return vel;
 	}
 
-	Vec2f operator()(float, const Vec2f& pos) const
+	Vec2d operator()(double, const Vec2d& pos) const
 	{
 		return getVelocity(pos);
 	}
 
 private:
 
-	Vec3f potential(float x, float y, float z = 0.) const
+	Vec3d potential(double x, double y, double z = 0.) const
 	{
-		Vec3f psi(0, 0, 0);
-		float heightFactor = 0.5;
+		Vec3d psi(0, 0, 0);
+		double heightFactor = 0.5;
 
-		Vec3f centre(0.0, 1.0, 0.0);
-		float radius = 4.0;
+		Vec3d centre(0.0, 1.0, 0.0);
+		double radius = 4.0;
 
 		for (int i = 0; i < myNoiseLengthScale.size(); ++i)
 		{
-			float sx = x / myNoiseLengthScale[i];
-			float sy = y / myNoiseLengthScale[i];
-			float sz = z / myNoiseLengthScale[i];
+			double sx = x / myNoiseLengthScale[i];
+			double sy = y / myNoiseLengthScale[i];
+			double sz = z / myNoiseLengthScale[i];
 
-			Vec3f psi_i(0, 0, noise2(sx, sy, sz));
+			Vec3d psi_i(0, 0, noise2(sx, sy, sz));
 
-			float dist = mag(Vec3f(x, y, z) - centre);
-			float scale = std::max((radius - dist) / radius, float(0));
+			double dist = (Vec3d(x, y, z) - centre).norm();
+			double scale = std::max((radius - dist) / radius, double(0));
 			psi_i *= scale;
 
 			psi += heightFactor * myNoiseGain[i] * psi_i;
@@ -139,10 +139,10 @@ private:
 		return psi;
 	}
 
-	float noise2(float x, float y, float z) const { return myNoiseFunction(z - 203.994, x + 169.47, y - 205.31); }
+	double noise2(double x, double y, double z) const { return myNoiseFunction(z - 203.994, x + 169.47, y - 205.31); }
 
-	std::vector<float> myNoiseLengthScale, myNoiseGain;
-	float myDx;
+	std::vector<double> myNoiseLengthScale, myNoiseGain;
+	double myDx;
 
 	FlowNoise3 myNoiseFunction;
 };
@@ -157,19 +157,19 @@ private:
 class CircularField
 {
 public:
-	CircularField() : myCenter(Vec2f(0)), myScale(1.) {}
-	CircularField(const Vec2f& center, float scale = 1.) : myCenter(center), myScale(scale) {}
+	CircularField() : myCenter(Vec2d(0)), myScale(1.) {}
+	CircularField(const Vec2d& center, double scale = 1.) : myCenter(center), myScale(scale) {}
 
-	void drawSimVectors(Renderer& renderer, float dt = 1., float radius = 10., const Vec3f& colour = Vec3f(0))
+	void drawSimVectors(Renderer& renderer, double dt = 1., double radius = 10., const Vec3d& colour = Vec3d(0))
 	{
-		std::vector<Vec2f> startPoints;
-		std::vector<Vec2f> endPoints;
+		VecVec2d startPoints;
+		VecVec2d endPoints;
 
-		for (float drawRadius = 0.0; drawRadius <= radius; drawRadius += radius / 10.)
-			for (float theta = 0.0; theta < 2 * PI; theta += PI / 16.0)
+		for (double drawRadius = 0.0; drawRadius <= radius; drawRadius += radius / 10.)
+			for (double theta = 0.0; theta < 2 * PI; theta += PI / 16.0)
 			{
-				Vec2f startPoint = Vec2f(drawRadius * cos(theta), drawRadius * sin(theta)) + myCenter;
-				Vec2f endPoint = startPoint + dt * (*this)(dt, startPoint);
+				Vec2d startPoint = Vec2d(drawRadius * cos(theta), drawRadius * sin(theta)) + myCenter;
+				Vec2d endPoint = startPoint + dt * (*this)(dt, startPoint);
 
 				startPoints.push_back(startPoint);
 				endPoints.push_back(endPoint);
@@ -178,14 +178,14 @@ public:
 		renderer.addLines(startPoints, endPoints, colour);
 	};
 
-	Vec2f operator()(float, const Vec2f& pos) const
+	Vec2d operator()(double, const Vec2d& pos) const
 	{
-		return Vec2f(pos[1] - myCenter[1], -(pos[0] - myCenter[0])) * myScale;
+		return Vec2d(pos[1] - myCenter[1], -(pos[0] - myCenter[0])) * myScale;
 	}
 
 private:
-	Vec2f myCenter;
-	float myScale;
+	Vec2d myCenter;
+	double myScale;
 };
 
 ///////////////////////////////////
@@ -199,16 +199,16 @@ class NotchedDiskField
 {
 public:
 
-	void drawSimVectors(Renderer& renderer, float dt = 1., float radius = 10., const Vec3f& colour = Vec3f(0))
+	void drawSimVectors(Renderer& renderer, double dt = 1., double radius = 10., const Vec3d& colour = Vec3d(0))
 	{
-		std::vector<Vec2f> startPoints;
-		std::vector<Vec2f> endPoints;
+		VecVec2d startPoints;
+		VecVec2d endPoints;
 
-		for (float drawRadius = 0; drawRadius <= radius; drawRadius += radius / 10.)
-			for (float theta = 0; theta < 2 * PI; theta += PI / 16.)
+		for (double drawRadius = 0; drawRadius <= radius; drawRadius += radius / 10.)
+			for (double theta = 0; theta < 2 * PI; theta += PI / 16.)
 			{
-				Vec2f startPoint = Vec2f(drawRadius * cos(theta), drawRadius * sin(theta));
-				Vec2f endPoint = startPoint + dt * (*this)(dt, startPoint);
+				Vec2d startPoint = Vec2d(drawRadius * cos(theta), drawRadius * sin(theta));
+				Vec2d endPoint = startPoint + dt * (*this)(dt, startPoint);
 
 				startPoints.push_back(startPoint);
 				endPoints.push_back(endPoint);
@@ -218,9 +218,9 @@ public:
 	};
 
 	// Procedural velocity field
-	Vec2f operator()(float, const Vec2f& pos) const
+	Vec2d operator()(double, const Vec2d& pos) const
 	{
-		return Vec2f((PI / 314.) * (50.0 - pos[1]), (PI / 314.) * (pos[0] - 50.0));
+		return Vec2d((PI / 314.) * (50.0 - pos[1]), (PI / 314.) * (pos[0] - 50.0));
 	}
 };
 

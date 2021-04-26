@@ -1,8 +1,7 @@
-#ifndef LIBRARY_TRANSFORM_H
-#define LIBRARY_TRANSFORM_H
+#ifndef FLUIDSIM2D_TRANSFORM_H
+#define FLUIDSIM2D_TRANSFORM_H
 
 #include "Utilities.h"
-#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -15,47 +14,45 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::Utilities
+namespace FluidSim2D
 {
 
 class Transform
 {
 public:
-	Transform(float dx = 1., const Vec2f& offset = Vec2f(0))
+	Transform(double dx = 1, const Vec2d& offset = Vec2d::Zero())
 		: myDx(dx)
 		, myOffset(offset)
 	{}
 
-	Vec2f indexToWorld(const Vec2f& indexPoint) const
+	FORCE_INLINE Vec2d indexToWorld(const Vec2d& indexPoint) const
 	{
 		return indexPoint * myDx + myOffset;
 	}
 
-	Vec2f worldToIndex(const Vec2f& worldPoint) const
+	FORCE_INLINE Vec2d worldToIndex(const Vec2d& worldPoint) const
 	{
 		return (worldPoint - myOffset) / myDx;
 	}
 
-	float dx() const { return myDx; }
-	Vec2f offset() const { return myOffset; }
+	FORCE_INLINE double dx() const { return myDx; }
+	FORCE_INLINE Vec2d offset() const { return myOffset; }
 
-	bool operator==(const Transform& rhs) const
+	FORCE_INLINE bool operator==(const Transform& rhs) const
 	{
 		if (myDx != rhs.myDx) return false;
 		if (myOffset != rhs.myOffset) return false;
 		return true;
 	}
 
-	bool operator!=(const Transform& rhs) const
+	FORCE_INLINE bool operator!=(const Transform& rhs) const
 	{
-		if (myDx == rhs.myDx) return false;
-		if (myOffset == rhs.myOffset) return false;
-		return true;
+		return !(*this == rhs);
 	}
 
 private:
-	float myDx;
-	Vec2f myOffset;
+	double myDx;
+	Vec2d myOffset;
 };
 
 }

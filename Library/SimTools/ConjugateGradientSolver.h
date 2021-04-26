@@ -7,7 +7,7 @@
 
 // A custom CG solver derived from Eigen's implementation
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
 
 template<typename SolveReal,

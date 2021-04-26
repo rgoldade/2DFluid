@@ -1,8 +1,7 @@
-#ifndef LIBRARY_INTEGRATOR_H
-#define LIBRARY_INTEGRATOR_H
+#ifndef FLUIDSIM2D_INTEGRATOR_H
+#define FLUIDSIM2D_INTEGRATOR_H
 
 #include "Utilities.h"
-#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -14,13 +13,13 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::Utilities
+namespace FluidSim2D
 {
 
 enum class IntegrationOrder { FORWARDEULER, RK3 };
 
 template<typename T, typename Function>
-T Integrator(float h, const T& x, const Function& f, IntegrationOrder order)
+T Integrator(double h, const T& x, const Function& f, IntegrationOrder order)
 {
 	T value;
 

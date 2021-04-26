@@ -1,5 +1,5 @@
-#ifndef LIBRARY_GEOMETRIC_PRESSURE_PROJECTION_H
-#define LIBRARY_GEOMETRIC_PRESSURE_PROJECTION_H
+#ifndef FLUIDSIM2D_GEOMETRIC_PRESSURE_PROJECTION_H
+#define FLUIDSIM2D_GEOMETRIC_PRESSURE_PROJECTION_H
 
 #include "GeometricConjugateGradientSolver.h"
 #include "LevelSet.h"
@@ -15,11 +15,8 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
-
-using namespace SurfaceTrackers;
-using namespace Utilities;
 
 class GeometricPressureProjection
 {
@@ -28,13 +25,13 @@ class GeometricPressureProjection
 
 public:
 	GeometricPressureProjection(const LevelSet& surface,
-								const VectorGrid<float>& cutCellWeights,
-								const VectorGrid<float>& ghostFluidWeights,
-								const VectorGrid<float>& solidVelocity);
+								const VectorGrid<double>& cutCellWeights,
+								const VectorGrid<double>& ghostFluidWeights,
+								const VectorGrid<double>& solidVelocity);
 
-	void project(VectorGrid<float>& velocity, bool useMGPreconditioner);
+	void project(VectorGrid<double>& velocity, bool useMGPreconditioner);
 
-	void setInitialGuess(const ScalarGrid<float>& initialGuessPressure)
+	void setInitialGuess(const ScalarGrid<double>& initialGuessPressure)
 	{
 		assert(mySurface.isGridMatched(initialGuessPressure));
 		myUseInitialGuessPressure = true;
@@ -46,7 +43,7 @@ public:
 		myUseInitialGuessPressure = false;
 	}
 
-	ScalarGrid<float> getPressureGrid()
+	ScalarGrid<double> getPressureGrid()
 	{
 		return myPressure;
 	}
@@ -60,18 +57,18 @@ public:
 
 private:
 
-	const VectorGrid<float>& mySolidVelocity;
-	const VectorGrid<float>& myGhostFluidWeights;
-	const VectorGrid<float>& myCutCellWeights;
+	const VectorGrid<double>& mySolidVelocity;
+	const VectorGrid<double>& myGhostFluidWeights;
+	const VectorGrid<double>& myCutCellWeights;
 
 	// Store flags for solved faces
 	VectorGrid<VisitedCellLabels> myValidFaces;
 
 	const LevelSet& mySurface;
 
-	ScalarGrid<float> myPressure;
+	ScalarGrid<double> myPressure;
 
-	const ScalarGrid<float> *myInitialGuessPressure;
+	const ScalarGrid<double> *myInitialGuessPressure;
 	bool myUseInitialGuessPressure;
 };
 

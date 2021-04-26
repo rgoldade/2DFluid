@@ -1,12 +1,11 @@
-#ifndef LIBRARY_FIELD_ADVECTOR_H
-#define LIBRARY_FIELD_ADVECTOR_H
+#ifndef FLUIDSIM2D_FIELD_ADVECTOR_H
+#define FLUIDSIM2D_FIELD_ADVECTOR_H
 
 #include "tbb/tbb.h"
 
 #include "Integrator.h"
 #include "ScalarGrid.h"
 #include "Utilities.h"
-#include "Vec.h"
 #include "VectorGrid.h"
 
 ///////////////////////////////////
@@ -20,25 +19,23 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
-
-using namespace Utilities;
 
 enum class InterpolationOrder { LINEAR, CUBIC };
 
 template<typename Field, typename VelocityField>
-void advectField(float dt, Field& destinationField, const Field& sourceField, const VelocityField& velocity, IntegrationOrder order, InterpolationOrder interpOrder)
+void advectField(double dt, Field& destinationField, const Field& sourceField, const VelocityField& velocity, IntegrationOrder order, InterpolationOrder interpOrder)
 {
 	assert(&destinationField != &sourceField);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, sourceField.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, sourceField.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
 			Vec2i cell = sourceField.unflatten(cellIndex);
 
-			Vec2f worldPoint = sourceField.indexToWorld(Vec2f(cell));
+			Vec2d worldPoint = sourceField.indexToWorld(cell.cast<double>());
 			worldPoint = Integrator(-dt, worldPoint, velocity, order);
 
 			switch (interpOrder)

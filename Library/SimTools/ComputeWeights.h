@@ -1,5 +1,5 @@
-#ifndef LIBRARY_COMPUTE_WEIGHTS_H
-#define LIBRARY_COMPUTE_WEIGHTS_H
+#ifndef FLUIDSIM2D_COMPUTE_WEIGHTS_H
+#define FLUIDSIM2D_COMPUTE_WEIGHTS_H
 
 #include "LevelSet.h"
 #include "ScalarGrid.h"
@@ -17,19 +17,16 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
 
-using namespace SurfaceTrackers;
-using namespace Utilities;
+VectorGrid<double> computeGhostFluidWeights(const LevelSet& surface);
 
-VectorGrid<float> computeGhostFluidWeights(const LevelSet& surface);
+VectorGrid<double> computeCutCellWeights(const LevelSet& surface, bool invert = false);
 
-VectorGrid<float> computeCutCellWeights(const LevelSet& surface, bool invert = false);
+ScalarGrid<double> computeSupersampledAreas(const LevelSet& surface, ScalarGridSettings::SampleType sampleType, int samples);
 
-ScalarGrid<float> computeSupersampledAreas(const LevelSet& surface, ScalarGridSettings::SampleType sampleType, int samples);
-
-VectorGrid<float> computeSupersampledFaceAreas(const LevelSet& surface, int samples);
+VectorGrid<double> computeSupersampledFaceAreas(const LevelSet& surface, int samples);
 
 }
 

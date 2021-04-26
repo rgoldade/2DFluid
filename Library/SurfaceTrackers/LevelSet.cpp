@@ -2,19 +2,19 @@
 
 #include <iostream>
 
-#include "tbb/tbb.h"
-
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 
-namespace FluidSim2D::SurfaceTrackers
+#include "GridUtilities.h"
+
+namespace FluidSim2D
 {
 
 void LevelSet::drawGrid(Renderer& renderer, bool doOnlyNarrowBand) const
 {
 	if (doOnlyNarrowBand)
 	{
-		forEachVoxelRange(Vec2i(0), size(), [&](const Vec2i& cell)
+		forEachVoxelRange(Vec2i::Zero(), size(), [&](const Vec2i& cell)
 		{
 			if (std::fabs(myPhiGrid(cell)) < myNarrowBand)
 				myPhiGrid.drawGridCell(renderer, cell);
@@ -25,27 +25,27 @@ void LevelSet::drawGrid(Renderer& renderer, bool doOnlyNarrowBand) const
 
 void LevelSet::drawMeshGrid(Renderer& renderer) const
 {
-	Transform xform(myPhiGrid.dx(), myPhiGrid.offset() + Vec2f(0.5) * myPhiGrid.dx());
+	Transform xform(myPhiGrid.dx(), myPhiGrid.offset() + Vec2d(.5, .5) * myPhiGrid.dx());
 	ScalarGrid<int> tempGrid(xform, myPhiGrid.size());
 	tempGrid.drawGrid(renderer);
 }
 
-void LevelSet::drawSupersampledValues(Renderer& renderer, float radius, int samples, float sampleSize) const
+void LevelSet::drawSupersampledValues(Renderer& renderer, double radius, int samples, double sampleSize) const
 {
 	myPhiGrid.drawSupersampledValues(renderer, radius, samples, sampleSize);
 }
-void LevelSet::drawNormals(Renderer& renderer, const Vec3f& colour, float length) const
+void LevelSet::drawNormals(Renderer& renderer, const Vec3d& colour, double length) const
 {
 	myPhiGrid.drawSampleGradients(renderer, colour, length);
 }
 
-void LevelSet::drawSurface(Renderer& renderer, const Vec3f& colour, float lineWidth) const
+void LevelSet::drawSurface(Renderer& renderer, const Vec3d& colour, double lineWidth) const
 {
 	EdgeMesh surface = buildMSMesh();
 	surface.drawMesh(renderer, colour, lineWidth);
 }
 
-void LevelSet::drawDCSurface(Renderer& renderer, const Vec3f& colour, float lineWidth) const
+void LevelSet::drawDCSurface(Renderer& renderer, const Vec3d& colour, double lineWidth) const
 {
 	EdgeMesh surface = buildDCMesh();
 	surface.drawMesh(renderer, colour, lineWidth);
@@ -55,14 +55,14 @@ void LevelSet::drawDCSurface(Renderer& renderer, const Vec3f& colour, float line
 // If the position falls outside of the narrow band, there isn't a defined gradient
 // to use. In this case, the original position will be returned.
 
-Vec2f LevelSet::findSurface(const Vec2f& worldPoint, int iterationLimit) const
+Vec2d LevelSet::findSurface(const Vec2d& worldPoint, int iterationLimit) const
 {
 	assert(iterationLimit >= 0);
 
-	float phi = myPhiGrid.biLerp(worldPoint);
+	double phi = myPhiGrid.biLerp(worldPoint);
 
-	float epsilon = 1E-2 * dx();
-	Vec2f tempPoint = worldPoint;
+	double epsilon = 1E-2 * dx();
+	Vec2d tempPoint = worldPoint;
 
 	int iterationCount = 0;
 	if (std::fabs(phi) < myNarrowBand)
@@ -78,21 +78,21 @@ Vec2f LevelSet::findSurface(const Vec2f& worldPoint, int iterationLimit) const
 	return tempPoint;
 }
 
-Vec2f LevelSet::findSurfaceIndex(const Vec2f& indexPoint, int iterationLimit) const
+Vec2d LevelSet::findSurfaceIndex(const Vec2d& indexPoint, int iterationLimit) const
 {
-	Vec2f worldPoint = indexToWorld(indexPoint);
+	Vec2d worldPoint = indexToWorld(indexPoint);
 	worldPoint = findSurface(worldPoint, iterationLimit);
 	return worldToIndex(worldPoint);
 }
 
-void LevelSet::reinit(bool rebuildWithFIM)
+void LevelSet::reinit()
 {
 	UniformGrid<VisitedCellLabels> reinitializedCells(size(), VisitedCellLabels::UNVISITED_CELL);
 
 	// Find the zero crossings, update their distances and flag as source cells
-	ScalarGrid<float> tempPhiGrid = myPhiGrid;
+	ScalarGrid<double> tempPhiGrid = myPhiGrid;
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, voxelCount()), [&](const tbb::blocked_range<int> &range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -100,32 +100,76 @@ void LevelSet::reinit(bool rebuildWithFIM)
 
 			// Check for a zero crossing
 			bool isAtZeroCrossing = false;
-			for (int axis = 0; axis < 2 && !isAtZeroCrossing; ++axis)
+
+			Vec2d distToZero = Vec2d(std::numeric_limits<double>::max(), std::numeric_limits<double>::max());
+
+			for (int axis : {0, 1})
 				for (int direction : {0, 1})
 				{
 					Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
-					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
-
-					if ((myPhiGrid(cell) <= 0 && myPhiGrid(adjacentCell) > 0) ||
-						(myPhiGrid(cell) > 0 && myPhiGrid(adjacentCell) <= 0))
+					if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis])
+					{
+						if (myPhiGrid(cell) > 0 && myIsBackgroundNegative)
+						{
+							distToZero[axis] = 0;
+							isAtZeroCrossing = true;
+						}
+						else if (myPhiGrid(cell) <= 0 && !myIsBackgroundNegative)
+						{
+							distToZero[axis] = 0;
+							isAtZeroCrossing = true;
+						}
+					}
+					else if ((myPhiGrid(cell) <= 0 && myPhiGrid(adjacentCell) > 0) ||
+								(myPhiGrid(cell) > 0 && myPhiGrid(adjacentCell) <= 0))
 					{
 						isAtZeroCrossing = true;
 
-						Vec2f worldPoint = indexToWorld(Vec2f(cell));
-						Vec2f interfacePoint = findSurface(worldPoint, 5);
+						// Compute length fraction to zero crossing
+						double theta = lengthFraction(myPhiGrid(cell), myPhiGrid(adjacentCell));
 
-						float distance = dist(worldPoint, interfacePoint);
+						if (myPhiGrid(cell) > 0)
+							theta = 1. - theta;
 
-						tempPhiGrid(cell) = myPhiGrid(cell) < 0. ? -distance : distance;
-						reinitializedCells(cell) = VisitedCellLabels::FINISHED_CELL;
+						assert(theta >= 0 && theta <= 1);
 
-						break;
+						distToZero[axis] = min(theta * dx(), distToZero[axis]);
 					}
 				}
 
+			if (isAtZeroCrossing)
+			{
+				if (distToZero[0] == 0 || distToZero[1] == 0)
+				{
+					tempPhiGrid(cell) = 0;
+				}
+				else
+				{
+					assert(distToZero[0] > 0 && distToZero[1] > 0);
+					if (distToZero[0] == std::numeric_limits<double>::max())
+					{
+						assert(distToZero[1] < std::numeric_limits<double>::max());
+						tempPhiGrid(cell) = distToZero[1];
+					}
+					else if (distToZero[1] == std::numeric_limits<double>::max())
+					{
+						assert(distToZero[0] < std::numeric_limits<double>::max());
+						tempPhiGrid(cell) = distToZero[0];
+					}
+					else
+					{
+						assert(distToZero[0] < std::numeric_limits<double>::max() &&
+								distToZero[1] < std::numeric_limits<double>::max());
+
+						tempPhiGrid(cell) = std::sqrt((distToZero[0] * distToZero[1]) / (std::pow(distToZero[0], 2) + std::pow(distToZero[1], 2)));
+					}
+				}
+
+				reinitializedCells(cell) = VisitedCellLabels::FINISHED_CELL;
+			}
 			// Set unvisited grid cells to background value, using old grid for inside/outside sign
-			if (!isAtZeroCrossing)
+			else
 			{
 				assert(reinitializedCells(cell) == VisitedCellLabels::UNVISITED_CELL);
 				tempPhiGrid(cell) = myPhiGrid(cell) < 0. ? -myNarrowBand : myNarrowBand;
@@ -133,222 +177,8 @@ void LevelSet::reinit(bool rebuildWithFIM)
 		}
 	});
 
-	//std::swap(myPhiGrid, tempPhiGrid);
-	myPhiGrid = tempPhiGrid;
-
-	if (rebuildWithFIM)
-		reinitFastIterative(reinitializedCells);
-	else
-		reinitFastMarching(reinitializedCells);
-}
-
-void LevelSet::reinitFastIterative(UniformGrid<VisitedCellLabels>& reinitializedCells)
-{
-	assert(reinitializedCells.size() == size());
-
-	//
-	// Before starting the iterations, we want to construct the active list of voxels
-	// to reinitialize.
-	//
-
-	tbb::enumerable_thread_specific<std::vector<Vec2i>> parallelActiveCellList;
-
-	tbb::parallel_for(tbb::blocked_range<int>(0, voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
-	{
-		std::vector<Vec2i>& localActiveCellList = parallelActiveCellList.local();
-
-		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-		{
-			Vec2i cell = reinitializedCells.unflatten(cellIndex);
-
-			if (reinitializedCells(cell) == VisitedCellLabels::FINISHED_CELL)
-			{
-				// Add neighbours to the list
-				for (int axis : {0, 1})
-					for (int direction : {0, 1})
-					{
-						Vec2i adjacentCell = cellToCell(cell, axis, direction);
-
-						if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
-
-						if (reinitializedCells(adjacentCell) == VisitedCellLabels::UNVISITED_CELL)
-						{
-							localActiveCellList.push_back(adjacentCell);
-							reinitializedCells(adjacentCell) = VisitedCellLabels::VISITED_CELL;
-						}
-					}
-			}
-		}
-	});
-
-	std::vector<Vec2i> activeCellList;
-	mergeLocalThreadVectors(activeCellList, parallelActiveCellList);
-
-	parallelActiveCellList.clear();
-
-	auto vecCompare = [](const Vec2i& a, const Vec2i& b) -> bool
-	{
-		if (a[0] < b[0]) return true;
-		else if (a[0] == b[0] && a[1] < b[1]) return true;
-		return false;
-	};
-
-	tbb::parallel_sort(activeCellList.begin(), activeCellList.end(), vecCompare);
-
-	float dx = myPhiGrid.dx();
-
-	// Now that the correct distances and signs have been recorded at the interface,
-	// it's important to flood fill that the signed distances outwards into the entire grid.
-	// We use the Eikonal equation here to build this outward.
-
-	auto solveEikonal = [&](const Vec2i& idx) -> float
-	{
-		float Ul = (idx[0] == 0) ? std::numeric_limits<float>::max() : myPhiGrid(idx[0] - 1, idx[1]);
-		float Ur = (idx[0] == myPhiGrid.size()[0] - 1) ? std::numeric_limits<float>::max() : myPhiGrid(idx[0] + 1, idx[1]);
-
-		float Ub = (idx[1] == 0) ? std::numeric_limits<float>::max() : myPhiGrid(idx[0], idx[1] - 1);
-		float Ut = (idx[1] == myPhiGrid.size()[1] - 1) ? std::numeric_limits<float>::max() : myPhiGrid(idx[0], idx[1] + 1);
-
-		float u = std::fabs(myPhiGrid(idx[0], idx[1]));
-
-		int count = 0;
-
-		float a = std::min(std::fabs(Ul), std::fabs(Ur));
-		if (u - a <= 0.) a = std::numeric_limits<float>::max();
-		else ++count;
-
-		float b = std::min(std::fabs(Ub), std::fabs(Ut));
-
-		if (u - b <= 0.) b = std::numeric_limits<float>::max();
-		else ++count;
-
-		if (a > b) std::swap(a, b);
-
-		if (count == 1) u = a + dx;
-		else if (count == 2)
-		{
-			float temp = -sqr(a) - sqr(b) + 2. * a * b + 2. * sqr(dx);
-			if (temp < 0.) u = a + dx;
-			else u = .5 * (a + b + sqrt(temp));
-			assert(std::isfinite(u));
-		}
-		// There shouldn't be a case where count is 0 but it seems to be happenning..
-
-		return u;
-
-	};
-
-	ScalarGrid<float> tempPhiGrid = myPhiGrid;
-
-	float tolerance = dx * 1E-5;
-	bool stillActiveCells = true;
-
-	int activeCellCount = activeCellList.size();
-
-	int iteration = 0;
-	int maxIterations = 5 * myNarrowBand / dx;
-
-	while (activeCellCount > 0 && iteration < maxIterations)
-	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount, tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
-		{
-			auto& localActiveCellList = parallelActiveCellList.local();
-
-			Vec2i oldCell(-1);
-
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-			{
-				Vec2i newCell = activeCellList[cellIndex];
-
-				if (oldCell == newCell)
-					continue;
-
-				oldCell = newCell;
-
-				assert(reinitializedCells(newCell) == VisitedCellLabels::VISITED_CELL);
-
-				float newPhi = solveEikonal(newCell);
-
-				// If we hit the narrow band, we don't need to make any changes
-				if (newPhi > myNarrowBand) continue;
-
-				tempPhiGrid(newCell) = myPhiGrid(newCell) < 0 ? -newPhi : newPhi;
-
-				// Check if new phi is converged
-				float oldPhi = myPhiGrid(newCell);
-
-				// If the cell is converged, load up the neighbours that aren't currently being VISITED
-				if (std::fabs(newPhi - std::fabs(oldPhi)) < tolerance)
-				{
-					for (int axis : {0, 1})
-						for (int direction : {0, 1})
-						{
-							Vec2i adjacentCell = cellToCell(newCell, axis, direction);
-
-							if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis]) continue;
-
-							if (reinitializedCells(adjacentCell) == VisitedCellLabels::UNVISITED_CELL)
-							{
-								float adjacentNewPhi = solveEikonal(adjacentCell);
-
-								if (adjacentNewPhi > myNarrowBand) continue;
-
-								// Check if new phi is less than the current value
-								float adjacentOldPhi = std::fabs(myPhiGrid(adjacentCell));
-
-								if ((adjacentNewPhi < adjacentOldPhi) && (std::fabs(adjacentNewPhi - adjacentOldPhi) > tolerance))
-								{
-									tempPhiGrid(adjacentCell) = myPhiGrid(adjacentCell) < 0 ? -adjacentNewPhi : adjacentNewPhi;
-
-									localActiveCellList.push_back(adjacentCell);
-								}
-							}
-
-						}
-				}
-				// If the cell hasn't converged, toss it back into the list
-				else
-					localActiveCellList.push_back(newCell);
-			}
-		});
-
-		// Turn off VISITED labels for current list
-		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount, tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
-		{
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-			{
-				Vec2i cell = activeCellList[cellIndex];
-				assert(reinitializedCells(cell) != VisitedCellLabels::FINISHED_CELL);
-				reinitializedCells(cell) = VisitedCellLabels::UNVISITED_CELL;
-			}
-		});
-
-		activeCellList.clear();
-
-		mergeLocalThreadVectors(activeCellList, parallelActiveCellList);
-
-		parallelActiveCellList.clear();
-
-		tbb::parallel_sort(activeCellList.begin(), activeCellList.end(), vecCompare);
-
-		activeCellCount = activeCellList.size();
-
-		// Turn on VISITED labels for new list
-		tbb::parallel_for(tbb::blocked_range<int>(0, activeCellCount, tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
-		{
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-			{
-				Vec2i cell = activeCellList[cellIndex];
-				assert(reinitializedCells(cell) != VisitedCellLabels::FINISHED_CELL);
-				reinitializedCells(cell) = VisitedCellLabels::VISITED_CELL;
-			}
-		});
-
-		//std::swap(tempPhiGrid, myPhiGrid);
-		myPhiGrid = tempPhiGrid;
-
-		++iteration;
-	}
+	std::swap(myPhiGrid, tempPhiGrid);
+	reinitFastMarching(reinitializedCells);
 }
 
 void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool doResizeGrid)
@@ -356,24 +186,24 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool doResizeGrid)
 	if (doResizeGrid)
 	{
 		// Determine the bounding box of the mesh to build the underlying grids
-		Vec2f minBoundingBox(std::numeric_limits<float>::max());
-		Vec2f maxBoundingBox(std::numeric_limits<float>::lowest());
+		AlignedBox2d bbox;
 
 		for (int vertexIndex = 0; vertexIndex < initialMesh.vertexCount(); ++vertexIndex)
-			updateMinAndMax(minBoundingBox, maxBoundingBox, initialMesh.vertex(vertexIndex).point());
+			bbox.extend(initialMesh.vertex(vertexIndex));
 
 		// Just for nice whole numbers, let's clamp the bounding box to be an integer
 		// offset in index space then bring it back to world space
-		float maxNarrowBand = 10.;
+		double maxNarrowBand = 10.;
 		maxNarrowBand = std::min(myNarrowBand / dx(), maxNarrowBand);
 
-		minBoundingBox = dx() * (Vec2f(floor(minBoundingBox / dx())) - 2 * Vec2f(maxNarrowBand));
-		maxBoundingBox = dx() * (Vec2f(ceil(maxBoundingBox / dx())) + 2 * Vec2f(maxNarrowBand));
+		AlignedBox2d scaledBBox;
+		scaledBBox.extend(dx() * (floor((bbox.max() / dx()).eval()) - 2. * Vec2d(maxNarrowBand, maxNarrowBand)));
+		scaledBBox.extend(dx() * (ceil((bbox.max() / dx()).eval()) + 2. * Vec2d(maxNarrowBand, maxNarrowBand)));
 
 		clear();
-		Transform xform(dx(), minBoundingBox);
+		Transform xform(dx(), scaledBBox.min());
 		// Since we know how big the mesh is, we know how big our grid needs to be (wrt to grid spacing)
-		myPhiGrid = ScalarGrid<float>(xform, Vec2i((maxBoundingBox - minBoundingBox) / dx()), myNarrowBand);
+		myPhiGrid = ScalarGrid<double>(xform, ((scaledBBox.max() - scaledBBox.max()) / dx()).cast<int>(), myNarrowBand);
 	}
 	else
 		myPhiGrid.resize(size(), myNarrowBand);
@@ -383,26 +213,27 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool doResizeGrid)
 	UniformGrid<VisitedCellLabels> reinitializedCells(size(), VisitedCellLabels::UNVISITED_CELL);
 	UniformGrid<int> meshCellParities(size(), 0);
 
-	for (const auto& edge : initialMesh.edges())
+	for (const Vec2i& edge : initialMesh.edges())
 	{
 		// It's easier to work in our index space and just scale the distance later.
-		const Vec2f& startPoint = worldToIndex(initialMesh.vertex(edge.vertex(0)).point());
-		const Vec2f& endPoint = worldToIndex(initialMesh.vertex(edge.vertex(1)).point());
+		const Vec2d& startPoint = worldToIndex(initialMesh.vertex(edge[0]));
+		const Vec2d& endPoint = worldToIndex(initialMesh.vertex(edge[1]));
 
 		// Record mesh-grid intersections between cell nodes (i.e. on grid edges)
 		// Since we only cast rays *left-to-right* for inside/outside checking, we don't
 		// need to know if the mesh intersects y-aligned grid edges
-		Vec2f vmin, vmax;
-		minAndMax(vmin, vmax, startPoint, endPoint);
+		AlignedBox2d vertBBox;
+		vertBBox.extend(startPoint);
+		vertBBox.extend(endPoint);
 
-		Vec2i edgeCeilMin = Vec2i(ceil(vmin));
-		Vec2i edgeFloorMin = Vec2i(floor(vmin)) - Vec2i(1);
-		Vec2i edgeFloorMax = Vec2i(floor(vmax));
+		Vec2i edgeCeilMin = ceil(vertBBox.min()).cast<int>();
+		Vec2i edgeFloorMin = floor(vertBBox.min()).cast<int>() - Vec2i::Ones();
+		Vec2i edgeFloorMax = floor(vertBBox.max()).cast<int>();
 
 		for (int j = edgeCeilMin[1]; j <= edgeFloorMax[1]; ++j)
 			for (int i = edgeFloorMax[0]; i >= edgeFloorMin[0]; --i)
 			{
-				Vec2f gridNode(i, j);
+				Vec2d gridNode(i, j);
 				IntersectionLabels intersectionResult = exactEdgeIntersect(startPoint, endPoint, gridNode, Axis::XAXIS);
 
 				// TODO: remove once test complete
@@ -466,7 +297,7 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool doResizeGrid)
 
 	// With the parity assigned, loop over the grid once more and label nodes that have an implied sign change
 	// with neighbouring nodes (this means parity goes from -'ve (and zero) to +'ve or vice versa).
-	forEachVoxelRange(Vec2i(1), size() - Vec2i(1), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Ones(), size() - Vec2i::Ones(), [&](const Vec2i& cell)
 	{
 		bool isCellInside = meshCellParities(cell) > 0;
 
@@ -485,39 +316,45 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool doResizeGrid)
 	// Loop over all the edges in the mesh. Level set grid cells labelled as VISITED will be
 	// updated with the distance to the surface if it happens to be shorter than the current
 	// distance to the surface.
-	for (const auto& edge : initialMesh.edges())
+	for (const Vec2i& edge : initialMesh.edges())
 	{
 		// Using the vertices of the edge, we can update distance values for cells
 		// within the bounding box of the mesh. It's easier to work in our index space
 		// and just scale the distance later.
-		const Vec2f& startPoint = worldToIndex(initialMesh.vertex(edge.vertex(0)).point());
-		const Vec2f& endPoint = worldToIndex(initialMesh.vertex(edge.vertex(1)).point());
+		const Vec2d& startPoint = worldToIndex(initialMesh.vertex(edge[0]));
+		const Vec2d& endPoint = worldToIndex(initialMesh.vertex(edge[1]));
 
 		// Build bounding box
+		AlignedBox2i edgeBbox;
+		edgeBbox.extend(floor(startPoint).cast<int>());
+		edgeBbox.extend(floor(endPoint).cast<int>());
 
-		Vec2i minBoundingBox = Vec2i(floor(minUnion(startPoint, endPoint))) - Vec2i(2);
-		minBoundingBox = maxUnion(minBoundingBox, Vec2i(0));
+		// Expand outward by 2-voxels in each direction
+		edgeBbox.extend(edgeBbox.min() - Vec2i(2, 2));
+		edgeBbox.extend(edgeBbox.max() + Vec2i(2, 2));
 
-		Vec2i maxBoundingBox = Vec2i(ceil(maxUnion(startPoint, endPoint))) + Vec2i(2);
-		Vec2i top = size() - Vec2i(1);
-		maxBoundingBox = minUnion(maxBoundingBox, top);
+		AlignedBox2i clampBBox;
+		clampBBox.extend(Vec2i::Zero());
+		clampBBox.extend(size() - Vec2i::Ones());
+
+		edgeBbox.clamp(clampBBox);
 
 		// Update distances to the mesh at grid cells within the bounding box
-		assert(minBoundingBox[0] >= 0 && minBoundingBox[1] >= 0 && maxBoundingBox[0] < size()[0] && maxBoundingBox[1] < size()[1]);
+		assert(edgeBbox.min()[0] >= 0 && edgeBbox.min()[1] >= 0 && edgeBbox.max()[0] < size()[0] && edgeBbox.max()[1] < size()[1]);
 
-		forEachVoxelRange(minBoundingBox, maxBoundingBox + Vec2i(1), [&](const Vec2i& cell)
+		forEachVoxelRange(edgeBbox.min(), edgeBbox.max() + Vec2i::Ones(), [&](const Vec2i& cell)
 		{
 			if (reinitializedCells(cell) != VisitedCellLabels::UNVISITED_CELL)
 			{
-				Vec2f cellPoint(cell);
-				Vec2f vec0 = cellPoint - startPoint;
-				Vec2f vec1 = endPoint - startPoint;
+				Vec2d cellPoint = cell.cast<double>();
+				Vec2d vec0 = cellPoint - startPoint;
+				Vec2d vec1 = endPoint - startPoint;
 
-				float s = dot(vec0, vec1) / dot(vec1, vec1); // Find projection along edge.
-				s = clamp(s, float(0), float(1));
+				double s = vec0.dot(vec1) / vec1.dot(vec1); // Find projection along edge.
+				s = std::clamp(s, double(0), double(1));
 
 				// Remove on-edge projection to get vector from closest point on edge to cell point.
-				float surfaceDistance = mag(vec0 - s * vec1) * dx();
+				double surfaceDistance = (vec0 - s * vec1).norm() * dx();
 
 				// Update if the distance to this edge is shorter than previous values.
 				if (surfaceDistance < std::fabs(myPhiGrid(cell)))
@@ -529,8 +366,7 @@ void LevelSet::initFromMesh(const EdgeMesh& initialMesh, bool doResizeGrid)
 		});
 	}
 
-	reinitFastIterative(reinitializedCells);
-	//reinitFastMarching(reinitializedCells);
+	reinitFastMarching(reinitializedCells);
 }
 
 void LevelSet::reinitFastMarching(UniformGrid<VisitedCellLabels>& reinitializedCells)
@@ -540,35 +376,51 @@ void LevelSet::reinitFastMarching(UniformGrid<VisitedCellLabels>& reinitializedC
 	// Now that the correct distances and signs have been recorded at the interface,
 	// it's important to flood fill that the signed distances outwards into the entire grid.
 	// We use the Eikonal equation here to build this outward
-	auto solveEikonal = [&](const Vec2i& cell) -> float
+	auto solveEikonal = [&](const Vec2i& cell) -> double
 	{
-		float max = std::numeric_limits<float>::max();
+		double max = std::numeric_limits<double>::max();
 
-		float U_bx = (cell[0] > 0) ? std::fabs(myPhiGrid(cell[0] - 1, cell[1])) : max;
-		float U_fx = (cell[0] < size()[0] - 1) ? std::fabs(myPhiGrid(cell[0] + 1, cell[1])) : max;
+		Vec2d Uaxis(max, max);
+		for (int axis : {0, 1})
+			for (int direction : {0, 1})
+			{
+				Vec2i adjacentCell = cellToCell(cell, axis, direction);
 
-		float U_by = (cell[1] > 0) ? std::fabs(myPhiGrid(cell[0], cell[1] - 1)) : max;
-		float U_fy = (cell[1] < size()[1] - 1) ? std::fabs(myPhiGrid(cell[0], cell[1] + 1)) : max;
+				if (adjacentCell[axis] < 0 || adjacentCell[axis] >= size()[axis])
+				{
+					assert(myPhiGrid(cell) > 0 && !myIsBackgroundNegative || myPhiGrid(cell) <= 0 && myIsBackgroundNegative);
+					Uaxis[axis] = max;
+				}
+				else
+				{
+					Uaxis[axis] = std::min(std::fabs(myPhiGrid(adjacentCell)), Uaxis[axis]);
+				}
+			}
 
-		float Uh = std::min(U_bx, U_fx);
-		float Uv = std::min(U_by, U_fy);
-		float U;
+		double U;
+
+		double Uh = Uaxis[0];
+		double Uv = Uaxis[1];
 		
 		if (std::fabs(Uh - Uv) >= dx())
 			U = std::min(Uh, Uv) + dx();
 		else
+		{
 			// Quadratic equation from the Eikonal
-			U = (Uh + Uv) / 2. + .5 * std::sqrt(pow(Uh + Uv, 2.) - 2. * (sqr(Uh) + sqr(Uv) - sqr(dx())));
+			double rootEntry = std::pow(Uh + Uv, 2) - 2. * (std::pow(Uh, 2) + std::pow(Uv, 2) - std::pow(dx(), 2));
+			assert(rootEntry >= 0);
+			U = .5 * (Uh + Uv) + .5 * std::sqrt(rootEntry);
+		}
 
-		return U;
+		return double(U);
 	};
 
 	// Load up the BFS queue with the unvisited cells next to the finished ones
-	using Node = std::pair<Vec2i, float>;
+	using Node = std::pair<Vec2i, double>;
 	auto cmp = [](const Node& a, const Node& b) -> bool { return std::fabs(a.second) > std::fabs(b.second); };
 	std::priority_queue<Node, std::vector<Node>, decltype(cmp)> marchingQ(cmp);
 
-	forEachVoxelRange(Vec2i(0), size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), size(), [&](const Vec2i& cell)
 	{
 		if (reinitializedCells(cell) == VisitedCellLabels::FINISHED_CELL)
 		{
@@ -581,7 +433,7 @@ void LevelSet::reinitFastMarching(UniformGrid<VisitedCellLabels>& reinitializedC
 
 					if (reinitializedCells(adjacentCell) == VisitedCellLabels::UNVISITED_CELL)
 					{
-						float dist = solveEikonal(adjacentCell);
+						double dist = solveEikonal(adjacentCell);
 						assert(dist >= 0);
 
 						myPhiGrid(adjacentCell) = (myPhiGrid(adjacentCell) < 0.) ? -dist : dist;
@@ -632,7 +484,7 @@ void LevelSet::reinitFastMarching(UniformGrid<VisitedCellLabels>& reinitializedC
 						foundFinishedCell = true;
 					else // If visited, then we'll update it
 					{
-						float dist = solveEikonal(adjacentCell);
+						double dist = solveEikonal(adjacentCell);
 						assert(dist >= 0);
 						
 						if (dist > myNarrowBand) dist = myNarrowBand;
@@ -665,11 +517,11 @@ void LevelSet::reinitFastMarching(UniformGrid<VisitedCellLabels>& reinitializedC
 
 EdgeMesh LevelSet::buildMSMesh() const
 {
-	std::vector<Vec2f> verts;
-	std::vector<Vec2i> edges;
+	VecVec2d verts;
+	VecVec2i edges;
 
 	// Run marching squares loop
-	forEachVoxelRange(Vec2i(0), size() - Vec2i(1), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), size() - Vec2i::Ones(), [&](const Vec2i& cell)
 	{
 		int mcKey = 0;
 
@@ -692,7 +544,7 @@ EdgeMesh LevelSet::buildMSMesh() const
 			Vec2i startNode = faceToNode(face, axis, 0);
 			Vec2i endNode = faceToNode(face, axis, 1);
 
-			Vec2f startPoint = interpolateInterface(startNode, endNode);
+			Vec2d startPoint = interpolateInterface(startNode, endNode);
 
 			// Find second vertex
 			edge = marchingSquaresTemplate[mcKey][edgeIndex + 1];
@@ -704,11 +556,11 @@ EdgeMesh LevelSet::buildMSMesh() const
 			startNode = faceToNode(face, axis, 0);
 			endNode = faceToNode(face, axis, 1);
 
-			Vec2f endPoint = interpolateInterface(startNode, endNode);
+			Vec2d endPoint = interpolateInterface(startNode, endNode);
 
 			// Store vertices
-			Vec2f worldStartPoint = indexToWorld(startPoint);
-			Vec2f worldEndPoint = indexToWorld(endPoint);
+			Vec2d worldStartPoint = indexToWorld(startPoint);
+			Vec2d worldEndPoint = indexToWorld(endPoint);
 
 			verts.push_back(worldStartPoint);
 			verts.push_back(worldEndPoint);
@@ -723,19 +575,19 @@ EdgeMesh LevelSet::buildMSMesh() const
 // Extract a mesh representation of the interface using dual contouring
 EdgeMesh LevelSet::buildDCMesh() const
 {
-	std::vector<Vec2f> verts;
-	std::vector<Vec2i> edges;
+	VecVec2d verts;
+	VecVec2i edges;
 
 	// Create grid to store index to dual contouring point. Note that phi is
 	// center sampled so the DC grid must be node sampled and one cell shorter
 	// in each dimension
-	UniformGrid<int> dcPointIndex(size() - Vec2i(1), -1);
+	UniformGrid<int> dcPointIndex(size() - Vec2i::Ones(), -1);
 
 	// Run dual contouring loop
-	forEachVoxelRange(Vec2i(0), dcPointIndex.size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), dcPointIndex.size(), [&](const Vec2i& cell)
 	{
-		std::vector<Vec2f> qefPoints;
-		std::vector<Vec2f> qefNormals;
+		VecVec2d qefPoints;
+		VecVec2d qefNormals;
 
 		for (int axis : {0, 1})
 			for (int direction : {0, 1})
@@ -749,11 +601,11 @@ EdgeMesh LevelSet::buildDCMesh() const
 					(myPhiGrid(backwardNode) > 0 && myPhiGrid(forwardNode) <= 0))
 				{
 					// Find interface point
-					Vec2f interfacePoint = interpolateInterface(backwardNode, forwardNode);
+					Vec2d interfacePoint = interpolateInterface(backwardNode, forwardNode);
 					qefPoints.push_back(interfacePoint);
 
 					// Find associated surface normal
-					Vec2f surfaceNormal = normal(indexToWorld(interfacePoint));
+					Vec2d surfaceNormal = normal(indexToWorld(interfacePoint));
 					qefNormals.push_back(surfaceNormal);
 				}
 			}
@@ -771,23 +623,23 @@ EdgeMesh LevelSet::buildDCMesh() const
 				A(pointIndex, 0) = qefNormals[pointIndex][0];
 				A(pointIndex, 1) = qefNormals[pointIndex][1];
 
-				b(pointIndex) = dot(qefNormals[pointIndex], qefPoints[pointIndex]);
+				b(pointIndex) = qefNormals[pointIndex].dot(qefPoints[pointIndex]);
 
 				pointCOM[0] += qefPoints[pointIndex][0];
 				pointCOM[1] += qefPoints[pointIndex][1];
 			}
 
-			pointCOM /= float(qefPoints.size());
+			pointCOM /= double(qefPoints.size());
 
 			Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
 			svd.setThreshold(1E-2);
 
 			Eigen::VectorXd dcPoint = pointCOM + svd.solve(b - A * pointCOM);
 
-			Vec2f vecCOM(pointCOM[0], pointCOM[1]);
+			Vec2d vecCOM(pointCOM[0], pointCOM[1]);
 
-			Vec2f boundingBoxMin = floor(vecCOM);
-			Vec2f boundingBoxMax = ceil(vecCOM);
+			Vec2d boundingBoxMin = floor(vecCOM);
+			Vec2d boundingBoxMax = ceil(vecCOM);
 
 			if (dcPoint[0] < boundingBoxMin[0] ||
 				dcPoint[1] < boundingBoxMin[1] ||
@@ -795,14 +647,14 @@ EdgeMesh LevelSet::buildDCMesh() const
 				dcPoint[1] > boundingBoxMax[1])
 				dcPoint = pointCOM;
 
-			verts.push_back(indexToWorld(Vec2f(dcPoint[0], dcPoint[1])));
-			dcPointIndex(cell) = verts.size() - 1;
+			verts.push_back(indexToWorld(Vec2d(dcPoint[0], dcPoint[1])));
+			dcPointIndex(cell) = int(verts.size()) - 1;
 		}
 	});
 
 	for (int axis : {0, 1})
 	{
-		Vec2i start(0); ++start[axis];
+		Vec2i start(0,0); ++start[axis];
 		Vec2i end(dcPointIndex.size());
 
 		forEachVoxelRange(start, end, [&](const Vec2i& face)
@@ -842,34 +694,29 @@ EdgeMesh LevelSet::buildDCMesh() const
 	return EdgeMesh(edges, verts);
 }
 
-Vec2f LevelSet::interpolateInterface(const Vec2i& startPoint, const Vec2i& endPoint) const
+Vec2d LevelSet::interpolateInterface(const Vec2i& startPoint, const Vec2i& endPoint) const
 {
 	assert((myPhiGrid(startPoint[0], startPoint[1]) <= 0 && myPhiGrid(endPoint[0], endPoint[1]) > 0) ||
 			(myPhiGrid(startPoint[0], startPoint[1]) > 0 && myPhiGrid(endPoint[0], endPoint[1]) <= 0));
 
-	//Find weight to zero isosurface
-	float s = myPhiGrid(startPoint) / (myPhiGrid(startPoint) - myPhiGrid(endPoint));
-	s = clamp(s, float(0), float(1));
+	double theta = lengthFraction(myPhiGrid(startPoint), myPhiGrid(endPoint));
+	
+	assert(theta >= 0 && theta <= 1);
 
-	Vec2f dx = Vec2f(endPoint) - Vec2f(startPoint);
-	return Vec2f(startPoint) + s * dx;
+	return startPoint.cast<double>() + theta * (endPoint - startPoint).cast<double>();
 }
 
 void LevelSet::unionSurface(const LevelSet& unionPhi)
 {
 	assert(isGridMatched(unionPhi));
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	forEachVoxelRange(Vec2i::Zero(), size(), [&](const Vec2i& cell)
 	{
-		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-		{
-			Vec2i cell = myPhiGrid.unflatten(cellIndex);
-			if (unionPhi(cell) < 2 * unionPhi.dx())
-				myPhiGrid(cell) = std::min(myPhiGrid(cell), unionPhi(cell));
-		}
+		if (std::fabs(unionPhi(cell)) < myNarrowBand)
+			myPhiGrid(cell) = std::min(myPhiGrid(cell), unionPhi(cell));
 	});
 
-	reinitMesh();
+	reinit();
 }
 
 }

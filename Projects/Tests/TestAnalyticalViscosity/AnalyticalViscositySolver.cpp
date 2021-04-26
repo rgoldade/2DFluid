@@ -1,5 +1,8 @@
 #include "AnalyticalViscositySolver.h"
 
+namespace FluidSim2D
+{
+
 void AnalyticalViscositySolver::drawGrid(Renderer& renderer) const
 {
 	myVelocityIndex.drawGrid(renderer);
@@ -11,13 +14,13 @@ void AnalyticalViscositySolver::drawActiveVelocity(Renderer& renderer) const
 	{
 		Vec2i size = myVelocityIndex.size(axis);
 
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		forEachVoxelRange(Vec2i::Zero(), size, [&](const Vec2i& face)
 		{
 			if (myVelocityIndex(face, axis) >= 0)
 			{
-				Vec2f worldPosition = myVelocityIndex.indexToWorld(Vec2f(face), axis);
+				Vec2d worldPosition = myVelocityIndex.indexToWorld(face.cast<double>(), axis);
 
-				renderer.addPoint(worldPosition, colours[axis], 5);
+				renderer.addPoint(worldPosition, colour_swatch[axis], 5);
 			}
 		});
 	}
@@ -34,7 +37,7 @@ unsigned AnalyticalViscositySolver::setVelocityIndex()
 	{
 		Vec2i size = myVelocityIndex.size(axis);
 
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		forEachVoxelRange(Vec2i::Zero(), size, [&](const Vec2i& face)
 		{
 			// Faces along the boundary are removed from the simulation
 			if (!(face[axis] == 0 || face[axis] == size[axis] - 1))
@@ -43,4 +46,6 @@ unsigned AnalyticalViscositySolver::setVelocityIndex()
 	}
 	// Returning index gives the number of velocity positions required for a linear system
 	return index;
+}
+
 }

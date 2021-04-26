@@ -1,5 +1,5 @@
-#ifndef GEOMETRIC_MULTIGRID_POISSONSOLVER_H
-#define GEOMETRIC_MULTIGRID_POISSONSOLVER_H
+#ifndef FLUIDSIM2D_GEOMETRIC_MULTIGRID_POISSONSOLVER_H
+#define FLUIDSIM2D_GEOMETRIC_MULTIGRID_POISSONSOLVER_H
 
 #include "Eigen/Sparse"
 
@@ -8,50 +8,44 @@
 #include "Utilities.h"
 #include "VectorGrid.h"
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
-
-using namespace Utilities;
 
 class GeometricMultigridPoissonSolver
 {
-	using StoreReal = double;
-	using SolveReal = double;
-	using Vector = std::conditional<std::is_same<SolveReal, float>::value, Eigen::VectorXf, Eigen::VectorXd>::type;
-
 	using MGCellLabels = GeometricMultigridOperators::CellLabels;
 
 public:
 	GeometricMultigridPoissonSolver() : myMGLevels(0) {};
 	GeometricMultigridPoissonSolver(const UniformGrid<MGCellLabels>& initialDomainLabels,
-									const VectorGrid<StoreReal>& boundaryWeights,
+									const VectorGrid<double>& boundaryWeights,
 									int mgLevels,
-									SolveReal dx);
+									double dx);
 
-	void applyMGVCycle(UniformGrid<StoreReal>& solutionVector,
-						const UniformGrid<StoreReal>& rhsVector,
+	void applyMGVCycle(UniformGrid<double>& solutionVector,
+						const UniformGrid<double>& rhsVector,
 						bool useInitialGuess = false);
 
 private:
 
 	std::vector<UniformGrid<MGCellLabels>> myDomainLabels;
-	std::vector<UniformGrid<StoreReal>> mySolutionGrids, myRHSGrids, myResidualGrids;
+	std::vector<UniformGrid<double>> mySolutionGrids, myRHSGrids, myResidualGrids;
 
-	std::vector<std::vector<Vec2i>> myBoundaryCells;
+	std::vector<VecVec2i> myBoundaryCells;
 
 	int myMGLevels;
 
-	VectorGrid<StoreReal> myFineBoundaryWeights;
+	VectorGrid<double> myFineBoundaryWeights;
 
-	std::vector<SolveReal> myDx;
+	std::vector<double> myDx;
 
 	int myBoundarySmootherIterations;
 	int myBoundarySmootherWidth;
 
 	UniformGrid<int> myDirectSolverIndices;
 
-	Eigen::SparseMatrix<SolveReal> mySparseMatrix;
-	Eigen::SimplicialCholesky<Eigen::SparseMatrix<SolveReal>> myCoarseSolver;
+	Eigen::SparseMatrix<double> mySparseMatrix;
+	Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> myCoarseSolver;
 };
 
 }

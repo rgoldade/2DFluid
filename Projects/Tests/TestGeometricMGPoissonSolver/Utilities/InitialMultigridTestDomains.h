@@ -9,10 +9,9 @@
 #include "UniformGrid.h"
 #include "Utilities.h"
 
-using namespace FluidSim2D::SimTools;
-using namespace FluidSim2D::SurfaceTrackers;
-using namespace FluidSim2D::Utilities;
-
+namespace FluidSim2D
+{
+	
 using GeometricMultigridOperators::CellLabels;
 
 template<typename StoreReal>
@@ -25,9 +24,8 @@ std::pair<Vec2i, int> buildExpandedDomain(UniformGrid<CellLabels> &expandedDomai
 																		baseDomainCellLabels);
 
 	Vec2i exteriorOffset = mgSettings.first;
-	int mgLevels = mgSettings.second;
 
-	Transform xform(baseBoundaryWeights.dx(), baseBoundaryWeights.xform().offset() - baseBoundaryWeights.dx() * Vec2f(exteriorOffset));
+	Transform xform(baseBoundaryWeights.dx(), baseBoundaryWeights.xform().offset() - baseBoundaryWeights.dx() * exteriorOffset.cast<double>());
 	expandedBoundaryWeights = VectorGrid<StoreReal>(xform, expandedDomainCellLabels.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 	// Build expanded boundary weights
 	for (int axis : {0,1})
@@ -49,18 +47,18 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
 						const bool useSolidSphere)
 {
 	assert(gridSize > 0);
-	domainCellLabels.resize(Vec2i(gridSize), CellLabels::EXTERIOR_CELL);
+	domainCellLabels.resize(Vec2i(gridSize, gridSize), CellLabels::EXTERIOR_CELL);
 
 	StoreReal dx = 1. / StoreReal(gridSize);
 
-	Transform xform(dx, Vec2f(0));
+	Transform xform(dx, Vec2d::Zero());
 
-	auto dirichletIsoSurface = [](const Vec2f &point)
+	auto dirichletIsoSurface = [](const Vec2d &point)
 	{
 		return point[0] - .5 + .25 * std::sin(2. * PI * point[1]);
 	};
 
-	LevelSet dirichletSurface(xform, Vec2i(gridSize));
+	LevelSet dirichletSurface(xform, Vec2i(gridSize, gridSize));
 
 	tbb::parallel_for(tbb::blocked_range<int>(0, dirichletSurface.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 	{
@@ -68,25 +66,25 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
 		{
 			Vec2i cell = dirichletSurface.unflatten(flatIndex);
 
-			Vec2f point = dirichletSurface.indexToWorld(Vec2f(cell));
+			Vec2d point = dirichletSurface.indexToWorld(cell.cast<double>());
 			dirichletSurface(cell) = dirichletIsoSurface(point);
 		}
 	});
 
-	auto sphereIsoSurface = [](const Vec2f &point)
+	auto sphereIsoSurface = [](const Vec2d &point) -> double
 	{
-		const Vec2f sphereCenter(.5);
+		const Vec2d sphereCenter(.5, .5);
 		constexpr StoreReal sphereRadius = .125;
 
-		return mag2(point - sphereCenter) - sqr(sphereRadius);
+		return (point - sphereCenter).norm() - std::pow(sphereRadius, 2);
 	};
 
-	boundaryWeights = VectorGrid<StoreReal>(xform, Vec2i(gridSize), 1, VectorGridSettings::SampleType::STAGGERED);
+	boundaryWeights = VectorGrid<StoreReal>(xform, Vec2i(gridSize, gridSize), 1, VectorGridSettings::SampleType::STAGGERED);
 
 	// Compute cut-cell weights
 	if (useSolidSphere)
 	{
-		LevelSet solidSphereSurface(xform, Vec2i(gridSize), 5);
+		LevelSet solidSphereSurface(xform, Vec2i(gridSize, gridSize), 5);
 
 		tbb::parallel_for(tbb::blocked_range<int>(0, gridSize * gridSize, tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
@@ -94,12 +92,12 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
 			{
 				Vec2i cell = solidSphereSurface.unflatten(flatIndex);
 
-				Vec2f point = solidSphereSurface.indexToWorld(Vec2f(cell));
+				Vec2d point = solidSphereSurface.indexToWorld(cell.cast<double>());
 				solidSphereSurface(cell) = sphereIsoSurface(point);
 			}
 		});
 
-		VectorGrid<float> cutCellWeights = computeCutCellWeights(solidSphereSurface, true);
+		VectorGrid<double> cutCellWeights = computeCutCellWeights(solidSphereSurface, true);
 
 		for (int axis : {0, 1})
 		{
@@ -118,7 +116,7 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
 	for (int axis : {0, 1})
 		for (int direction : {0, 1})
 		{
-			Vec2i startFace(0);
+			Vec2i startFace(0, 0);
 			Vec2i endFace = boundaryWeights.size(axis);
 
 			if (direction == 0)
@@ -152,7 +150,7 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
 			if (hasOpenFace)
 			{
 				// Sine wave for air-liquid boundary.
-				float sdf = dirichletSurface(cell);
+				double sdf = dirichletSurface(cell);
 				if (sdf > 0)
 					domainCellLabels(cell) = CellLabels::DIRICHLET_CELL;
 				else
@@ -162,7 +160,7 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
 		}
 	});
 
-	VectorGrid<float> ghostFluidWeights = computeGhostFluidWeights(dirichletSurface);
+	VectorGrid<double> ghostFluidWeights = computeGhostFluidWeights(dirichletSurface);
 	// Build ghost fluid weights
 	for (int axis : {0, 1})
 	{
@@ -190,14 +188,14 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
 					{
 						if (backwardLabel == CellLabels::DIRICHLET_CELL || forwardLabel == CellLabels::DIRICHLET_CELL)
 						{
-							float backwardSDF = dirichletSurface(backwardCell);
-							float forwardSDF = dirichletSurface(forwardCell);
+							double backwardSDF = dirichletSurface(backwardCell);
+							double forwardSDF = dirichletSurface(forwardCell);
 
 							// Sine wave for air-liquid boundary.
 							assert((backwardSDF > 0 && forwardSDF <= 0) || (backwardSDF <= 0 && forwardSDF > 0));
 
 							StoreReal theta = ghostFluidWeights(face, axis);
-							theta = clamp(theta, StoreReal(.01), StoreReal(1));
+							theta = std::clamp(theta, StoreReal(.01), StoreReal(1));
 
 							boundaryWeights(face, axis) /= theta;
 						}
@@ -269,7 +267,7 @@ void buildSimpleDomain(UniformGrid<CellLabels> &domainCellLabels,
 	});
 
 	// TODO: use proper ghost fluid and cut-cell weights
-	boundaryWeights = VectorGrid<StoreReal>(Transform(dx, Vec2f(0)), Vec2i(gridSize), 0, VectorGridSettings::SampleType::STAGGERED);
+	boundaryWeights = VectorGrid<StoreReal>(Transform(dx, Vec2d(0)), Vec2i(gridSize), 0, VectorGridSettings::SampleType::STAGGERED);
 
 	// Build boundary weights
 	for (int axis : {0, 1})
@@ -302,6 +300,8 @@ void buildSimpleDomain(UniformGrid<CellLabels> &domainCellLabels,
 			}
 		});
 	}
+}
+
 }
 
 #endif

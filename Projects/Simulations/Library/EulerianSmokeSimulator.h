@@ -20,66 +20,62 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::RegularGridSim
+namespace FluidSim2D
 {
-
-using namespace FluidSim2D::SimTools;
-using namespace FluidSim2D::SurfaceTrackers;
-using namespace FluidSim2D::Utilities;
 
 class EulerianSmokeSimulator
 {
 public:
-	EulerianSmokeSimulator(const Transform& xform, Vec2i size, float ambientTemperature = 300)
+	EulerianSmokeSimulator(const Transform& xform, Vec2i size, double ambientTemperature = 300)
 		: myXform(xform), myAmbientTemperature(ambientTemperature)
 	{
-		myVelocity = VectorGrid<float>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
-		mySolidVelocity = VectorGrid<float>(myXform, size, 0, VectorGridSettings::SampleType::STAGGERED);
+		myVelocity = VectorGrid<double>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
+		mySolidVelocity = VectorGrid<double>(myXform, size, 0, VectorGridSettings::SampleType::STAGGERED);
 
 		mySolidSurface = LevelSet(myXform, size, 5);
 
-		mySmokeDensity = ScalarGrid<float>(myXform, size, 0);
-		mySmokeTemperature = ScalarGrid<float>(myXform, size, myAmbientTemperature);
+		mySmokeDensity = ScalarGrid<double>(myXform, size, 0);
+		mySmokeTemperature = ScalarGrid<double>(myXform, size, myAmbientTemperature);
 
-		myOldPressure = ScalarGrid<float>(myXform, size, 0);
+		myOldPressure = ScalarGrid<double>(myXform, size, 0);
 	}
 
 	void setSolidSurface(const LevelSet& solidSurface);
-	void setSolidVelocity(const VectorGrid<float>& solidVelocity);
+	void setSolidVelocity(const VectorGrid<double>& solidVelocity);
 
-	void setFluidVelocity(const VectorGrid<float>& velocity);
-	void setSmokeSource(const ScalarGrid<float>& density, const ScalarGrid<float>& temperature);
+	void setFluidVelocity(const VectorGrid<double>& velocity);
+	void setSmokeSource(const ScalarGrid<double>& density, const ScalarGrid<double>& temperature);
 
-	void advectFluidMaterial(float dt, InterpolationOrder order);
-	void advectFluidVelocity(float dt, InterpolationOrder order);
-	void advectOldPressure(float dt, InterpolationOrder order);
+	void advectFluidMaterial(double dt, InterpolationOrder order);
+	void advectFluidVelocity(double dt, InterpolationOrder order);
+	void advectOldPressure(double dt, InterpolationOrder order);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
-	void runTimestep(float dt);
+	void runTimestep(double dt);
 
 	// Useful for CFL
-	float maxVelocityMagnitude() { return myVelocity.maxMagnitude(); }
+	double maxVelocityMagnitude() { return myVelocity.maxMagnitude(); }
 
 	// Rendering tools
 	void drawGrid(Renderer& renderer) const;
-	void drawFluidDensity(Renderer& renderer, float maxDensity);
-	void drawFluidVelocity(Renderer& renderer, float length) const;
+	void drawFluidDensity(Renderer& renderer, double maxDensity);
+	void drawFluidVelocity(Renderer& renderer, double length) const;
 
 	void drawSolidSurface(Renderer& renderer);
-	void drawSolidVelocity(Renderer& renderer, float length) const;
+	void drawSolidVelocity(Renderer& renderer, double length) const;
 
 private:
 
 	// Simulation containers
-	VectorGrid<float> myVelocity, mySolidVelocity;
+	VectorGrid<double> myVelocity, mySolidVelocity;
 	LevelSet mySolidSurface;
-	ScalarGrid<float> mySmokeDensity, mySmokeTemperature;
+	ScalarGrid<double> mySmokeDensity, mySmokeTemperature;
 
-	float myAmbientTemperature;
+	double myAmbientTemperature;
 
 	Transform myXform;
 
-	ScalarGrid<float> myOldPressure;
+	ScalarGrid<double> myOldPressure;
 };
 
 }

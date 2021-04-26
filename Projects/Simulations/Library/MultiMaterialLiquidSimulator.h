@@ -21,17 +21,13 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::RegularGridSim
+namespace FluidSim2D
 {
-
-using namespace FluidSim2D::SimTools;
-using namespace FluidSim2D::SurfaceTrackers;
-using namespace FluidSim2D::Utilities;
 
 class MultiMaterialLiquidSimulator
 {
 public:
-	MultiMaterialLiquidSimulator(const Transform& xform, Vec2i size, int materials, float narrowBand = 5.)
+	MultiMaterialLiquidSimulator(const Transform& xform, Vec2i size, int materials, double narrowBand = 5.)
 		: myXform(xform)
 		, myGridSize(size)
 		, myMaterialCount(materials)
@@ -42,31 +38,31 @@ public:
 		myFluidDensities.resize(myMaterialCount);
 
 		for (int i = 0; i < myMaterialCount; ++i)
-			myFluidVelocities[i] = VectorGrid<float>(xform, size, 0, VectorGridSettings::SampleType::STAGGERED);
+			myFluidVelocities[i] = VectorGrid<double>(xform, size, 0, VectorGridSettings::SampleType::STAGGERED);
 
 		for (int i = 0; i < myMaterialCount; ++i)
 			myFluidSurfaces[i] = LevelSet(xform, size, narrowBand);
 
 		mySolidSurface = LevelSet(myXform, size, narrowBand);
 
-		myOldPressure = ScalarGrid<float>(myXform, size, 0);
+		myOldPressure = ScalarGrid<double>(myXform, size, 0);
 	}
 
 	template<typename ForceSampler>
-	void addForce(float dt, int material, const ForceSampler& force);
+	void addForce(double dt, int material, const ForceSampler& force);
 
-	void addForce(float dt, int material, const Vec2f& force);
+	void addForce(double dt, int material, const Vec2d& force);
 
-	void advectFluidSurfaces(float dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
-	void advectFluidVelocities(float dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
+	void advectFluidSurfaces(double dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
+	void advectFluidVelocities(double dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
-	void runTimestep(float dt, Renderer& renderer, int frame = 0);
+	void runTimestep(double dt);
 
 	// Useful for CFL
-	float maxVelocityMagnitude() const
+	double maxVelocityMagnitude() const
 	{
-		float maxVelocity = 0;
+		double maxVelocity = 0;
 		for (int i = 0; i < myMaterialCount; ++i)
 			maxVelocity = std::max(maxVelocity, myFluidVelocities[i].maxMagnitude());
 		return maxVelocity;
@@ -74,7 +70,7 @@ public:
 
 	void setSolidSurface(const LevelSet& solidSurface);
 
-	void setMaterial(const LevelSet& surface, float density, int material)
+	void setMaterial(const LevelSet& surface, double density, int material)
 	{
 		assert(material < myMaterialCount);
 
@@ -83,8 +79,8 @@ public:
 		myFluidDensities[material] = density;
 	}
 
-	void setMaterial(const LevelSet& surface, const VectorGrid<float>& velocity,
-		float density, int material)
+	void setMaterial(const LevelSet& surface, const VectorGrid<double>& velocity,
+		double density, int material)
 	{
 		assert(material < myMaterialCount);
 
@@ -98,14 +94,14 @@ public:
 	}
 
 	void drawMaterialSurface(Renderer& renderer, int material);
-	void drawMaterialVelocity(Renderer& renderer, float length, int material) const;
+	void drawMaterialVelocity(Renderer& renderer, double length, int material) const;
 	void drawSolidSurface(Renderer& renderer);
 
 private:
 
-	std::vector<VectorGrid<float>> myFluidVelocities;
+	std::vector<VectorGrid<double>> myFluidVelocities;
 	std::vector<LevelSet> myFluidSurfaces;
-	std::vector<float> myFluidDensities;
+	std::vector<double> myFluidDensities;
 
 	LevelSet mySolidSurface;
 
@@ -113,7 +109,7 @@ private:
 	Transform myXform;
 	int myMaterialCount;
 
-	ScalarGrid<float> myOldPressure;
+	ScalarGrid<double> myOldPressure;
 };
 
 }

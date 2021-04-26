@@ -1,23 +1,23 @@
 #include "GeometricMultigridPoissonSolver.h"
 
-#include "tbb/tbb.h"
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_for.h"
 
 #include "GeometricMultigridOperators.h"
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
 
 using MGCellLabels = GeometricMultigridOperators::CellLabels;
 
-template<typename Vector, typename StoreReal>
-void copyGridToVector(Vector& vector,
-						const UniformGrid<StoreReal>& vectorGrid,
+void copyGridToVector(VectorXd& vector,
+						const UniformGrid<double>& vectorGrid,
 						const UniformGrid<int>& solverIndices,
 						const UniformGrid<MGCellLabels>& cellLabels)
 {
 	assert(vectorGrid.size() == solverIndices.size() && solverIndices.size() == cellLabels.size());
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, cellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, cellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -41,16 +41,15 @@ void copyGridToVector(Vector& vector,
 	});
 }
 
-template<typename Vector, typename StoreReal>
-void copyVectorToGrid(UniformGrid<StoreReal>& vectorGrid,
-						const Vector& vector,
+void copyVectorToGrid(UniformGrid<double>& vectorGrid,
+						const VectorXd& vector,
 						const UniformGrid<int>& solverIndices,
 						const UniformGrid<MGCellLabels>& cellLabels)
 {
 	assert(vectorGrid.size() == solverIndices.size() &&
 		solverIndices.size() == cellLabels.size());
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, cellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, cellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -75,9 +74,9 @@ void copyVectorToGrid(UniformGrid<StoreReal>& vectorGrid,
 }
 
 GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGrid<MGCellLabels>& initialDomainLabels,
-																	const VectorGrid<StoreReal>& boundaryWeights,
+																	const VectorGrid<double>& boundaryWeights,
 																	int mgLevels,
-																	SolveReal dx)
+																	double dx)
 																	: myMGLevels(mgLevels)
 																	, myBoundarySmootherWidth(3)
 																	, myBoundarySmootherIterations(3)
@@ -100,13 +99,13 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 	{
 		bool hasSolvableCell = false;
 
-		tbb::parallel_for(tbb::blocked_range<int>(0, testGrid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, testGrid.voxelCount()), [&](const tbb::blocked_range<int>& range)
 		{
 			if (hasSolvableCell) return;
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
 				Vec2i cell = testGrid.unflatten(cellIndex);
-
+			
 				if (testGrid(cell) == MGCellLabels::INTERIOR_CELL ||
 					testGrid(cell) == MGCellLabels::BOUNDARY_CELL)
 					hasSolvableCell = true;
@@ -117,7 +116,7 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 	};
 
 	assert(checkSolvableCell(myDomainLabels[0]));
-	assert(GeometricMultigridOperators::unitTestBoundaryCells<StoreReal>(myDomainLabels[0], &myFineBoundaryWeights));
+	assert(GeometricMultigridOperators::unitTestBoundaryCells(myDomainLabels[0], &myFineBoundaryWeights));
 	assert(GeometricMultigridOperators::unitTestExteriorCells(myDomainLabels[0]));
 
 	// Precompute the coarsening strategy. Cap level if there are no longer interior cells
@@ -132,7 +131,7 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 			break;
 		}
 		assert(GeometricMultigridOperators::unitTestCoarsening(myDomainLabels[level], myDomainLabels[level - 1]));
-		assert(GeometricMultigridOperators::unitTestBoundaryCells<StoreReal>(myDomainLabels[level]));
+		assert(GeometricMultigridOperators::unitTestBoundaryCells(myDomainLabels[level]));
 		assert(GeometricMultigridOperators::unitTestExteriorCells(myDomainLabels[0]));
 	}
 
@@ -149,9 +148,9 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 
 	for (int level = 0; level < myMGLevels; ++level)
 	{
-		mySolutionGrids[level] = UniformGrid<StoreReal>(myDomainLabels[level].size());
-		myRHSGrids[level] = UniformGrid<StoreReal>(myDomainLabels[level].size());
-		myResidualGrids[level] = UniformGrid<StoreReal>(myDomainLabels[level].size());
+		mySolutionGrids[level] = UniformGrid<double>(myDomainLabels[level].size());
+		myRHSGrids[level] = UniformGrid<double>(myDomainLabels[level].size());
+		myResidualGrids[level] = UniformGrid<double>(myDomainLabels[level].size());
 	}
 
 	myBoundaryCells.resize(myMGLevels);
@@ -165,7 +164,7 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 
 		myDirectSolverIndices = UniformGrid<int>(coarsestSize, -1 /* unlabelled cell marker */);
 
-		forEachVoxelRange(Vec2i(0), coarsestSize, [&](const Vec2i& cell)
+		forEachVoxelRange(Vec2i::Zero(), coarsestSize, [&](const Vec2i& cell)
 		{
 			if (myDomainLabels[myMGLevels - 1](cell) == MGCellLabels::INTERIOR_CELL ||
 				myDomainLabels[myMGLevels - 1](cell) == MGCellLabels::BOUNDARY_CELL)
@@ -173,10 +172,10 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 		});
 
 		// Build rows
-		std::vector<Eigen::Triplet<SolveReal>> sparseElements;
+		std::vector<Eigen::Triplet<double>> sparseElements;
 
-		SolveReal gridScale = 1. / sqr(myDx[myMGLevels - 1]);
-		forEachVoxelRange(Vec2i(0), coarsestSize, [&](const Vec2i& cell)
+		double gridScale = 1. / std::pow(myDx[myMGLevels - 1], 2);
+		forEachVoxelRange(Vec2i::Zero(), coarsestSize, [&](const Vec2i& cell)
 		{
 			if (myDomainLabels[myMGLevels - 1](cell) == MGCellLabels::INTERIOR_CELL ||
 				myDomainLabels[myMGLevels - 1](cell) == MGCellLabels::BOUNDARY_CELL)
@@ -209,7 +208,7 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 		});
 
 		// Solve system
-		mySparseMatrix = Eigen::SparseMatrix<SolveReal>(interiorCellCount, interiorCellCount);
+		mySparseMatrix = Eigen::SparseMatrix<double>(interiorCellCount, interiorCellCount);
 		mySparseMatrix.setFromTriplets(sparseElements.begin(), sparseElements.end());
 		mySparseMatrix.makeCompressed();
 
@@ -218,8 +217,8 @@ GeometricMultigridPoissonSolver::GeometricMultigridPoissonSolver(const UniformGr
 	}
 }
 
-void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal>& fineSolutionGrid,
-													const UniformGrid<StoreReal>& fineRHSGrid,
+void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<double>& fineSolutionGrid,
+													const UniformGrid<double>& fineRHSGrid,
 													bool useInitialGuess)
 {
 	using namespace GeometricMultigridOperators;
@@ -234,46 +233,46 @@ void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal>& fine
 	{
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations; ++boundaryIteration)
 		{
-			boundaryJacobiPoissonSmoother<SolveReal>(fineSolutionGrid,
-														fineRHSGrid,
-														myDomainLabels[0],
-														myBoundaryCells[0],
-														myDx[0],
-														&myFineBoundaryWeights);
+			boundaryJacobiPoissonSmoother(fineSolutionGrid,
+											fineRHSGrid,
+											myDomainLabels[0],
+											myBoundaryCells[0],
+											myDx[0],
+											&myFineBoundaryWeights);
 		}
 
 		// Interior smoothing
-		interiorJacobiPoissonSmoother<SolveReal>(fineSolutionGrid,
-													fineRHSGrid,
-													myDomainLabels[0],
-													myDx[0],
-													&myFineBoundaryWeights);
+		interiorJacobiPoissonSmoother(fineSolutionGrid,
+										fineRHSGrid,
+										myDomainLabels[0],
+										myDx[0],
+										&myFineBoundaryWeights);
 
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations; ++boundaryIteration)
 		{
-			boundaryJacobiPoissonSmoother<SolveReal>(fineSolutionGrid,
-														fineRHSGrid,
-														myDomainLabels[0],
-														myBoundaryCells[0],
-														myDx[0],
-														&myFineBoundaryWeights);
+			boundaryJacobiPoissonSmoother(fineSolutionGrid,
+											fineRHSGrid,
+											myDomainLabels[0],
+											myBoundaryCells[0],
+											myDx[0],
+											&myFineBoundaryWeights);
 		}
 
 		myResidualGrids[0].reset(0);
 
-		computePoissonResidual<SolveReal>(myResidualGrids[0],
-											fineSolutionGrid,
-											fineRHSGrid,
-											myDomainLabels[0],
-											myDx[0],
-											&myFineBoundaryWeights);
+		computePoissonResidual(myResidualGrids[0],
+								fineSolutionGrid,
+								fineRHSGrid,
+								myDomainLabels[0],
+								myDx[0],
+								&myFineBoundaryWeights);
 
 		myRHSGrids[1].reset(0);
 
-		downsample<SolveReal>(myRHSGrids[1],
-								myResidualGrids[0],
-								myDomainLabels[1],
-								myDomainLabels[0]);
+		downsample(myRHSGrids[1],
+					myResidualGrids[0],
+					myDomainLabels[1],
+					myDomainLabels[0]);
 	}
 
 	// Down-stroke of the v-cycle
@@ -283,53 +282,53 @@ void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal>& fine
 
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations * (1 << level); ++boundaryIteration)
 		{
-			boundaryJacobiPoissonSmoother<SolveReal>(mySolutionGrids[level],
-														myRHSGrids[level],
-														myDomainLabels[level],
-														myBoundaryCells[level],
-														myDx[level]);
+			boundaryJacobiPoissonSmoother(mySolutionGrids[level],
+											myRHSGrids[level],
+											myDomainLabels[level],
+											myBoundaryCells[level],
+											myDx[level]);
 		}
 
 		// Interior smoothing
-		interiorJacobiPoissonSmoother<SolveReal>(mySolutionGrids[level],
-													myRHSGrids[level],
-													myDomainLabels[level],
-													myDx[level]);
+		interiorJacobiPoissonSmoother(mySolutionGrids[level],
+										myRHSGrids[level],
+										myDomainLabels[level],
+										myDx[level]);
 
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations * (1 << level); ++boundaryIteration)
 		{
-			boundaryJacobiPoissonSmoother<SolveReal>(mySolutionGrids[level],
-														myRHSGrids[level],
-														myDomainLabels[level],
-														myBoundaryCells[level],
-														myDx[level]);
+			boundaryJacobiPoissonSmoother(mySolutionGrids[level],
+											myRHSGrids[level],
+											myDomainLabels[level],
+											myBoundaryCells[level],
+											myDx[level]);
 		}
 
 		myResidualGrids[level].reset(0);
 
 		// Compute residual to restrict to the next level
-		computePoissonResidual<SolveReal>(myResidualGrids[level],
-											mySolutionGrids[level],
-											myRHSGrids[level],
-											myDomainLabels[level],
-											myDx[level]);
+		computePoissonResidual(myResidualGrids[level],
+								mySolutionGrids[level],
+								myRHSGrids[level],
+								myDomainLabels[level],
+								myDx[level]);
 
 		myRHSGrids[level + 1].reset(0);
 
-		downsample<SolveReal>(myRHSGrids[level + 1],
-								myResidualGrids[level],
-								myDomainLabels[level + 1],
-								myDomainLabels[level]);
+		downsample(myRHSGrids[level + 1],
+					myResidualGrids[level],
+					myDomainLabels[level + 1],
+					myDomainLabels[level]);
 	}
 
-	Vector coarseRHSVector = Vector::Zero(mySparseMatrix.rows());
+	VectorXd coarseRHSVector = VectorXd::Zero(mySparseMatrix.rows());
 	
 	copyGridToVector(coarseRHSVector,
 						myRHSGrids[myMGLevels - 1],
 						myDirectSolverIndices,
 						myDomainLabels[myMGLevels - 1]);
 
-	Vector directSolution = myCoarseSolver.solve(coarseRHSVector);
+	VectorXd directSolution = myCoarseSolver.solve(coarseRHSVector);
 
 	mySolutionGrids[myMGLevels - 1].reset(0);
 	
@@ -341,50 +340,50 @@ void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal>& fine
 	// Up-stroke of the v-cycle
 	for (int level = myMGLevels - 2; level >= 1; --level)
 	{
-		upsampleAndAdd<SolveReal>(mySolutionGrids[level],
-									mySolutionGrids[level + 1],
-									myDomainLabels[level],
-									myDomainLabels[level + 1]);
+		upsampleAndAdd(mySolutionGrids[level],
+						mySolutionGrids[level + 1],
+						myDomainLabels[level],
+						myDomainLabels[level + 1]);
 
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations * (1 << level); ++boundaryIteration)
 		{
-			boundaryJacobiPoissonSmoother<SolveReal>(mySolutionGrids[level],
-														myRHSGrids[level],
-														myDomainLabels[level],
-														myBoundaryCells[level],
-														myDx[level]);
+			boundaryJacobiPoissonSmoother(mySolutionGrids[level],
+											myRHSGrids[level],
+											myDomainLabels[level],
+											myBoundaryCells[level],
+											myDx[level]);
 		}
 
-		interiorJacobiPoissonSmoother<SolveReal>(mySolutionGrids[level],
-													myRHSGrids[level],
-													myDomainLabels[level],
-													myDx[level]);
+		interiorJacobiPoissonSmoother(mySolutionGrids[level],
+										myRHSGrids[level],
+										myDomainLabels[level],
+										myDx[level]);
 
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations * (1 << level); ++boundaryIteration)
 		{
-			boundaryJacobiPoissonSmoother<SolveReal>(mySolutionGrids[level],
-														myRHSGrids[level],
-														myDomainLabels[level],
-														myBoundaryCells[level],
-														myDx[level]);
+			boundaryJacobiPoissonSmoother(mySolutionGrids[level],
+											myRHSGrids[level],
+											myDomainLabels[level],
+											myBoundaryCells[level],
+											myDx[level]);
 		}
 	}
 
 	// Apply fine-level smoother
 	{
-		upsampleAndAdd<SolveReal>(fineSolutionGrid,
-									mySolutionGrids[1],
-									myDomainLabels[0],
-									myDomainLabels[1]);
+		upsampleAndAdd(fineSolutionGrid,
+						mySolutionGrids[1],
+						myDomainLabels[0],
+						myDomainLabels[1]);
 
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations; ++boundaryIteration)
 		{
-			boundaryJacobiPoissonSmoother<SolveReal>(fineSolutionGrid,
-														fineRHSGrid,
-														myDomainLabels[0],
-														myBoundaryCells[0],
-														myDx[0],
-														&myFineBoundaryWeights);
+			boundaryJacobiPoissonSmoother(fineSolutionGrid,
+											fineRHSGrid,
+											myDomainLabels[0],
+											myBoundaryCells[0],
+											myDx[0],
+											&myFineBoundaryWeights);
 		}
 
 		interiorJacobiPoissonSmoother(fineSolutionGrid,
@@ -395,12 +394,12 @@ void GeometricMultigridPoissonSolver::applyMGVCycle(UniformGrid<StoreReal>& fine
 
 		for (int boundaryIteration = 0; boundaryIteration < myBoundarySmootherIterations; ++boundaryIteration)
 		{
-			boundaryJacobiPoissonSmoother<SolveReal>(fineSolutionGrid,
-														fineRHSGrid,
-														myDomainLabels[0],
-														myBoundaryCells[0],
-														myDx[0],
-														&myFineBoundaryWeights);
+			boundaryJacobiPoissonSmoother(fineSolutionGrid,
+											fineRHSGrid,
+											myDomainLabels[0],
+											myBoundaryCells[0],
+											myDx[0],
+											&myFineBoundaryWeights);
 		}
 	}
 }

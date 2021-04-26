@@ -1,39 +1,34 @@
-#ifndef LIBRARY_GEOMETRIC_CONJUGATE_GRADIENT_SOLVER_H
-#define LIBRARY_GEOMETRIC_CONJUGATE_GRADIENT_SOLVER_H
+#ifndef FLUIDSIM2D_GEOMETRIC_CONJUGATE_GRADIENT_SOLVER_H
+#define FLUIDSIM2D_GEOMETRIC_CONJUGATE_GRADIENT_SOLVER_H
 
 #include "GeometricMultigridOperators.h"
 #include "UniformGrid.h"
 #include "Utilities.h"
 #include "VectorGrid.h"
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
-
-using namespace Utilities;
 
 template<typename MatrixVectorMultiplyFunctor,
 			typename PreconditionerFunctor,
 			typename DotProductFunctor,
 			typename SquaredL2NormFunctor,
 			typename AddToVectorFunctor,
-			typename AddScaledVectorFunctor,
-			typename StoreReal>
-void solveGeometricConjugateGradient(UniformGrid<StoreReal>& solutionGrid,
-										const UniformGrid<StoreReal>& rhsGrid,
+			typename AddScaledVectorFunctor>
+void solveGeometricConjugateGradient(UniformGrid<double>& solutionGrid,
+										const UniformGrid<double>& rhsGrid,
 										const MatrixVectorMultiplyFunctor& matrixVectorMultiplyFunctor,
 										const PreconditionerFunctor& preconditionerFunctor,
 										const DotProductFunctor& dotProductFunctor,
 										const SquaredL2NormFunctor& squaredNormFunctor,
 										const AddToVectorFunctor& addToVectorFunctor,
 										const AddScaledVectorFunctor& addScaledVectorFunctor,
-										const StoreReal tolerance,
+										const double tolerance,
 										const int maxIterations)
 {
-	using SolveReal = double;
-
 	assert(solutionGrid.size() == rhsGrid.size());
 
-	SolveReal rhsNorm2 = squaredNormFunctor(rhsGrid);
+	double rhsNorm2 = squaredNormFunctor(rhsGrid);
 	if (rhsNorm2 == 0)
 	{
 		std::cout << "RHS is zero. Nothing to solve" << std::endl;
@@ -41,13 +36,13 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal>& solutionGrid,
 	}
 
 	// Build initial residual vector using an initial guess
-	UniformGrid<StoreReal> residualGrid(solutionGrid.size(), 0);
+	UniformGrid<double> residualGrid(solutionGrid.size(), 0);
 
 	matrixVectorMultiplyFunctor(residualGrid, solutionGrid);
 	addScaledVectorFunctor(residualGrid, rhsGrid, residualGrid, -1);
 
-	SolveReal residualNorm2 = squaredNormFunctor(residualGrid);
-	SolveReal threshold = SolveReal(tolerance) * SolveReal(tolerance) * rhsNorm2;
+	double residualNorm2 = squaredNormFunctor(residualGrid);
+	double threshold = double(tolerance) * double(tolerance) * rhsNorm2;
 
 	if (residualNorm2 < threshold)
 	{
@@ -56,15 +51,15 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal>& solutionGrid,
 	}
 
 	// Apply preconditioner for initial search direction
-	UniformGrid<StoreReal> pGrid(solutionGrid.size(), 0);
+	UniformGrid<double> pGrid(solutionGrid.size(), 0);
 
 	preconditionerFunctor(pGrid, residualGrid);
 
-	SolveReal absNew;
+	double absNew;
 	absNew = dotProductFunctor(pGrid, residualGrid);
 
-	UniformGrid<StoreReal> zGrid(solutionGrid.size(), 0);
-	UniformGrid<StoreReal> tempGrid(solutionGrid.size(), 0);
+	UniformGrid<double> zGrid(solutionGrid.size(), 0);
+	UniformGrid<double> tempGrid(solutionGrid.size(), 0);
 
 	int iteration = 0;
 	for (; iteration < maxIterations; ++iteration)
@@ -74,7 +69,7 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal>& solutionGrid,
 		// Matrix-vector multiplication
 		matrixVectorMultiplyFunctor(tempGrid, pGrid);
 
-		SolveReal alpha;
+		double alpha;
 		alpha = absNew / dotProductFunctor(pGrid, tempGrid);
 
 		// Update solution
@@ -92,8 +87,8 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal>& solutionGrid,
 
 		preconditionerFunctor(zGrid, residualGrid);
 
-		SolveReal absOld = absNew;
-		SolveReal beta;
+		double absOld = absNew;
+		double beta;
 
 		absNew = dotProductFunctor(zGrid, residualGrid);
 		beta = absNew / absOld;
@@ -102,7 +97,7 @@ void solveGeometricConjugateGradient(UniformGrid<StoreReal>& solutionGrid,
 	}
 
 	std::cout << "Iterations: " << iteration << std::endl;
-	SolveReal error = std::sqrt(residualNorm2 / rhsNorm2);
+	double error = std::sqrt(residualNorm2 / rhsNorm2);
 	std::cout << "Drifted relative L2 Error: " << error << std::endl;
 
 	// Recompute residual

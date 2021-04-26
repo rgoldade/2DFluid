@@ -1,5 +1,5 @@
-#ifndef LIBRARY_PRESSURE_PROJECTION_H
-#define LIBRARY_PRESSURE_PROJECTION_H
+#ifndef FLUIDSIM2D_PRESSURE_PROJECTION_H
+#define FLUIDSIM2D_PRESSURE_PROJECTION_H
 
 #include "LevelSet.h"
 #include "Renderer.h"
@@ -17,11 +17,8 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
-
-using namespace Utilities;
-using namespace SurfaceTrackers;
 
 class PressureProjection
 {
@@ -29,13 +26,13 @@ class PressureProjection
 public:
 	// For variational solve, surface should be extrapolated into the solid boundary
 	PressureProjection(const LevelSet& surface,
-						const VectorGrid<float>& cutCellWeights,
-						const VectorGrid<float>& ghostFluidWeights,
-						const VectorGrid<float>& solidVelocity);
+						const VectorGrid<double>& cutCellWeights,
+						const VectorGrid<double>& ghostFluidWeights,
+						const VectorGrid<double>& solidVelocity);
 
-	void project(VectorGrid<float>& velocity);
+	void project(VectorGrid<double>& velocity);
 
-	void setInitialGuess(const ScalarGrid<float>& initialGuessPressure)
+	void setInitialGuess(const ScalarGrid<double>& initialGuessPressure)
 	{
 		assert(mySurface.isGridMatched(initialGuessPressure));
 		myUseInitialGuessPressure = true;
@@ -47,7 +44,7 @@ public:
 		myUseInitialGuessPressure = false;
 	}
 
-	ScalarGrid<float> getPressureGrid()
+	ScalarGrid<double> getPressureGrid()
 	{
 		return myPressure;
 	}
@@ -61,18 +58,18 @@ public:
 
 private:
 
-	const VectorGrid<float>& mySolidVelocity;
-	const VectorGrid<float>& myGhostFluidWeights;
-	const VectorGrid<float>& myCutCellWeights;
+	const VectorGrid<double>& mySolidVelocity;
+	const VectorGrid<double>& myGhostFluidWeights;
+	const VectorGrid<double>& myCutCellWeights;
 
 	// Store flags for solved faces
 	VectorGrid<VisitedCellLabels> myValidFaces;
 
 	const LevelSet& mySurface;
 
-	ScalarGrid<float> myPressure;
+	ScalarGrid<double> myPressure;
 
-	const ScalarGrid<float>* myInitialGuessPressure;
+	const ScalarGrid<double>* myInitialGuessPressure;
 	bool myUseInitialGuessPressure;
 };
 

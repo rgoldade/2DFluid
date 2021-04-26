@@ -1,9 +1,8 @@
-#ifndef LIBRARY_INITIAL_GEOMETRY_H
-#define LIBRARY_INITIAL_GEOMETRY_H
+#ifndef FLUIDSIM2D_INITIAL_GEOMETRY_H
+#define FLUIDSIM2D_INITIAL_GEOMETRY_H
 
 #include "EdgeMesh.h"
 #include "Utilities.h"
-#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -15,12 +14,12 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::SurfaceTrackers
+namespace FluidSim2D
 {
 
-EdgeMesh makeCircleMesh(const Vec2f& center = Vec2f(0), float radius = 1., float divisions = 10.);
-EdgeMesh makeSquareMesh(const Vec2f& center = Vec2f(0), const Vec2f& scale = Vec2f(1.));
-EdgeMesh makeDiamondMesh(const Vec2f& center = Vec2f(0), const Vec2f& scale = Vec2f(1.));
+EdgeMesh makeCircleMesh(const Vec2d& center = Vec2d::Zero(), double radius = 1, double divisions = 10);
+EdgeMesh makeSquareMesh(const Vec2d& center = Vec2d::Zero(), const Vec2d& scale = Vec2d::Ones());
+EdgeMesh makeDiamondMesh(const Vec2d& center = Vec2d::Zero(), const Vec2d& scale = Vec2d::Ones());
 EdgeMesh makeNotchedDiskMesh();
 EdgeMesh makeVortexMesh();
 

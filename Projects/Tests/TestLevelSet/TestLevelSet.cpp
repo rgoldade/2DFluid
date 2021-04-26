@@ -8,21 +8,19 @@
 #include "Transform.h"
 #include "Utilities.h"
 
-using namespace FluidSim2D::RenderTools;
-using namespace FluidSim2D::SimTools;
-using namespace FluidSim2D::SurfaceTrackers;
+using namespace FluidSim2D;
 
 static std::unique_ptr<Renderer> renderer;
 static std::unique_ptr<LevelSet> surface;
 static std::unique_ptr<CurlNoiseField> velocityField;
 
-static constexpr float dt = 1./24.;
+static constexpr double dt = 1./24.;
 
 static bool runSimulation = false;
 static bool runSingleTimestep = false;
 static bool isDisplayDirty = true;
 
-void keyboard(unsigned char key, int x, int y)
+void keyboard(unsigned char key, int, int)
 {
 	if (key == ' ')
 		runSimulation = !runSimulation;
@@ -49,8 +47,8 @@ void display()
 	if (isDisplayDirty)
 	{
 		surface->drawGrid(*renderer, true);
-		surface->drawDCSurface(*renderer, Vec3f(1,0,0), 2);
-		surface->drawNormals(*renderer, Vec3f(.5), .1);
+		surface->drawDCSurface(*renderer, Vec3d(1., 0., 0.), 2.);
+		surface->drawNormals(*renderer, Vec3d(.5, .5, .5), .1);
 
 		glutPostRedisplay();
 	}
@@ -60,8 +58,8 @@ int main(int argc, char** argv)
 {
 	EdgeMesh initialMesh = makeCircleMesh();
 	
-	EdgeMesh testMesh2 = makeCircleMesh(Vec2f(.5), 1., 10);
-	EdgeMesh testMesh3 = makeCircleMesh(Vec2f(.05), .5, 10);
+	EdgeMesh testMesh2 = makeCircleMesh(Vec2d(.5, .5), 1., 10.);
+	EdgeMesh testMesh3 = makeCircleMesh(Vec2d(.05, .05), .5, 10.);
 	
 	assert(initialMesh.unitTestMesh());
 	assert(testMesh2.unitTestMesh());
@@ -72,24 +70,25 @@ int main(int argc, char** argv)
 
 	assert(initialMesh.unitTestMesh());
 
-	Vec2f minBoundingBox(std::numeric_limits<float>::max());
-	Vec2f maxBoundingBox(std::numeric_limits<float>::lowest());
+	AlignedBox2d bbox;
 
 	for (int vertexIndex = 0; vertexIndex < initialMesh.vertexCount(); ++vertexIndex)
-		updateMinAndMax(minBoundingBox, maxBoundingBox, initialMesh.vertex(vertexIndex).point());
+	{
+		bbox.extend(initialMesh.vertex(vertexIndex));
+	}
 
-	Vec2f boundingBoxSize(maxBoundingBox - minBoundingBox);
+	Vec2d boundingBoxSize = bbox.max() - bbox.min();
 
-	Vec2f origin = minBoundingBox - boundingBoxSize;
+	double dx = .05;
 
-	float dx = .05;
-	Vec2i size = Vec2i(3. * boundingBoxSize / dx);
+	Vec2d origin = bbox.min() - boundingBoxSize;
+	Vec2i size = (3. * boundingBoxSize / dx).cast<int>();
 
 	Transform xform(dx, origin);
 	surface = std::make_unique<LevelSet>(xform, size, 5);
 	surface->initFromMesh(initialMesh, true /* resize grid */);
 	
-	renderer = std::make_unique<Renderer>("Levelset Test", Vec2i(1000), origin, float(size[1]) * dx, &argc, argv);
+	renderer = std::make_unique<Renderer>("Levelset Test", Vec2i(1000), origin, double(size[1]) * dx, &argc, argv);
 
 	velocityField = std::make_unique<CurlNoiseField>();
 

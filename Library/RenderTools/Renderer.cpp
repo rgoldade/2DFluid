@@ -2,7 +2,7 @@
 
 #include "simple_svg_1.0.0.hpp"
 
-namespace FluidSim2D::RenderTools
+namespace FluidSim2D
 {
 
 // Helper struct because glut is a pain.
@@ -54,8 +54,8 @@ private:
 
 Renderer* GlutHelper::myRender;
 
-Renderer::Renderer(const char *title, Vec2i windowSize, Vec2f screenOrigin,
-	float screenHeight, int *argc, char **argv)
+Renderer::Renderer(const char *title, Vec2i windowSize, Vec2d screenOrigin,
+	double screenHeight, int *argc, char **argv)
 	: myWindowSize(windowSize)
 	, myCurrentScreenOrigin(screenOrigin)
 	, myCurrentScreenHeight(screenHeight)
@@ -82,7 +82,7 @@ void Renderer::display()
 	glViewport(0, 0, GLsizei(myWindowSize[0]), GLsizei(myWindowSize[1]));
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	glOrtho(myCurrentScreenOrigin[0], myCurrentScreenOrigin[0] + (myCurrentScreenHeight * float(myWindowSize[0])) / float(myWindowSize[1]), myCurrentScreenOrigin[1], myCurrentScreenOrigin[1] + myCurrentScreenHeight, 0, 1);
+	glOrtho(myCurrentScreenOrigin[0], myCurrentScreenOrigin[0] + (myCurrentScreenHeight * double(myWindowSize[0])) / double(myWindowSize[1]), myCurrentScreenOrigin[1], myCurrentScreenOrigin[1] + myCurrentScreenHeight, 0, 1);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
@@ -102,7 +102,7 @@ void Renderer::mouse(int button, int state, int x, int y)
 	{
 		if (state == GLUT_UP)
 		{
-			float scale;
+			double scale;
 			switch (myMouseAction)
 			{
 				// PAN is only for drag
@@ -112,7 +112,7 @@ void Renderer::mouse(int button, int state, int x, int y)
 				// Zoom in by 2x
 				scale = .5;
 
-				myCurrentScreenOrigin[0] -= .5 * (scale - 1.) * float(myWindowSize[0]) * myCurrentScreenHeight / float(myWindowSize[1]);
+				myCurrentScreenOrigin[0] -= .5 * (scale - 1.) * double(myWindowSize[0]) * myCurrentScreenHeight / double(myWindowSize[1]);
 				myCurrentScreenOrigin[1] -= .5 * (scale - 1.) * myCurrentScreenHeight;
 				myCurrentScreenHeight *= scale;
 
@@ -122,12 +122,14 @@ void Renderer::mouse(int button, int state, int x, int y)
 			case MouseAction::ZOOM_OUT:
 
 				scale = 2.;
-				myCurrentScreenOrigin[0] -= .5 * (scale - 1.) * float(myWindowSize[0]) * myCurrentScreenHeight / float(myWindowSize[1]);
+				myCurrentScreenOrigin[0] -= .5 * (scale - 1.) * double(myWindowSize[0]) * myCurrentScreenHeight / double(myWindowSize[1]);
 				myCurrentScreenOrigin[1] -= .5 * (scale - 1.) * myCurrentScreenHeight;
 				myCurrentScreenHeight *= scale;
 
 				glutPostRedisplay();
 			}
+
+			myMouseAction = MouseAction::INACTIVE;
 		}
 		else
 		{
@@ -159,9 +161,9 @@ void Renderer::drag(int x, int y)
 			myMouseMoved = true;
 			if (myMouseAction == MouseAction::PAN)
 			{
-				float pixelRatio = myCurrentScreenHeight / float(myWindowSize[1]);
-				myCurrentScreenOrigin[0] -= pixelRatio * (float(x) - myMousePosition[0]);
-				myCurrentScreenOrigin[1] += pixelRatio * (float(y) - myMousePosition[1]);
+				double pixelRatio = myCurrentScreenHeight / double(myWindowSize[1]);
+				myCurrentScreenOrigin[0] -= pixelRatio * (double(x) - myMousePosition[0]);
+				myCurrentScreenOrigin[1] += pixelRatio * (double(y) - myMousePosition[1]);
 				glutPostRedisplay();
 			}
 
@@ -213,21 +215,21 @@ void Renderer::setUserDisplay(const std::function<void()>& displayFunction)
 
 // These helpers make it easy to render out basic primitives without having to write
 // a custom loop outside of this class
-void Renderer::addPoint(const Vec2f& point, const Vec3f& colour, float size)
+void Renderer::addPoint(const Vec2d& point, const Vec3d& colour, double size)
 {
 	myPoints.emplace_back(1, point);
 	myPointColours.push_back(colour);
 	myPointSizes.push_back(size);
 }
 
-void Renderer::addPoints(const std::vector<Vec2f>& points, const Vec3f& colour, float size)
+void Renderer::addPoints(const VecVec2d& points, const Vec3d& colour, double size)
 {
 	myPoints.push_back(points);
 	myPointColours.push_back(colour);
 	myPointSizes.push_back(size);
 }
 
-void Renderer::addLine(const Vec2f& startingPoint, const Vec2f& endingPoint, const Vec3f& colour, float lineWidth)
+void Renderer::addLine(const Vec2d& startingPoint, const Vec2d& endingPoint, const Vec3d& colour, double lineWidth)
 {
 	myLineStartingPoints.emplace_back(1, startingPoint);
 	myLineEndingPoints.emplace_back(1, endingPoint);
@@ -236,7 +238,7 @@ void Renderer::addLine(const Vec2f& startingPoint, const Vec2f& endingPoint, con
 	myLineWidths.push_back(lineWidth);
 }
 
-void Renderer::addLines(const std::vector<Vec2f>& startingPoints, const std::vector<Vec2f>& endingPoints, const Vec3f& colour, float lineWidth)
+void Renderer::addLines(const VecVec2d& startingPoints, const VecVec2d& endingPoints, const Vec3d& colour, double lineWidth)
 {
 	assert(startingPoints.size() == endingPoints.size());
 	myLineStartingPoints.push_back(startingPoints);
@@ -246,14 +248,14 @@ void Renderer::addLines(const std::vector<Vec2f>& startingPoints, const std::vec
 	myLineWidths.push_back(lineWidth);
 }
 
-void Renderer::addTriFaces(const std::vector<Vec2f>& vertices, const std::vector<Vec3i>& faces, const std::vector<Vec3f>& faceColours)
+void Renderer::addTriFaces(const VecVec2d& vertices, const VecVec3i& faces, const VecVec3d& faceColours)
 {
 	myTriVertices.push_back(vertices);
 	myTriFaces.push_back(faces);
 	myTriFaceColours.push_back(faceColours);
 }
 
-void Renderer::addQuadFaces(const std::vector<Vec2f>& vertices, const std::vector<Vec4i>& faces, const std::vector<Vec3f>& faceColours)
+void Renderer::addQuadFaces(const VecVec2d& vertices, const VecVec4i& faces, const VecVec3d& faceColours)
 {
 	myQuadVertices.push_back(vertices);
 	myQuadFaces.push_back(faces);
@@ -272,7 +274,7 @@ void Renderer::drawPrimitives() const
 
 		for (int quadIndex = 0; quadIndex < myQuadFaces[quadListIndex].size(); ++quadIndex)
 		{
-			const Vec3f& quadFaceColour = myQuadFaceColours[quadListIndex][quadIndex];
+			const Vec3t<GLfloat> quadFaceColour = myQuadFaceColours[quadListIndex][quadIndex].cast<GLfloat>();
 			glColor3f(quadFaceColour[0], quadFaceColour[1], quadFaceColour[2]);
 
 			glBegin(GL_QUADS);
@@ -283,7 +285,7 @@ void Renderer::drawPrimitives() const
 
 				assert(quadVertexIndex >= 0 && quadVertexIndex < myQuadVertices[quadListIndex].size());
 
-				const Vec2f& vertexPoint = myQuadVertices[quadListIndex][quadVertexIndex];
+				const Vec2t<GLfloat> vertexPoint = myQuadVertices[quadListIndex][quadVertexIndex].cast<GLfloat>();
 				glVertex2f(vertexPoint[0], vertexPoint[1]);
 			}
 
@@ -301,7 +303,7 @@ void Renderer::drawPrimitives() const
 
 		for (int triIndex = 0; triIndex < myTriFaces[triListIndex].size(); ++triIndex)
 		{
-			const Vec3f& triFaceColour = myTriFaceColours[triListIndex][triIndex];
+			const Vec3t<GLfloat> triFaceColour = myTriFaceColours[triListIndex][triIndex].cast<GLfloat>();
 			glColor3f(triFaceColour[0], triFaceColour[1], triFaceColour[2]);
 
 			glBegin(GL_TRIANGLES);
@@ -312,7 +314,7 @@ void Renderer::drawPrimitives() const
 
 				assert(triVertexIndex >= 0 && triVertexIndex < myTriVertices[triListIndex].size());
 
-				const Vec2f& vertexPoint = myTriVertices[triListIndex][triVertexIndex];
+				const Vec2t<GLfloat> vertexPoint = myTriVertices[triListIndex][triVertexIndex].cast<GLfloat>();
 				glVertex2f(vertexPoint[0], vertexPoint[1]);
 			}
 
@@ -328,19 +330,19 @@ void Renderer::drawPrimitives() const
 	{
 		assert(myLineStartingPoints[lineListIndex].size() == myLineEndingPoints[lineListIndex].size());
 
-		const Vec3f& lineColour = myLineColours[lineListIndex];
+		const Vec3t<GLfloat>& lineColour = myLineColours[lineListIndex].cast<GLfloat>();
 
 		glColor3f(lineColour[0], lineColour[1], lineColour[2]);
-		glLineWidth(myLineWidths[lineListIndex]);
+		glLineWidth(GLfloat(myLineWidths[lineListIndex]));
 
 		glBegin(GL_LINES);
 
 		for (int lineIndex = 0; lineIndex < myLineStartingPoints[lineListIndex].size(); ++lineIndex)
 		{
-			const Vec2f& startPoint = myLineStartingPoints[lineListIndex][lineIndex];
+			const Vec2t<GLfloat> startPoint = myLineStartingPoints[lineListIndex][lineIndex].cast<GLfloat>();
 			glVertex2f(startPoint[0], startPoint[1]);
 
-			const Vec2f& endPoint = myLineEndingPoints[lineListIndex][lineIndex];
+			const Vec2t<GLfloat> endPoint = myLineEndingPoints[lineListIndex][lineIndex].cast<GLfloat>();
 			glVertex2f(endPoint[0], endPoint[1]);			
 		}
 
@@ -352,15 +354,15 @@ void Renderer::drawPrimitives() const
 
 	for (int pointListIndex = 0; pointListIndex < myPoints.size(); ++pointListIndex)
 	{
-		const Vec3f& pointColour = myPointColours[pointListIndex];
+		const Vec3t<GLfloat> pointColour = myPointColours[pointListIndex].cast<GLfloat>();
 		glColor3f(pointColour[0], pointColour[1], pointColour[2]);
-		glPointSize(myPointSizes[pointListIndex]);
+		glPointSize(GLfloat(myPointSizes[pointListIndex]));
 
 		glBegin(GL_POINTS);
 
 		for (int pointIndex = 0; pointIndex < myPoints[pointListIndex].size(); ++pointIndex)
 		{
-			const Vec2f& point = myPoints[pointListIndex][pointIndex];
+			const Vec2t<GLfloat> point = myPoints[pointListIndex][pointIndex].cast<GLfloat>();
 			glVertex2f(point[0], point[1]);
 		}
 
@@ -395,7 +397,7 @@ void Renderer::run()
 
 void Renderer::printImage(const std::string &filename) const
 {
-	float scale = float(myWindowSize[1]) / myCurrentScreenHeight;
+	double scale = double(myWindowSize[1]) / myCurrentScreenHeight;
 	svg::Point originOffset(-myCurrentScreenOrigin[0], -myCurrentScreenOrigin[1]);
 
 	svg::Document svgDocument(filename + ".svg",
@@ -411,10 +413,8 @@ void Renderer::printImage(const std::string &filename) const
 		assert(myQuadFaces[quadListIndex].size() == myQuadFaceColours[quadListIndex].size());
 
 		for (int quadIndex = 0; quadIndex < myQuadFaces[quadListIndex].size(); ++quadIndex)
-		{
-			Vec3f quadColour = 255 * myQuadFaceColours[quadListIndex][quadIndex];
-	
-			Vec2f points[4];
+		{	
+			Vec2d points[4];
 
 			for (int pointIndex : {0, 1, 2, 3})
 			{
@@ -424,6 +424,8 @@ void Renderer::printImage(const std::string &filename) const
 
 				points[pointIndex] = myQuadVertices[quadListIndex][quadVertexIndex];
 			}
+
+			Vec3i quadColour = (255.f * myQuadFaceColours[quadListIndex][quadIndex]).cast<int>();
 
 			svgDocument << (svg::Polygon(svg::Color(quadColour[0], quadColour[1], quadColour[2]))
 								<< svg::Point(points[0][0], points[0][1])
@@ -447,9 +449,7 @@ void Renderer::printImage(const std::string &filename) const
 
 		for (int triIndex = 0; triIndex < myTriFaces[triListIndex].size(); ++triIndex)
 		{
-			Vec2f points[3];
-
-			Vec3f triColour = 255 * myTriFaceColours[triListIndex][triIndex];
+			Vec2d points[3];
 
 			for (int pointIndex : {0, 1, 2})
 			{
@@ -459,6 +459,8 @@ void Renderer::printImage(const std::string &filename) const
 
 				points[pointIndex] = myTriVertices[triListIndex][triVertexIndex];
 			}
+			
+			Vec3i triColour = (255.f * myTriFaceColours[triListIndex][triIndex]).cast<int>();
 
 			svgDocument << (svg::Polygon(svg::Color(triColour[0], triColour[1], triColour[2]))
 											<< svg::Point(points[0][0], points[0][1])
@@ -477,12 +479,12 @@ void Renderer::printImage(const std::string &filename) const
 	{
 		assert(myLineStartingPoints[lineListIndex].size() == myLineEndingPoints[lineListIndex].size());
 
-		const Vec3f& lineColour = 255 * myLineColours[lineListIndex];
+		const Vec3i lineColour = (255.f * myLineColours[lineListIndex]).cast<int>();
 
 		for (int lineIndex = 0; lineIndex < myLineStartingPoints[lineListIndex].size(); ++lineIndex)
 		{
-			Vec2f startPoint = myLineStartingPoints[lineListIndex][lineIndex];
-			Vec2f endPoint = myLineEndingPoints[lineListIndex][lineIndex];
+			Vec2d startPoint = myLineStartingPoints[lineListIndex][lineIndex];
+			Vec2d endPoint = myLineEndingPoints[lineListIndex][lineIndex];
 
 			svgDocument << svg::Line(svg::Point(startPoint[0], startPoint[1]),
 				svg::Point(endPoint[0], endPoint[1]),
@@ -495,12 +497,12 @@ void Renderer::printImage(const std::string &filename) const
 
 	for (int pointListIndex = 0; pointListIndex < myPoints.size(); ++pointListIndex)
 	{
-		const Vec3f& pointColour = 255 * myPointColours[pointListIndex];
-		float pointSize = myPointSizes[pointListIndex] / scale;
+		const Vec3i pointColour = (255.f * myPointColours[pointListIndex]).cast<int>();
+		double pointSize = myPointSizes[pointListIndex] / scale;
 
 		for (int pointIndex = 0; pointIndex < myPoints[pointListIndex].size(); ++pointIndex)
 		{
-			const Vec2f& point = myPoints[pointListIndex][pointIndex];
+			const Vec2d& point = myPoints[pointListIndex][pointIndex];
 
 			svgDocument << svg::Circle(svg::Point(point[0], point[1]),
 				pointSize,

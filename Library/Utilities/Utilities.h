@@ -1,30 +1,42 @@
-#ifndef LIBRARY_UTILITIES_H
-#define LIBRARY_UTILITIES_H
+#ifndef FLUIDSIM2D_UTILITIES_H
+#define FLUIDSIM2D_UTILITIES_H
 
-#include <assert.h>
 #include <limits>
 #include <vector>
 
-#include "tbb/tbb.h"
+#include "Eigen/Dense"
+#include "Eigen/Geometry"
 
-///////////////////////////////////
-//
-// Borrowed from Robert Bridson's
-// sample code.
-//
-////////////////////////////////////
+#include "tbb/enumerable_thread_specific.h"
 
-namespace FluidSim2D::Utilities
+namespace FluidSim2D
 {
 
 constexpr double PI = 3.1415926535897932384626433832795;
 
+static const int marchingSquaresTemplate[16][4] = { { -1,-1,-1,-1 },
+													{ 3, 0,-1,-1 },
+													{ 0, 1,-1,-1 },
+													{ 3, 1,-1,-1 },
+
+													{ 1, 2,-1,-1 },
+													{ 3, 0, 1, 2 },
+													{ 0, 2,-1,-1 },
+													{ 3, 2,-1,-1 },
+
+													{ 2, 3,-1,-1 },
+													{ 2, 0,-1,-1 },
+													{ 0, 1, 2, 3 },
+													{ 2, 1,-1,-1 },
+
+													{ 1, 3,-1,-1 },
+													{ 1, 0,-1,-1 },
+													{ 0, 3,-1,-1 },
+													{ -1,-1,-1,-1 } };
+
 //
 // TBB utilities
 //
-
-constexpr int tbbLightGrainSize = 1000;
-constexpr int tbbHeavyGrainSize = 100;
 
 template<typename StorageType>
 void mergeLocalThreadVectors(std::vector<StorageType>& combinedVector,
@@ -51,74 +63,114 @@ void mergeLocalThreadVectors(std::vector<StorageType>& combinedVector,
 
 enum class VisitedCellLabels { UNVISITED_CELL, VISITED_CELL, FINISHED_CELL };
 
-///////////////////////////////////
-//
-// Borrowed and modified from
-// Robert Bridson's sample code.
-//
-////////////////////////////////////
+// Borrowed from https://github.com/sideeffects/WindingNumber/blob/master/SYS_Types.h
+#if defined(__GNUC__) || defined(__clang__)
+#define FORCE_INLINE	__attribute__ ((always_inline)) inline
+#elif defined(_MSC_VER)
+#define FORCE_INLINE	__forceinline
+#else
+#define FORCE_INLINE	inline
+#endif
 
 #ifdef _MSC_VER
 #undef min
 #undef max
 #endif
 
+using Vec2d = Eigen::Matrix<double, 2, 1>;
+using Vec2i = Eigen::Matrix<int, 2, 1>;
+
+template<typename T>
+using Vec2t = Eigen::Matrix<T, 2, 1>;
+
+using VecVec2d = std::vector<Vec2d, Eigen::aligned_allocator<Vec2d>>;
+using VecVec2i = std::vector<Vec2i, Eigen::aligned_allocator<Vec2i>>;
+
+using Vec3d = Eigen::Matrix<double, 3, 1>;
+using Vec3i = Eigen::Matrix<int, 3, 1>;
+
+template<typename T>
+using Vec3t = Eigen::Matrix<T, 3, 1>;
+
+using VecVec3d = std::vector<Vec3d, Eigen::aligned_allocator<Vec3d>>;
+using VecVec3i = std::vector<Vec3i, Eigen::aligned_allocator<Vec3i>>;
+
+using Vec4i = Eigen::Matrix<int, 4, 1>;
+
+using VecVec4i = std::vector<Vec4i, Eigen::aligned_allocator<Vec4i>>;
+
+template<typename T, int N>
+using VecXt = Eigen::Matrix<T, N, 1>;
+
+template<typename VecType>
+using VecVecT = std::vector<VecType, Eigen::aligned_allocator<VecType>>;
+
+using AlignedBox2d = Eigen::AlignedBox<double, 2>;
+using AlignedBox2i = Eigen::AlignedBox<int, 2>;
+
+using VecAlignedBox2i = std::vector<AlignedBox2i, Eigen::aligned_allocator<AlignedBox2i>>;
+
+using VectorXd = Eigen::VectorXd;
+
+template<typename T>
+using VectorX = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+
+template<typename T, int N>
+VecXt<T, N> clamp(const VecXt<T, N>& vIn, const VecXt<T, N>& vMin, const VecXt<T, N>& vMax)
+{
+	VecXt<T, N> vOut;
+
+	for (int i = 0; i < vIn.rows(); ++i)
+		vOut[i] = std::clamp(vIn[i], vMin[i], vMax[i]);
+
+	return vOut;
+}
+
+template<typename T, int N>
+VecXt<T, N> ceil(const VecXt<T, N>& vIn)
+{
+	return vIn.array().ceil().matrix();
+}
+
+template<typename T, int N>
+VecXt<T, N> floor(const VecXt<T, N>& vIn)
+{
+	return vIn.array().floor().matrix();
+}
+
+template<typename T, int N>
+bool operator==(const VecXt<T, N>& v0, const VecXt<T, N>& v1)
+{
+	return (v0.array() == v1.array()).all();
+}
+
+template<typename T, int N>
+bool operator!=(const VecXt<T, N>& v0, const VecXt<T, N>& v1)
+{
+	return (v0.array() != v1.array()).all();
+}
+
+template<typename RealType>
+bool isNearlyEqual(const RealType a, const RealType b, const RealType tolerance = 1e-5, const bool useRelative = true)
+{
+	if (a == b)
+		return true;
+
+	RealType absDiff = std::fabs(a - b);
+
+	RealType avgMag(1);
+
+	if (useRelative)
+	{
+		avgMag = (std::fabs(a) + std::fabs(b)) / RealType(2);
+	}
+
+	return absDiff < tolerance * avgMag;
+}
+
 using std::min;
 using std::max;
 using std::swap;
-
-template<typename T>
-T sqr(T x)
-{
-	return x * x;
-}
-
-template<typename T>
-T cube(T x)
-{
-	return x * sqr(x);
-}
-
-template<typename... Args>
-decltype(auto) min(const Args&... values)
-{
-	return std::min({ values... });
-}
-
-template<typename... Args>
-decltype(auto) max(const Args&... values)
-{
-	return std::max({ values... });
-}
-
-template<typename T>
-void minAndMax(T& minValue, T& maxValue, const T& value0, const T& value1)
-{
-	minValue = std::min(value0, value1);
-	maxValue = std::max(value0, value1);
-}
-
-template<typename T>
-void updateMinOrMax(T& minValue, T& maxValue, const T& value)
-{
-	if (value < minValue) minValue = value;
-	else if (value > maxValue) maxValue = value;
-}
-
-template<typename T>
-void updateMinAndMax(T& minValue, T& maxValue, const T& value)
-{
-	if (value < minValue) minValue = value;
-	if (value > maxValue) maxValue = value;
-}
-
-template<typename T>
-T clamp(const T& value, const T& lower, const T& upper)
-{
-	if (value < lower) return lower;
-	else if (value > upper) return upper;
-	else return value;
-}
 
 // Transforms even the sequence 0,1,2,3,... into reasonably good random numbers 
 // Challenge: improve on this in speed and "randomness"!
@@ -153,26 +205,22 @@ inline double randhashd(unsigned seed)
 	return randhash(seed) / double(maxInteger);
 }
 
-inline float randhashf(unsigned seed)
-{
-	return randhash(seed) / float(maxInteger);
-}
-
 // returns repeatable stateless pseudo-random number in [a,b]
 inline double randhashd(unsigned seed, double a, double b)
 {
 	return (b - a) * randhash(seed) / double(maxInteger) + a;
 }
 
-inline float randhashf(unsigned seed, float a, float b)
-{
-	return (b - a) * randhash(seed) / float(maxInteger) + a;
-}
-
 template<typename S, typename T>
 S lerp(const S& value0, const S& value1, const T& f)
 {
-	return (1. - f) * value0 + f * value1;
+	return (T(1) - f) * value0 + f * value1;
+}
+
+template<typename S, typename T>
+S lerpGradient(const S& value0, const S& value1, const T&)
+{
+	return value1 - value0;
 }
 
 template<typename S, typename T>
@@ -184,6 +232,18 @@ S bilerp(const S& value00, const S& value10,
 		lerp(value01, value11, fx),
 		fy);
 }
+
+template<typename S, typename T>
+Vec2t<S> bilerpGradient(const S& value00, const S& value10,
+					const S& value01, const S& value11,
+					const T& fx, const T& fy)
+{
+	Vec2t<S> gradient;
+	gradient[0] = lerp(lerpGradient(value00, value10, fx), lerpGradient(value01, value11, fx), fy);
+	gradient[1] = lerp(lerpGradient(value00, value01, fy), lerpGradient(value10, value11, fy), fx);
+	return gradient;
+}
+
 
 template<typename S, typename T>
 S trilerp(const S& value000, const S& value100,
@@ -201,11 +261,22 @@ S trilerp(const S& value000, const S& value100,
 template<typename S, typename T>
 S cubicInterp(const S& value_1, const S& value0, const S& value1, const S& value2, const T& fx)
 {
-	T sqrfx = sqr(fx), cubefx = cube(fx);
-	return T(0.5) * ((-cubefx + T(2.0) * sqrfx - fx) * value_1
-		+ (T(3.0) * cubefx - T(5.0) * sqrfx + T(2.0)) * value0
-		+ (-T(3.0) * cubefx + T(4.0) * sqrfx + fx) * value1
+	T sqrfx = pow(fx, 2);
+	T cubefx = sqrfx * fx;
+	return T(.5) * ((-cubefx + T(2) * sqrfx - fx) * value_1
+		+ (T(3) * cubefx - T(5) * sqrfx + T(2)) * value0
+		+ (-T(3) * cubefx + T(4) * sqrfx + fx) * value1
 		+ (cubefx - sqrfx) * value2);
+};
+
+template<typename S, typename T>
+S cubicInterpGradient(const S& value_1, const S& value0, const S& value1, const S& value2, const T& fx)
+{
+	T sqrfx = pow(fx, 2);
+	return T(.5) * ((-T(3) * sqrfx + T(4) * fx - 1) * value_1
+		+ (T(9) * sqrfx - T(10) * fx) * value0
+		+ (-T(9) * sqrfx + T(8) * fx + 1) * value1
+		+ (T(3) * sqrfx - T(2) * fx) * value2);
 };
 
 }

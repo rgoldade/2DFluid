@@ -20,66 +20,62 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::RegularGridSim
+namespace FluidSim2D
 {
-
-using namespace FluidSim2D::SimTools;
-using namespace FluidSim2D::SurfaceTrackers;
-using namespace FluidSim2D::Utilities;
 
 class EulerianLiquidSimulator
 {
 public:
-	EulerianLiquidSimulator(const Transform& xform, Vec2i size, float cfl = 5.)
+	EulerianLiquidSimulator(const Transform& xform, Vec2i size, double cfl = 5.)
 		: myXform(xform)
 		, myDoSolveViscosity(false)
 		, myCFL(cfl)
 	{
-		myLiquidVelocity = VectorGrid<float>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
-		mySolidVelocity = VectorGrid<float>(myXform, size, 0, VectorGridSettings::SampleType::STAGGERED);
+		myLiquidVelocity = VectorGrid<double>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
+		mySolidVelocity = VectorGrid<double>(myXform, size, 0, VectorGridSettings::SampleType::STAGGERED);
 
 		myLiquidSurface = LevelSet(myXform, size, myCFL);
 		mySolidSurface = LevelSet(myXform, size, myCFL);
 
-		myOldPressure = ScalarGrid<float>(myXform, size, 0);
+		myOldPressure = ScalarGrid<double>(myXform, size, 0);
 	}
 
 	void setSolidSurface(const LevelSet& solidSurface);
-	void setSolidVelocity(const VectorGrid<float>& solidVelocity);
+	void setSolidVelocity(const VectorGrid<double>& solidVelocity);
 
 	void setLiquidSurface(const LevelSet& liquidSurface);
-	void setLiquidVelocity(const VectorGrid<float>& liquidVelocity);
+	void setLiquidVelocity(const VectorGrid<double>& liquidVelocity);
 
-	void setViscosity(const ScalarGrid<float>& viscosityGrid)
+	void setViscosity(const ScalarGrid<double>& viscosityGrid)
 	{
 		assert(myLiquidSurface.isGridMatched(viscosityGrid));
 		myViscosity = viscosityGrid;
 		myDoSolveViscosity = true;
 	}
 
-	void setViscosity(float constantViscosity = 1.)
+	void setViscosity(double constantViscosity = 1.)
 	{
-		myViscosity = ScalarGrid<float>(myLiquidSurface.xform(), myLiquidSurface.size(), constantViscosity);
+		myViscosity = ScalarGrid<double>(myLiquidSurface.xform(), myLiquidSurface.size(), constantViscosity);
 		myDoSolveViscosity = true;
 	}
 
 	void unionLiquidSurface(const LevelSet& addedLiquidSurface);
 
 	template<typename ForceSampler>
-	void addForce(float dt, const ForceSampler& force);
+	void addForce(double dt, const ForceSampler& force);
 
-	void addForce(float dt, const Vec2R& force);
+	void addForce(double dt, const Vec2d& force);
 
-	void advectOldPressure(const float dt);
-	void advectLiquidSurface(float dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
-	void advectViscosity(float dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
-	void advectLiquidVelocity(float dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
+	void advectOldPressure(const double dt);
+	void advectLiquidSurface(double dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER);
+	void advectViscosity(double dt, IntegrationOrder integrator = IntegrationOrder::FORWARDEULER, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
+	void advectLiquidVelocity(double dt, IntegrationOrder integrator = IntegrationOrder::RK3, InterpolationOrder interpolator = InterpolationOrder::LINEAR);
 
 	// Perform pressure project, viscosity solver, extrapolation, surface and velocity advection
-	void runTimestep(float dt);
+	void runTimestep(double dt);
 
 	// Useful for CFL
-	float maxVelocityMagnitude() { return myLiquidVelocity.maxMagnitude(); }
+	double maxVelocityMagnitude() { return myLiquidVelocity.maxMagnitude(); }
 
 	// Rendering tools
 	void drawGrid(Renderer& renderer) const;
@@ -87,24 +83,24 @@ public:
 	void drawVolumetricSurface(Renderer& renderer) const;
 
 	void drawLiquidSurface(Renderer& renderer);
-	void drawLiquidVelocity(Renderer& renderer, float length) const;
+	void drawLiquidVelocity(Renderer& renderer, double length) const;
 
 	void drawSolidSurface(Renderer& renderer);
-	void drawSolidVelocity(Renderer& renderer, float length) const;
+	void drawSolidVelocity(Renderer& renderer, double length) const;
 
 private:
 
 	// Simulation containers
-	VectorGrid<float> myLiquidVelocity, mySolidVelocity;
+	VectorGrid<double> myLiquidVelocity, mySolidVelocity;
 	LevelSet myLiquidSurface, mySolidSurface;
-	ScalarGrid<float> myViscosity;
+	ScalarGrid<double> myViscosity;
 
 	Transform myXform;
 
 	bool myDoSolveViscosity;
-	float myCFL;
+	double myCFL;
 
-	ScalarGrid<float> myOldPressure;
+	ScalarGrid<double> myOldPressure;
 };
 
 }

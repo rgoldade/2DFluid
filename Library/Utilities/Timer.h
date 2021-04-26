@@ -1,5 +1,5 @@
-#ifndef LIBRARY_TIMER_H
-#define LIBRARY_TIMER_H
+#ifndef FLUIDSIM2D_TIMER_H
+#define FLUIDSIM2D_TIMER_H
 
 #ifdef _MSC_VER
 	#include <Windows.h>
@@ -17,7 +17,7 @@
 // 
 ////////////////////////////////////
 
-namespace FluidSim2D::Utilities
+namespace FluidSim2D
 {
 
 class Timer

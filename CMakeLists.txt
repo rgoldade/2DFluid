@@ -41,11 +41,10 @@ if (TBB_FOUND)
 	link_libraries(${TBB_LIBRARIES} ${TBB_LIBRARIES_DEBUG})
 endif()
 
-enable_testing()
-
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-
 
 add_subdirectory(Library)
 add_subdirectory(Projects)
 
+enable_testing()
+add_subdirectory(UnitTests)

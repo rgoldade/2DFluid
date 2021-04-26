@@ -1,5 +1,5 @@
-#ifndef TESTS_ANALYTICAL_VISCOSITY_H
-#define TESTS_ANALYTICAL_VISCOSITY_H
+#ifndef FLUIDSIM2D_ANALYTICAL_VISCOSITY_H
+#define FLUIDSIM2D_ANALYTICAL_VISCOSITY_H
 
 #include <Eigen/Sparse>
 
@@ -23,9 +23,8 @@
 //
 ////////////////////////////////////
 
-using namespace FluidSim2D::Utilities;
-using namespace FluidSim2D::RenderTools;
-
+namespace FluidSim2D
+{
 
 class AnalyticalViscositySolver
 {
@@ -43,10 +42,10 @@ public:
 
 	// Returns the infinity-norm error of the numerical solution
 	template<typename Initial, typename Solution, typename Viscosity>
-	float solve(const Initial& initial, const Solution& solution, const Viscosity& viscosity, const float dt);
+	double solve(const Initial& initial, const Solution& solution, const Viscosity& viscosity, const double dt);
 
-	Vec2f cellIndexToWorld(const Vec2f& index) const { return myXform.indexToWorld(index + Vec2f(.5)); }
-	Vec2f nodeIndexToWorld(const Vec2f& index) const { return myXform.indexToWorld(index); }
+	Vec2d cellIndexToWorld(const Vec2d& index) const { return myXform.indexToWorld(index + Vec2d(.5, .5)); }
+	Vec2d nodeIndexToWorld(const Vec2d& index) const { return myXform.indexToWorld(index); }
 	
 	void drawGrid(Renderer& renderer) const;
 	void drawActiveVelocity(Renderer& renderer) const;
@@ -59,10 +58,10 @@ private:
 };
 
 template<typename Initial, typename Solution, typename Viscosity>
-float AnalyticalViscositySolver::solve(const Initial& initialFunction,
+double AnalyticalViscositySolver::solve(const Initial& initialFunction,
 										const Solution& solutionFunction,
 										const Viscosity& viscosityFunction,
-										const float dt)
+										const double dt)
 {
 	int velocityDOFCount = setVelocityIndex();
 
@@ -74,40 +73,40 @@ float AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 	Vector rhsVector = Vector::Zero(velocityDOFCount);
 
-	float dx = myVelocityIndex.dx();
-	float baseCoeff = dt / sqr(dx);
+	double dx = myVelocityIndex.dx();
+	double baseCoeff = dt / std::pow(dx, 2);
 
 	for (int axis : { 0,1 })
 	{
 		Vec2i size = myVelocityIndex.size(axis);
 
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		forEachVoxelRange(Vec2i::Zero(), size, [&](const Vec2i& face)
 		{
 			int velocityIndex = myVelocityIndex(face, axis);
 
 			if (velocityIndex >= 0)
 			{
-				Vec2f facePosition = myVelocityIndex.indexToWorld(Vec2f(face), axis);
+				Vec2d facePosition = myVelocityIndex.indexToWorld(face.cast<double>(), axis);
 
 				rhsVector(velocityIndex) += initialFunction(facePosition, axis);
 
-				sparseMatrixElements.emplace_back(velocityIndex, velocityIndex, 1.);
+				sparseMatrixElements.emplace_back(velocityIndex, velocityIndex, 1);
 
 				// Build cell-centered stresses.
 				for (int cellDirection : { 0,1 })
 				{
-					Vec2i cell = faceToCell(Vec2i(face), axis, cellDirection);
+					Vec2i cell = faceToCell(face, axis, cellDirection);
 
-					Vec2f cellPosition = cellIndexToWorld(Vec2f(cell));
-					float cellCoeff = 2. * viscosityFunction(cellPosition) * baseCoeff;
+					Vec2d cellPosition = cellIndexToWorld(cell.cast<double>());
+					double cellCoeff = 2. * viscosityFunction(cellPosition) * baseCoeff;
 
-					float cellSign = (cellDirection == 0) ? -1. : 1.;
+					double cellSign = (cellDirection == 0) ? -1 : 1;
 
 					for (int faceDirection : { 0,1 })
 					{
 						Vec2i adjacentFace = cellToFace(cell, axis, faceDirection);
 
-						float faceSign = (faceDirection == 0) ? -1. : 1.;
+						double faceSign = (faceDirection == 0) ? -1 : 1;
 
 						int faceRow = myVelocityIndex(adjacentFace, axis);
 						if (faceRow >= 0)
@@ -122,10 +121,10 @@ float AnalyticalViscositySolver::solve(const Initial& initialFunction,
 				{
 					Vec2i node = faceToNode(face, axis, nodeDirection);
 
-					float nodeSign = (nodeDirection == 0) ? -1. : 1.;
+					double nodeSign = (nodeDirection == 0) ? -1 : 1;
 
-					Vec2f nodePosition = nodeIndexToWorld(Vec2f(node));
-					float nodeCoeff = viscosityFunction(nodePosition) * baseCoeff;
+					Vec2d nodePosition = nodeIndexToWorld(node.cast<double>());
+					double nodeCoeff = viscosityFunction(nodePosition) * baseCoeff;
 
 					for (int gradientAxis : {0, 1})
 						for (int faceDirection : {0, 1})
@@ -134,22 +133,22 @@ float AnalyticalViscositySolver::solve(const Initial& initialFunction,
 
 							int faceAxis = (gradientAxis + 1) % 2;
 
-							float faceSign = (faceDirection == 0) ? -1. : 1.;
+							double faceSign = (faceDirection == 0) ? -1 : 1;
 
 							// Check for out of bounds
 							if ((faceDirection == 0 && adjacentFace[gradientAxis] < 0) ||
 								(faceDirection == 1 && adjacentFace[gradientAxis] >= size[gradientAxis]))
 							{
-								Vec2f facePosition = myVelocityIndex.indexToWorld(Vec2f(adjacentFace), faceAxis);
-								rhsVector(velocityIndex) += nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis);
+								Vec2d adjacentFacePosition = myVelocityIndex.indexToWorld(adjacentFace.cast<double>(), faceAxis);
+								rhsVector(velocityIndex) += nodeSign * faceSign * nodeCoeff * solutionFunction(adjacentFacePosition, faceAxis);
 							}
 							// Check for on the bounds
 							else if ((nodeDirection == 0 && adjacentFace[faceAxis] == 0) ||
 										(nodeDirection == 1 &&
 										adjacentFace[faceAxis] == myVelocityIndex.size(faceAxis)[faceAxis] - 1))
 							{
-								Vec2f facePosition = myVelocityIndex.indexToWorld(Vec2f(adjacentFace), faceAxis);
-								rhsVector(velocityIndex) += nodeSign * faceSign * nodeCoeff * solutionFunction(facePosition, faceAxis);
+								Vec2d adjacentFacePosition = myVelocityIndex.indexToWorld(adjacentFace.cast<double>(), faceAxis);
+								rhsVector(velocityIndex) += nodeSign * faceSign * nodeCoeff * solutionFunction(adjacentFacePosition, faceAxis);
 							}
 							else
 							{
@@ -184,20 +183,20 @@ float AnalyticalViscositySolver::solve(const Initial& initialFunction,
 		return -1;
 	}
 
-	float error = 0;
+	double error = 0;
 
 	for (int axis : {0, 1})
 	{
 		Vec2i size = myVelocityIndex.size(axis);
 
-		forEachVoxelRange(Vec2i(0), size, [&](const Vec2i& face)
+		forEachVoxelRange(Vec2i::Zero(), size, [&](const Vec2i& face)
 		{
 			int velocityIndex = myVelocityIndex(face, axis);
 
 			if (velocityIndex >= 0)
 			{
-				Vec2f facePosition = myVelocityIndex.indexToWorld(Vec2f(face), axis);
-				float localError = fabs(solutionVector(velocityIndex) - solutionFunction(facePosition, axis));
+				Vec2d facePosition = myVelocityIndex.indexToWorld(face.cast<double>(), axis);
+				double localError = fabs(solutionVector(velocityIndex) - solutionFunction(facePosition, axis));
 
 				if (error < localError) error = localError;
 			}
@@ -207,4 +206,5 @@ float AnalyticalViscositySolver::solve(const Initial& initialFunction,
 	return error;
 }
 
+}
 #endif

@@ -1,15 +1,13 @@
-#ifndef LIBRARY_PREDICATES_H
-#define LIBRARY_PREDICATES_H
+#ifndef FLUIDSIM2D_PREDICATES_H
+#define FLUIDSIM2D_PREDICATES_H
 
 #include "GridUtilities.h"
-#include "Vec.h"
 
-namespace FluidSim2D::SurfaceTrackers
+namespace FluidSim2D
 {
-using namespace Utilities;
 
-using REAL = float;
-using Vec2R = Vec<2, REAL>;
+using REAL = double;
+using Vec2R = Vec2t<REAL>;
 
 REAL exactinit(); // call this before anything else
 

@@ -10,13 +10,8 @@
 #include "Transform.h"
 #include "TestVelocityFields.h"
 #include "Utilities.h"
-#include "Vec.h"
 
-using namespace FluidSim2D::RegularGridSim;
-using namespace FluidSim2D::RenderTools;
-using namespace FluidSim2D::SurfaceTrackers;
-using namespace FluidSim2D::SimTools;
-using namespace FluidSim2D::Utilities;
+using namespace FluidSim2D;
 
 static std::unique_ptr<Renderer> renderer;
 
@@ -28,9 +23,9 @@ static bool runSimulation = false;
 static bool runSingleTimestep = false;
 static bool isDisplayDirty = true;
 
-static constexpr float dt = 1. / 30;
+static constexpr double dt = 1. / 30;
 
-static constexpr float cfl = 5.;
+static constexpr double cfl = 5.;
 
 static Transform xform;
 static Vec2i gridSize;
@@ -44,20 +39,20 @@ void display()
 {
 	if (runSimulation || runSingleTimestep)
 	{
-		float frameTime = 0.;
+		double frameTime = 0.;
 		std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
 
 		while (frameTime < dt)
 		{
 			// Set CFL condition
-			float speed = simulator->maxVelocityMagnitude();
+			double speed = simulator->maxVelocityMagnitude();
 
-			float localDt = dt - frameTime;
+			double localDt = dt - frameTime;
 			assert(localDt >= 0);
 
 			if (speed > 1E-6)
 			{
-				float cflDt = cfl * xform.dx() / speed;
+				double cflDt = cfl * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
 					localDt = cflDt;
@@ -69,7 +64,7 @@ void display()
 				break;
 
 			// Add gravity
-			simulator->addForce(localDt, Vec2f(0., -9.8));
+			simulator->addForce(localDt, Vec2d(0., -9.8));
 
 			// Update moving solid
 			movingSolidsMesh.advectMesh(localDt, *solidVelocityField, IntegrationOrder::RK3);
@@ -78,7 +73,7 @@ void display()
 			LevelSet movingSolidSurface(xform, gridSize, 5);
 			movingSolidSurface.initFromMesh(movingSolidsMesh, false);
 
-			VectorGrid<float> movingSolidVelocity(xform, gridSize, 0, VectorGridSettings::SampleType::STAGGERED);
+			VectorGrid<double> movingSolidVelocity(xform, gridSize, 0, VectorGridSettings::SampleType::STAGGERED);
 	
 			// Set moving solid velocity
 			for (int axis : {0, 1})
@@ -89,7 +84,7 @@ void display()
 					{
 						Vec2i face = movingSolidVelocity.grid(axis).unflatten(faceIndex);
 
-						Vec2f worldPosition = movingSolidVelocity.indexToWorld(Vec2f(face), axis);
+						Vec2d worldPosition = movingSolidVelocity.indexToWorld(face.cast<double>(), axis);
 
 						if (movingSolidSurface.biLerp(worldPosition) < xform.dx())
 							movingSolidVelocity(face, axis) = (*solidVelocityField)(0, worldPosition)[axis];
@@ -131,7 +126,7 @@ void display()
 	}
 }
 
-void keyboard(unsigned char key, int x, int y)
+void keyboard(unsigned char key, int, int)
 {
 	if (key == ' ')
 		runSimulation = !runSimulation;
@@ -142,28 +137,28 @@ void keyboard(unsigned char key, int x, int y)
 int main(int argc, char** argv)
 {
 	// Scene settings
-	float dx = .025;
-	Vec2f topRightCorner(2.5);
-	Vec2f bottomLeftCorner(-2.5);
-	gridSize = Vec2i((topRightCorner - bottomLeftCorner) / dx);
+	double dx = .025;
+	Vec2d topRightCorner(2.5, 2.5);
+	Vec2d bottomLeftCorner(-2.5, -2.5);
+	gridSize = ((topRightCorner - bottomLeftCorner).array() / dx).matrix().cast<int>();
 	xform = Transform(dx, bottomLeftCorner);
-	Vec2f center = .5 * (topRightCorner + bottomLeftCorner);
+	Vec2d center = .5 * (topRightCorner + bottomLeftCorner);
 
-	renderer = std::make_unique<Renderer>("Viscous Liquid Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Viscous Liquid Simulator", Vec2i(1000, 1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	movingSolidsMesh = makeCircleMesh(center + Vec2f(1.2, 0), .25, 20);
+	movingSolidsMesh = makeCircleMesh(center + Vec2d(1.2, 0), .25, 20);
 	
-	staticSolidsMesh = makeSquareMesh(center, Vec2f(2));
+	staticSolidsMesh = makeSquareMesh(center, Vec2d(2));
 	staticSolidsMesh.reverse();
 	assert(staticSolidsMesh.unitTestMesh());
 	
-	EdgeMesh beamLiquidMesh = makeSquareMesh(center - Vec2f(.8, 0), Vec2f(1.5, .2));
+	EdgeMesh beamLiquidMesh = makeSquareMesh(center - Vec2d(.8, 0), Vec2d(1.5, .2));
 	assert(beamLiquidMesh.unitTestMesh());
 
 	LevelSet beamLiquidSurface(xform, gridSize, 5);
 	beamLiquidSurface.initFromMesh(beamLiquidMesh, false);
 
-	EdgeMesh seedLiquidMesh = makeSquareMesh(center + Vec2f(0, .6), Vec2f(.075, .25));
+	EdgeMesh seedLiquidMesh = makeSquareMesh(center + Vec2d(0, .6), Vec2d(.075, .25));
 	assert(seedLiquidMesh.unitTestMesh());
 
 	seedLiquidSurface = LevelSet(xform, gridSize, 5);

@@ -7,26 +7,26 @@
 #include "MultiMaterialPressureProjection.h"
 #include "Timer.h"
 
-namespace FluidSim2D::RegularGridSim
+namespace FluidSim2D
 {
 
 void MultiMaterialLiquidSimulator::drawMaterialSurface(Renderer& renderer, int material)
 {
-	myFluidSurfaces[material].drawSurface(renderer, Vec3f(0, 0, 1), 2);
+	myFluidSurfaces[material].drawSurface(renderer, Vec3d(0., 0., 1.), 2.);
 }
 
-void MultiMaterialLiquidSimulator::drawMaterialVelocity(Renderer& renderer, float length, int material) const
+void MultiMaterialLiquidSimulator::drawMaterialVelocity(Renderer& renderer, double length, int material) const
 {
-	myFluidVelocities[material].drawSamplePointVectors(renderer, Vec3f(0), myFluidVelocities[material].dx() * length);
+	myFluidVelocities[material].drawSamplePointVectors(renderer, Vec3d::Zero(), myFluidVelocities[material].dx() * length);
 }
 
 void MultiMaterialLiquidSimulator::drawSolidSurface(Renderer& renderer)
 {
-	mySolidSurface.drawSurface(renderer, Vec3f(0), 2);
+	mySolidSurface.drawSurface(renderer, Vec3d::Zero(), 2);
 }
 
 template<typename ForceSampler>
-void MultiMaterialLiquidSimulator::addForce(float dt, int material, const ForceSampler& force)
+void MultiMaterialLiquidSimulator::addForce(double dt, int material, const ForceSampler& force)
 {
 	for (int axis : {0, 1})
 	{
@@ -35,7 +35,7 @@ void MultiMaterialLiquidSimulator::addForce(float dt, int material, const ForceS
 				for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 				{
 					Vec2i face = myFluidVelocities[0].grid(axis).unflatten(faceIndex);
-					Vec2f worldPosition = myFluidVelocities[0].indexToWorld(Vec2f(face), axis);
+					Vec2d worldPosition = myFluidVelocities[0].indexToWorld(face.cast<double>(), axis);
 
 					for (int material = 0; material < myMaterialCount; ++material)
 						myFluidVelocities[material](face, axis) += dt * force(worldPosition, axis);
@@ -44,18 +44,18 @@ void MultiMaterialLiquidSimulator::addForce(float dt, int material, const ForceS
 	}
 }
 
-void MultiMaterialLiquidSimulator::addForce(float dt, int material, const Vec2f& force)
+void MultiMaterialLiquidSimulator::addForce(double dt, int material, const Vec2d& force)
 {
-	addForce(dt, material, [&](Vec2f, int axis) { return force[axis]; });
+	addForce(dt, material, [&](Vec2d, int axis) { return force[axis]; });
 }
 
-void MultiMaterialLiquidSimulator::advectFluidVelocities(float dt, IntegrationOrder integrator, InterpolationOrder interpolator)
+void MultiMaterialLiquidSimulator::advectFluidVelocities(double dt, IntegrationOrder integrator, InterpolationOrder interpolator)
 {
 	for (int material = 0; material < myMaterialCount; ++material)
 	{
-		auto velocityFunc = [&](float, const Vec2f& point) { return myFluidVelocities[material].biLerp(point); };
+		auto velocityFunc = [&](double, const Vec2d& point) { return myFluidVelocities[material].biLerp(point); };
 
-		VectorGrid<float> tempVelocity(myFluidVelocities[material].xform(), myFluidVelocities[material].gridSize(), 0, VectorGridSettings::SampleType::STAGGERED);
+		VectorGrid<double> tempVelocity(myFluidVelocities[material].xform(), myFluidVelocities[material].gridSize(), 0, VectorGridSettings::SampleType::STAGGERED);
 
 		for (int axis : {0, 1})
 			advectField(dt, tempVelocity.grid(axis), myFluidVelocities[material].grid(axis), velocityFunc, integrator, interpolator);
@@ -64,11 +64,11 @@ void MultiMaterialLiquidSimulator::advectFluidVelocities(float dt, IntegrationOr
 	}
 }
 
-void MultiMaterialLiquidSimulator::advectFluidSurfaces(float dt, IntegrationOrder integrator)
+void MultiMaterialLiquidSimulator::advectFluidSurfaces(double dt, IntegrationOrder integrator)
 {
 	for (int material = 0; material < myMaterialCount; ++material)
 	{
-		auto velocityFunc = [&](float, const Vec2f& point) { return myFluidVelocities[material].biLerp(point); };
+		auto velocityFunc = [&](double, const Vec2d& point) { return myFluidVelocities[material].biLerp(point); };
 
 		EdgeMesh localMesh = myFluidSurfaces[material].buildMSMesh();
 		localMesh.advectMesh(dt, velocityFunc, integrator);
@@ -82,12 +82,12 @@ void MultiMaterialLiquidSimulator::advectFluidSurfaces(float dt, IntegrationOrde
 			{
 				Vec2i cell = myFluidSurfaces[0].unflatten(cellIndex);
 
-				float firstMin = std::min(myFluidSurfaces[0](cell), mySolidSurface(cell));
-				float secondMin = std::max(myFluidSurfaces[0](cell), mySolidSurface(cell));
+				double firstMin = std::min(myFluidSurfaces[0](cell), mySolidSurface(cell));
+				double secondMin = std::max(myFluidSurfaces[0](cell), mySolidSurface(cell));
 
 				for (int material = 1; material < myMaterialCount; ++material)
 				{
-					float localMin = myFluidSurfaces[material](cell);
+					double localMin = myFluidSurfaces[material](cell);
 					if (localMin < firstMin)
 					{
 						secondMin = firstMin;
@@ -96,7 +96,7 @@ void MultiMaterialLiquidSimulator::advectFluidSurfaces(float dt, IntegrationOrde
 					else secondMin = std::min(localMin, secondMin);
 				}
 
-				float avgSDF = .5 * (firstMin + secondMin);
+				double avgSDF = .5 * (firstMin + secondMin);
 
 				for (int material = 0; material < myMaterialCount; ++material)
 					myFluidSurfaces[material](cell) -= avgSDF;
@@ -117,7 +117,7 @@ void MultiMaterialLiquidSimulator::setSolidSurface(const LevelSet& solidSurface)
 	mySolidSurface.initFromMesh(localMesh, false /* don't resize grid*/);
 }
 
-void MultiMaterialLiquidSimulator::runTimestep(float dt, Renderer& renderer, int frame)
+void MultiMaterialLiquidSimulator::runTimestep(double dt)
 {
 	std::cout << "\nStarting simulation loop\n" << std::endl;
 
@@ -132,7 +132,7 @@ void MultiMaterialLiquidSimulator::runTimestep(float dt, Renderer& renderer, int
 	for (int material = 0; material < myMaterialCount; ++material)
 		extrapolatedSurfaces[material] = myFluidSurfaces[material];
 
-	float dx = mySolidSurface.dx();
+	double dx = mySolidSurface.dx();
 
 	tbb::parallel_for(tbb::blocked_range<int>(0, myFluidSurfaces[0].voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{

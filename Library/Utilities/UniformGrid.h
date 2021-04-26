@@ -1,5 +1,5 @@
-#ifndef LIBRARY_UNIFORM_GRID_H
-#define LIBRARY_UNIFORM_GRID_H
+#ifndef FLUIDSIM2D_UNIFORM_GRID_H
+#define FLUIDSIM2D_UNIFORM_GRID_H
 
 #include <iostream>
 #include <fstream>
@@ -7,7 +7,6 @@
 
 #include "GridUtilities.h"
 #include "Utilities.h"
-#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -19,7 +18,7 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::Utilities
+namespace FluidSim2D
 {
 
 template <typename T>
@@ -27,22 +26,23 @@ class UniformGrid
 {
 public:
 
-	UniformGrid() : mySize(Vec2i(0)) {}
+	UniformGrid() : mySize(Vec2i::Zero()) {}
 
 	UniformGrid(const Vec2i& size) : mySize(size)
 	{
 		for (int axis : {0, 1})
-			assert(size[axis] >= 0);
+			assert(size[axis] > 0);
 
-		myGrid.resize(mySize[0] * mySize[1]);
+		myGrid.setZero(mySize[0] * mySize[1]);
 	}
 
 	UniformGrid(const Vec2i& size, const T& value) : mySize(size)
 	{
 		for (int axis : {0, 1})
-			assert(size[axis] >= 0);
+			assert(size[axis] > 0);
 
-		myGrid.resize(mySize[0] * mySize[1], value);
+		myGrid.resize(mySize[0] * mySize[1]);
+		myGrid.array() = value;
 	}
 
 	// Accessor is y-major because the inside loop for most processes is naturally y. Should give better cache coherence.
@@ -70,11 +70,11 @@ public:
 
 	void clear()
 	{
-		mySize = Vec2i(0);
-		myGrid.clear();
+		mySize.setZero();
+		myGrid.resize(0);
 	}
 
-	bool empty() const { return myGrid.empty(); }
+	bool empty() const { return myGrid.rows() == 0; }
 
 	void resize(const Vec2i& size)
 	{
@@ -82,7 +82,6 @@ public:
 			assert(size[axis] >= 0);
 
 		mySize = size;
-		myGrid.clear();
 		myGrid.resize(mySize[0] * mySize[1]);
 	}
 
@@ -90,16 +89,14 @@ public:
 	{
 		for (int axis : {0, 1})
 			assert(size[axis] >= 0);
-
-		mySize = size;
-		myGrid.clear();
-		myGrid.resize(mySize[0] * mySize[1], value);
+	
+		resize(size);
+		myGrid.array() = value;
 	}
 
 	void reset(const T& value)
 	{
-		myGrid.clear();
-		myGrid.resize(mySize[0] * mySize[1], value);
+		myGrid.array() = value;
 	}
 
 	const Vec2i& size() const { return mySize; }
@@ -123,7 +120,7 @@ public:
 protected:
 
 	//Grid center container
-	std::vector<T> myGrid;
+	VectorX<T> myGrid;
 	Vec2i mySize;
 };
 
@@ -137,14 +134,14 @@ void UniformGrid<T>::printAsOBJ(const std::string& filename) const
 	{
 		// Print vertices first.
 		int vertexCount = 0;
-		forEachVoxelRange(Vec2i(0), this->mySize, [&](const Vec2i& cell)
+		forEachVoxelRange(Vec2i::Zero(), this->mySize, [&](const Vec2i& cell)
 		{
-			Vec2f position(cell);
+			Vec2d position = cell.cast<double>();
 
 			int flatIndex = this->flatten(cell);
 			assert(this->unflatten(flatIndex) == cell);
 
-			writer << "v " << position[0] << " " << (*this)(cell) << " " << position[1] << "#" << vertexCount << "\n";
+			writer << "v " << position[0] << " " << myGrid[flatIndex] << " " << position[1] << "#" << vertexCount << "\n";
 
 			assert(flatIndex == vertexCount);
 			++vertexCount;
@@ -152,7 +149,7 @@ void UniformGrid<T>::printAsOBJ(const std::string& filename) const
 
 		assert(vertexCount == this->mySize[0] * this->mySize[1]);
 		// Print quad faces
-		forEachVoxelRange(Vec2i(1), this->mySize, [&](const Vec2i& node)
+		forEachVoxelRange(Vec2i::Ones(), this->mySize, [&](const Vec2i& node)
 		{
 			writer << "f";
 			for (int cellIndex = 0; cellIndex < 4; ++cellIndex)

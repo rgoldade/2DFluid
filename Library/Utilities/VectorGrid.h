@@ -1,10 +1,9 @@
-#ifndef LIBRARY_VECTOR_GRID_H
-#define LIBRARY_VECTOR_GRID_H
+#ifndef FLUIDSIM2D_VECTOR_GRID_H
+#define FLUIDSIM2D_VECTOR_GRID_H
 
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "Utilities.h"
-#include "Vec.h"
 
 ///////////////////////////////////
 //
@@ -17,7 +16,7 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::Utilities
+namespace FluidSim2D
 {
 
 namespace VectorGridSettings
@@ -34,7 +33,7 @@ class VectorGrid
 
 public:
 
-	VectorGrid() : myXform(1., Vec2f(0.)), myGridSize(0)
+	VectorGrid() : myXform(1., Vec2d::Zero()), myGridSize(Vec2i::Zero())
 	{}
 
 	VectorGrid(const Transform& xform, const Vec2i& size,
@@ -108,23 +107,23 @@ public:
 
 	T maxMagnitude() const;
 
-	Vec<2, T> biLerp(float x, float y) const { return biLerp(Vec2f(x, y)); }
-	Vec<2, T> biLerp(const Vec2f& samplePoint) const
+	Vec2t<T> biLerp(double x, double y) const { return biLerp(Vec2d(x, y)); }
+	Vec2t<T> biLerp(const Vec2d& samplePoint) const
 	{
-		return Vec<2, T>(biLerp(samplePoint, 0), biLerp(samplePoint, 1));
+		return Vec2t<T>(biLerp(samplePoint, 0), biLerp(samplePoint, 1));
 	}
 
-	T biLerp(float x, float y, int axis) const { return biLerp(Vec2f(x, y), axis); }
-	T biLerp(const Vec2f& samplePoint, int axis) const
+	T biLerp(double x, double y, int axis) const { return biLerp(Vec2d(x, y), axis); }
+	T biLerp(const Vec2d& samplePoint, int axis) const
 	{
 		return myGrids[axis].biLerp(samplePoint);
 	}
 
-	Vec<2, T> biCubicInterp(float x, float y) const { return biCubicInterp(Vec2f(x, y)); }
-	Vec<2, T> biCubicInterp(const Vec2f& samplePoint) const { return Vec<2, T>(biCubicInterp(samplePoint, 0), biCubicInterp(samplePoint, 1)); }
+	Vec2t<T> biCubicInterp(double x, double y) const { return biCubicInterp(Vec2d(x, y)); }
+	Vec2t<T> biCubicInterp(const Vec2d& samplePoint) const { return Vec2t<T>(biCubicInterp(samplePoint, 0), biCubicInterp(samplePoint, 1)); }
 
-	T biCubicInterp(float x, float y, int axis) const { return biCubicInterp(Vec2f(x, y), axis); }
-	T biCubicInterp(const Vec2f& samplePoint, int axis) const
+	T biCubicInterp(double x, double y, int axis) const { return biCubicInterp(Vec2d(x, y), axis); }
+	T biCubicInterp(const Vec2d& samplePoint, int axis) const
 	{
 		return myGrids[axis].biCubicInterp(samplePoint);
 	}
@@ -132,18 +131,18 @@ public:
 	// World space vs. index space converters need to be done at the 
 	// underlying scalar grid level because the alignment of the two 
 	// grids are different depending on the SampleType.
-	Vec2f indexToWorld(const Vec2f& indexPoint, int axis) const
+	Vec2d indexToWorld(const Vec2d& indexPoint, int axis) const
 	{
 		return myGrids[axis].indexToWorld(indexPoint);
 	}
 
-	Vec2f worldToIndex(const Vec2f& worldPoint, int axis) const
+	Vec2d worldToIndex(const Vec2d& worldPoint, int axis) const
 	{
 		return myGrids[axis].worldToIndex(worldPoint);
 	}
 
-	float dx() const { return myXform.dx(); }
-	Vec2f offset() const { return myXform.offset(); }
+	double dx() const { return myXform.dx(); }
+	Vec2d offset() const { return myXform.offset(); }
 	Transform xform() const { return myXform; }
 
 	Vec2i size(int axis) const { return myGrids[axis].size(); }
@@ -153,18 +152,18 @@ public:
 	// Rendering methods
 	void drawGrid(Renderer& renderer) const;
 	void drawSamplePoints(Renderer& renderer,
-							const Vec3f& colour0 = Vec3f(1, 0, 0),
-							const Vec3f& colour1 = Vec3f(0, 0, 1),
-							const Vec2f& sampleSizes = Vec2f(1.)) const;
+							const Vec3d& colour0 = Vec3d(1, 0, 0),
+							const Vec3d& colour1 = Vec3d(0, 0, 1),
+							const Vec2d& sampleSizes = Vec2d(1.)) const;
 
-	void drawSupersampledValues(Renderer& renderer, float sampleRadius = .5, int samples = 5, float sampleSize = 1.) const;
-	void drawSamplePointVectors(Renderer& renderer, const Vec3f& colour = Vec3f(0, 0, 1), float length = .25) const;
+	void drawSupersampledValues(Renderer& renderer, double sampleRadius = .5, int samples = 5, double sampleSize = 1.) const;
+	void drawSamplePointVectors(Renderer& renderer, const Vec3d& colour = Vec3d(0, 0, 1), double length = .25) const;
 
 private:
 
 	// This method is private to prevent future mistakes between this transform
 	// and the staggered scalar grids
-	Vec2f indexToWorld(const Vec2f& indexPos) const
+	Vec2d indexToWorld(const Vec2d& indexPos) const
 	{
 		return myXform.indexToWorld(indexPos);
 	}
@@ -182,55 +181,60 @@ private:
 template<typename T>
 T VectorGrid<T>::maxMagnitude() const
 {
-	T magnitude(0);
-
-	tbb::enumerable_thread_specific<T> parallelMax(T(0));
+	T sqr_mag;
 
 	if (mySampleType == SampleType::CENTER || mySampleType == SampleType::NODE)
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, myGrids[0].voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		sqr_mag = tbb::parallel_reduce(tbb::blocked_range<int>(0, myGrids[0].voxelCount()), T(0),
+		[&](const tbb::blocked_range<int>& range, T maxMagnitude) -> T
+		{
+			for (int index = range.begin(); index != range.end(); ++index)
 			{
-				T& localMax = parallelMax.local();
-				for (int index = range.begin(); index != range.end(); ++index)
-				{
-					Vec2i coord = myGrids[0].unflatten(index);
-					T localMagnitude = mag2(Vec<2, T>(myGrids[0](coord), myGrids[1](coord)));
+				Vec2i coord = myGrids[0].unflatten(index);
+				T localMagnitude = mag2(Vec<2, T>(myGrids[0](coord), myGrids[1](coord)));
 
-					localMax = std::max(localMax, localMagnitude);
-				}
-			});
+				maxMagnitude = std::max(maxMagnitude, localMagnitude);
+			}
+
+			return maxMagnitude;
+		}
+		[](T a, T b) -> double
+		{
+			return std::max(a, b);
+		});
 	}
 	else if (mySampleType == SampleType::STAGGERED)
 	{
 		auto blocked_range = tbb::blocked_range2d<int>(0, myGridSize[0], std::sqrt(tbbLightGrainSize), 0, myGridSize[1], std::cbrt(tbbLightGrainSize));
 
-		tbb::parallel_for(blocked_range, [&](const tbb::blocked_range2d<int>& range)
-			{
-				T& localMax = parallelMax.local();
+		sqr_mag = tbb::parallel_reduce(blocked_range, T(0),
+		[&](const tbb::blocked_range2d<int>& range, T maxMagnitude) -> T
+		{
+			Vec2i cell;
 
-				Vec2i cell;
+			for (cell[0] = range.rows().begin(); cell[0] != range.rows().end(); ++cell[0])
+				for (cell[1] = range.cols().begin(); cell[1] != range.cols().end(); ++cell[1])
+				{
+					Vec2d averageVector = Vec2d::Zero();
 
-				for (cell[0] = range.rows().begin(); cell[0] != range.rows().end(); ++cell[0])
-					for (cell[1] = range.cols().begin(); cell[1] != range.cols().end(); ++cell[1])
-					{
-						Vec2f averageVector(0);
+					for (int axis : {0, 1})
+						for (int direction : {0, 1})
+						{
+							Vec2i face = cellToFace(cell, axis, direction);
+							averageVector[axis] += .5 * myGrids[axis](face);
+						}
 
-						for (int axis : {0, 1})
-							for (int direction : {0, 1})
-							{
-								Vec2i face = cellToFace(cell, axis, direction);
-								averageVector[axis] += .5 * myGrids[axis](face);
-							}
-
-						T localMagnitude = mag2(averageVector);
-						localMax = std::max(localMax, localMagnitude);
-					}
-			});
+					T localMagnitude = mag2(averageVector);
+					maxMagnitude = std::max(maxMagnitude, localMagnitude);
+				}
+		}
+		[](T a, T b) -> T
+		{
+			return std::max(a, b);
+		});
 	}
 
-	parallelMax.combine_each([&](T x) { magnitude = std::max(magnitude, x); });
-
-	return std::sqrt(magnitude);
+	return std::sqrt(sqr_mag);
 }
 
 template<typename T>
@@ -241,34 +245,34 @@ void VectorGrid<T>::drawGrid(Renderer& renderer) const
 
 template<typename T>
 void VectorGrid<T>::drawSamplePoints(Renderer& renderer,
-										const Vec3f& colour0,
-										const Vec3f& colour1,
-										const Vec2f& sampleSizes) const
+										const Vec3d& colour0,
+										const Vec3d& colour1,
+										const Vec2d& sampleSizes) const
 {
 	myGrids[0].drawSamplePoints(renderer, colour0, sampleSizes[0]);
 	myGrids[1].drawSamplePoints(renderer, colour1, sampleSizes[1]);
 }
 
 template<typename T>
-void VectorGrid<T>::drawSupersampledValues(Renderer& renderer, float sampleRadius, int samples, float sampleSize) const
+void VectorGrid<T>::drawSupersampledValues(Renderer& renderer, double sampleRadius, int samples, double sampleSize) const
 {
 	myGrids[0].drawSupersampledValues(renderer, sampleRadius, samples, sampleSize);
 	myGrids[1].drawSupersampledValues(renderer, sampleRadius, samples, sampleSize);
 }
 
 template<typename T>
-void VectorGrid<T>::drawSamplePointVectors(Renderer& renderer, const Vec3f& colour, float length) const
+void VectorGrid<T>::drawSamplePointVectors(Renderer& renderer, const Vec3d& colour, double length) const
 {
-	std::vector<Vec2f> startPoints;
-	std::vector<Vec2f> endPoints;
+	VecVec2d startPoints;
+	VecVec2d endPoints;
 	
-	forEachVoxelRange(Vec2i(0), myGridSize, [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), myGridSize, [&](const Vec2i& cell)
 	{
-		Vec2f worldPoint = indexToWorld(Vec2f(cell) + Vec2f(.5));
+		Vec2d worldPoint = indexToWorld(cell.cast<double>() + Vec2d(.5f, .5f));
 		startPoints.push_back(worldPoint);
 
-		Vec<2, T> sampleVector = biLerp(worldPoint);
-		Vec2f vectorEnd = worldPoint + length * sampleVector;
+		Vec2t<T> sampleVector = biLerp(worldPoint);
+		Vec2d vectorEnd = worldPoint + length * sampleVector;
 		endPoints.push_back(vectorEnd);
 	});
 

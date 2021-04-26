@@ -1,8 +1,9 @@
-#ifndef LIBRARY_GRID_UTILITIES_H
-#define LIBRARY_GRID_UTILITIES_H
+#ifndef FLUIDSIM2D_GRID_UTILITIES_H
+#define FLUIDSIM2D_GRID_UTILITIES_H
+
+#include <assert.h>
 
 #include "Utilities.h"
-#include "Vec.h"
 
 // The marching squares template uses a binary encoding of
 // inside/outside cell nodes to provide a set of
@@ -15,7 +16,7 @@
 // 0 --- 0 --- 1
 //
 
-namespace FluidSim2D::Utilities
+namespace FluidSim2D
 {
 
 template<typename RealType>
@@ -40,11 +41,9 @@ RealType lengthFraction(RealType phi0, RealType phi1)
 
 enum class Axis { XAXIS, YAXIS };
 
-// Helper fuctions to map between geometry components in the grid. It's preferrable to use these
-// compared to the offsets above because only the necessary pieces are modified and the concepts
-// are encapsulated better.
+// Helper fuctions to map between geometry components in the grid.
 
-inline Vec2i cellToCell(const Vec2i& cell, int axis, int direction)
+FORCE_INLINE Vec2i cellToCell(const Vec2i& cell, int axis, int direction)
 {
 	Vec2i adjacentCell(cell);
 
@@ -59,7 +58,7 @@ inline Vec2i cellToCell(const Vec2i& cell, int axis, int direction)
 	return adjacentCell;
 }
 
-inline Vec2i cellToFace(const Vec2i& cell, int axis, int direction)
+FORCE_INLINE Vec2i cellToFace(const Vec2i& cell, int axis, int direction)
 {
 	Vec2i face(cell);
 
@@ -71,7 +70,7 @@ inline Vec2i cellToFace(const Vec2i& cell, int axis, int direction)
 }
 
 // Map cell to face using the same winding order as cellToNodeCCW
-inline Vec3i cellToFaceCCW(const Vec2i &cell, int index)
+FORCE_INLINE Vec3i cellToFaceCCW(const Vec2i &cell, int index)
 {
 	int axis = index % 2 == 0 ? 1 : 0;
 	Vec3i face(cell[0], cell[1], axis);
@@ -84,7 +83,7 @@ inline Vec3i cellToFaceCCW(const Vec2i &cell, int index)
 	return face;
 }
 
-inline Vec2i cellToNode(const Vec2i& cell, int nodeIndex)
+FORCE_INLINE Vec2i cellToNode(const Vec2i& cell, int nodeIndex)
 {
 	assert(nodeIndex >= 0 && nodeIndex < 4);
 
@@ -100,9 +99,9 @@ inline Vec2i cellToNode(const Vec2i& cell, int nodeIndex)
 }
 
 // Map cell to nodes CCW from bottom-left
-inline Vec2i cellToNodeCCW(const Vec2i& cell, int nodeIndex)
+FORCE_INLINE Vec2i cellToNodeCCW(const Vec2i& cell, int nodeIndex)
 {
-	const Vec2i cellToNodeOffsets[4] = { Vec2i(0), Vec2i(1,0), Vec2i(1,1), Vec2i(0,1) };
+	const Vec2i cellToNodeOffsets[4] = { Vec2i::Zero(), Vec2i(1, 0), Vec2i::Ones(), Vec2i(0, 1) };
 
 	assert(nodeIndex >= 0 && nodeIndex < 4);
 
@@ -112,7 +111,7 @@ inline Vec2i cellToNodeCCW(const Vec2i& cell, int nodeIndex)
 	return node;
 }
 
-inline Vec2i faceToCell(const Vec2i& face, int axis, int direction)
+FORCE_INLINE Vec2i faceToCell(const Vec2i& face, int axis, int direction)
 {
 	Vec2i cell(face);
 
@@ -125,7 +124,7 @@ inline Vec2i faceToCell(const Vec2i& face, int axis, int direction)
 
 // An x-aligned face really means that the face normal is in the
 // x-direction so the face nodes must be y-direction offsets.
-inline Vec2i faceToNode(const Vec2i& face, int faceAxis, int direction)
+FORCE_INLINE Vec2i faceToNode(const Vec2i& face, int faceAxis, int direction)
 {
 	assert(faceAxis >= 0 && faceAxis < 2);
 
@@ -139,20 +138,20 @@ inline Vec2i faceToNode(const Vec2i& face, int faceAxis, int direction)
 }
 
 // Offset node index in the axis direction.
-inline Vec2i nodeToFace(const Vec2i& node, int faceAxis, int direction)
+FORCE_INLINE Vec2i nodeToFace(const Vec2i& node, int faceAxis, int direction)
 {
 	Vec2i face(node);
 
 	if (direction == 0)
-		--face[faceAxis];
+		--face[(faceAxis + 1) % 2];
 	else assert(direction == 1);
 
 	return face;
 }
 
-inline Vec2i nodeToCellCCW(const Vec2i& node, int cellIndex)
+FORCE_INLINE Vec2i nodeToCellCCW(const Vec2i& node, int cellIndex)
 {
-	const Vec2i nodeToCellOffsets[4] = { Vec2i(0), Vec2i(-1,0), Vec2i(-1,-1), Vec2i(0,-1) };
+	const Vec2i nodeToCellOffsets[4] = { Vec2i::Zero(), Vec2i(-1,0), Vec2i(-1,-1), Vec2i(0,-1) };
 	
 	assert(cellIndex >= 0 && cellIndex < 4);
 
@@ -162,7 +161,7 @@ inline Vec2i nodeToCellCCW(const Vec2i& node, int cellIndex)
 	return cell;
 }
 
-inline Vec2i nodeToCell(const Vec2i& node, int cellIndex)
+FORCE_INLINE Vec2i nodeToCell(const Vec2i& node, int cellIndex)
 {
 	assert(cellIndex >= 0 && cellIndex < 4);
 
@@ -176,26 +175,26 @@ inline Vec2i nodeToCell(const Vec2i& node, int cellIndex)
 	return cell;
 }
 
-const Vec3f colours[] = { Vec3f(1., 0., 0.),
-							Vec3f(0., 1., 0.),
-							Vec3f(0., 0., 1.),
-							Vec3f(1., 1., 0.),
-							Vec3f(1., 0., 1.),
-							Vec3f(0., 1., 1.) };
+const std::vector<Vec3d> colour_swatch = { Vec3d(1, 0, 0),
+											Vec3d(0, 1, 0),
+											Vec3d(0, 0, 1),
+											Vec3d(1, 1, 0),
+											Vec3d(1, 0, 1),
+											Vec3d(0, 1, 1) };
 
-template<typename T, typename Function>
-void forEachVoxelRange(const Vec<2, T>& start, const Vec<2, T>& end, const Function& f)
+template<typename Function>
+void forEachVoxelRange(const Vec2i& start, const Vec2i& end, const Function& f)
 {
-	Vec<2, T> cell;
+	Vec2i cell;
 	for (cell[0] = start[0]; cell[0] < end[0]; ++cell[0])
 		for (cell[1] = start[1]; cell[1] < end[1]; ++cell[1])
 			f(cell);
 }
 
-template<typename T, typename Function>
-void forEachVoxelRangeReverse(const Vec<2, T>& start, const Vec<2, T>& end, const Function& f)
+template<typename Function>
+void forEachVoxelRangeReverse(const Vec2i& start, const Vec2i& end, const Function& f)
 {
-	Vec<2, T> cell;
+	Vec2i cell;
 	for (cell[0] = end[0] - 1; cell[0] >= start[0]; --cell[0])
 		for (cell[1] = end[1] - 1; cell[1] >= start[1]; --cell[1])
 			f(cell);

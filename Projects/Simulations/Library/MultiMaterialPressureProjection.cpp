@@ -9,16 +9,16 @@
 #include "ConjugateGradientSolver.h"
 #include "GeometricMultigridPoissonSolver.h"
 
-namespace FluidSim2D::RegularGridSim
+namespace FluidSim2D
 {
 
 MultiMaterialPressureProjection::MultiMaterialPressureProjection(const std::vector<LevelSet>& surfaces,
-																	const std::vector<float>& densities,
+																	const std::vector<double>& densities,
 																	const LevelSet& solidSurface)
 	: myFluidSurfaces(surfaces)
 	, myFluidDensities(densities)
 	, mySolidSurface(solidSurface)
-	, myMaterialCount(surfaces.size())
+	, myMaterialCount(int(surfaces.size()))
 {
 	assert(myFluidSurfaces.size() == myFluidDensities.size());
 
@@ -27,7 +27,7 @@ MultiMaterialPressureProjection::MultiMaterialPressureProjection(const std::vect
 
 	assert(myFluidSurfaces[0].isGridMatched(mySolidSurface));
 
-	myPressure = ScalarGrid<float>(mySolidSurface.xform(), mySolidSurface.size(), 0);
+	myPressure = ScalarGrid<double>(mySolidSurface.xform(), mySolidSurface.size(), 0);
 
 	myValidMaterialFaces.resize(myMaterialCount);
 	for (int material = 0; material < myMaterialCount; ++material)
@@ -44,19 +44,19 @@ MultiMaterialPressureProjection::MultiMaterialPressureProjection(const std::vect
 	// Now normalize the weights, removing the solid boundary contribution first.
 	for (int axis : {0, 1})
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, mySolidCutCellWeights.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, mySolidCutCellWeights.grid(axis).voxelCount()), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
 				Vec2i face = mySolidCutCellWeights.grid(axis).unflatten(faceIndex);
 
-				float weight = 1;
+				double weight = 1;
 				weight -= mySolidCutCellWeights(face, axis);
-				weight = clamp(weight, float(0.), weight);
+				weight = std::clamp(weight, 0., weight);
 
 				if (weight > 0)
 				{
-					float accumulatedWeight = 0;
+					double accumulatedWeight = 0;
 					for (int material = 0; material < myMaterialCount; ++material)
 						accumulatedWeight += myMaterialCutCellWeights[material](face, axis);
 
@@ -75,7 +75,7 @@ MultiMaterialPressureProjection::MultiMaterialPressureProjection(const std::vect
 				}
 
 				// Debug check
-				float totalWeight = mySolidCutCellWeights(face, axis);
+				double totalWeight = mySolidCutCellWeights(face, axis);
 
 				for (int material = 0; material < myMaterialCount; ++material)
 					totalWeight += myMaterialCutCellWeights[material](face, axis);
@@ -90,16 +90,16 @@ MultiMaterialPressureProjection::MultiMaterialPressureProjection(const std::vect
 
 					int otherAxis = (axis + 1) % 2;
 
-					Vec2f offset(0); offset[otherAxis] = .5;
+					Vec2d offset(0); offset[otherAxis] = .5;
 
 					for (int material = 0; material < myMaterialCount; ++material)
 					{
-						Vec2f backwardNodePoint = myMaterialCutCellWeights[material].indexToWorld(Vec2f(face) - offset, axis);
-						Vec2f forwardNodePoint = myMaterialCutCellWeights[material].indexToWorld(Vec2f(face) + offset, axis);
+						Vec2d backwardNodePoint = myMaterialCutCellWeights[material].indexToWorld(face.cast<double>() - offset, axis);
+						Vec2d forwardNodePoint = myMaterialCutCellWeights[material].indexToWorld(face.cast<double>() + offset, axis);
 
-						float weight = lengthFraction(surfaces[material].biLerp(backwardNodePoint), surfaces[material].biLerp(forwardNodePoint));
+						double localWeight = lengthFraction(surfaces[material].biLerp(backwardNodePoint), surfaces[material].biLerp(forwardNodePoint));
 
-						if (weight == 0)
+						if (localWeight == 0)
 							faceAlignedSurfaces.push_back(material);
 					}
 
@@ -128,9 +128,9 @@ void MultiMaterialPressureProjection::copyToPreconditionerGrids(std::vector<Unif
 																const UniformGrid<int>& materialCellLabels,
 																const UniformGrid<int>& solvableCellIndices,
 																const Vector &sourceVector,
-																const std::vector<Vec2i> &mgExpandedOffset) const
+																const VecVec2i &mgExpandedOffset) const
 {
-	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
@@ -156,10 +156,10 @@ void MultiMaterialPressureProjection::copyToPreconditionerGrids(std::vector<Unif
 					assert(solvableCellIndices(cell) == UNSOLVED_CELL);
 					assert(materialCellLabels(cell) == UNSOLVED_CELL);
 
-					for (int material = 0; material < myMaterialCount; ++material)
+					for (int local_material = 0; local_material < myMaterialCount; ++local_material)
 					{
-						Vec2i expandedCell = cell + mgExpandedOffset[material];
-						assert(mgDomainCellLabels[material](expandedCell) == MGCellLabels::EXTERIOR_CELL);
+						Vec2i expandedCell = cell + mgExpandedOffset[local_material];
+						assert(mgDomainCellLabels[local_material](expandedCell) == MGCellLabels::EXTERIOR_CELL);
 					}
 				}
 			}
@@ -167,16 +167,16 @@ void MultiMaterialPressureProjection::copyToPreconditionerGrids(std::vector<Unif
 }
 
 void MultiMaterialPressureProjection::applyBoundarySmoothing(std::vector<SolveReal>& tempDestinationVector,
-	const std::vector<Vec2i>& boundarySmootherCells,
+	const VecVec2i& boundarySmootherCells,
 	const std::vector<UniformGrid<MGCellLabels>>& mgDomainCellLabels,
 	const UniformGrid<int>& materialCellLabels,
 	const UniformGrid<SolveReal>& smootherDestinationGrid,
 	const UniformGrid<SolveReal>& smootherSourceGrid,
-	const std::vector<Vec2i>& mgExpandedOffset) const
+	const VecVec2i& mgExpandedOffset) const
 {
-	tbb::parallel_for(tbb::blocked_range<int>(0, boundarySmootherCells.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, boundarySmootherCells.size()), [&](const tbb::blocked_range<size_t>& range)
 		{
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
+			for (size_t cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
 				Vec2i cell = boundarySmootherCells[cellIndex];
 
@@ -219,7 +219,7 @@ void MultiMaterialPressureProjection::applyBoundarySmoothing(std::vector<SolveRe
 							else
 								theta = std::fabs(phi) / (std::fabs(phi) + std::fabs(adjacentPhi));
 
-							theta = clamp(theta, SolveReal(0), SolveReal(1));
+							theta = std::clamp(theta, SolveReal(0), SolveReal(1));
 
 							// Build interpolated density
 							if (direction == 0)
@@ -251,12 +251,12 @@ void MultiMaterialPressureProjection::applyBoundarySmoothing(std::vector<SolveRe
 
 void MultiMaterialPressureProjection::updateDestinationGrid(UniformGrid<SolveReal>& smootherDestinationGrid,
 	const UniformGrid<int>& materialCellLabels,
-	const std::vector<Vec2i>& boundarySmootherCells,
+	const VecVec2i& boundarySmootherCells,
 	const std::vector<SolveReal>& tempDestinationVector) const
 {
-	tbb::parallel_for(tbb::blocked_range<int>(0, boundarySmootherCells.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, boundarySmootherCells.size()), [&](const tbb::blocked_range<size_t>& range)
 		{
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
+			for (size_t cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
 				Vec2i cell = boundarySmootherCells[cellIndex];
 				assert(materialCellLabels(cell) >= 0);
@@ -273,12 +273,12 @@ void MultiMaterialPressureProjection::applyDirichletToMG(std::vector<UniformGrid
 	const UniformGrid<int>& materialCellLabels,
 	const UniformGrid<int>& solvableCellIndices,
 	const Vector& sourceVector,
-	const std::vector<Vec2i>& boundarySmootherCells,
-	const std::vector<Vec2i>& mgExpandedOffset) const
+	const VecVec2i& boundarySmootherCells,
+	const VecVec2i& mgExpandedOffset) const
 {
-	tbb::parallel_for(tbb::blocked_range<int>(0, boundarySmootherCells.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, boundarySmootherCells.size()), [&](const tbb::blocked_range<size_t>& range)
 		{
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
+			for (size_t cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
 				Vec2i cell = boundarySmootherCells[cellIndex];
 
@@ -326,7 +326,7 @@ void MultiMaterialPressureProjection::applyDirichletToMG(std::vector<UniformGrid
 								else
 									theta = std::fabs(phi) / (std::fabs(phi) + std::fabs(adjacentPhi));
 
-								theta = clamp(theta, SolveReal(0), SolveReal(1));
+								theta = std::clamp(theta, SolveReal(0), SolveReal(1));
 
 								// Build interpolated density
 								SolveReal density;
@@ -356,9 +356,9 @@ void MultiMaterialPressureProjection::updateSmootherGrid(UniformGrid<SolveReal>&
 	const std::vector<UniformGrid<SolveReal>>& mgDestinationGrid,
 	const UniformGrid<int>& materialCellLabels,
 	const std::vector<UniformGrid<MGCellLabels>>& mgDomainCellLabels,
-	const std::vector<Vec2i>& mgExpandedOffset) const
+	const VecVec2i& mgExpandedOffset) const
 {
-	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
@@ -385,9 +385,9 @@ void MultiMaterialPressureProjection::copyMGSolutionToVector(Vector& destination
 	const UniformGrid<int>& solvableCellIndices,
 	const std::vector<UniformGrid<MGCellLabels>>& mgDomainCellLabels,
 	const std::vector<UniformGrid<SolveReal>>& mgDestinationGrid,
-	const std::vector<Vec2i>& mgExpandedOffset) const
+	const VecVec2i& mgExpandedOffset) const
 {
-	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
@@ -414,11 +414,11 @@ void MultiMaterialPressureProjection::copyBoundarySolutionToVector(Vector& desti
 	const UniformGrid<int>& materialCellLabels,
 	const UniformGrid<int>& solvableCellIndices,
 	const UniformGrid<SolveReal>& smootherDestinationGrid,
-	const std::vector<Vec2i>& boundarySmootherCells) const
+	const VecVec2i& boundarySmootherCells) const
 {
-	tbb::parallel_for(tbb::blocked_range<int>(0, boundarySmootherCells.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<size_t>(0, boundarySmootherCells.size()), [&](const tbb::blocked_range<size_t>& range)
 		{
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
+			for (size_t cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
 				Vec2i cell = boundarySmootherCells[cellIndex];
 
@@ -432,7 +432,7 @@ void MultiMaterialPressureProjection::copyBoundarySolutionToVector(Vector& desti
 		});
 }
 
-void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fluidVelocities)
+void MultiMaterialPressureProjection::project(std::vector<VectorGrid<double>>& fluidVelocities)
 {
 	assert(fluidVelocities.size() == myFluidSurfaces.size());
 
@@ -452,7 +452,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 	UniformGrid<int> materialCellLabels = UniformGrid<int>(mySolidSurface.size(), UNSOLVED_CELL);
 	UniformGrid<int> solvableCellIndices = UniformGrid<int>(mySolidSurface.size(), UNSOLVED_CELL);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -475,7 +475,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 
 			if (isFluidCell)
 			{
-				float minDistance = std::numeric_limits<float>::max();
+				double minDistance = std::numeric_limits<double>::max();
 				int minMaterial = -1;
 
 				for (int material = 0; material < myMaterialCount; ++material)
@@ -500,7 +500,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 					// of a material if the cell is partially inside a solid.
 					if (validMaterial)
 					{
-						float sdf = myFluidSurfaces[material](cell);
+						double sdf = myFluidSurfaces[material](cell);
 
 						if (sdf < minDistance)
 						{
@@ -522,7 +522,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 	});
 
 	int solvableCellCount = 0;
-	forEachVoxelRange(Vec2i(0), materialCellLabels.size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), materialCellLabels.size(), [&](const Vec2i& cell)
 	{
 		if (materialCellLabels(cell) >= 0)
 			solvableCellIndices(cell) = solvableCellCount++;
@@ -627,7 +627,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 								else
 									theta = std::fabs(phi) / (std::fabs(phi) + std::fabs(adjacentPhi));
 
-								theta = clamp(theta, SolveReal(0), SolveReal(1));
+								theta = std::clamp(theta, SolveReal(0), SolveReal(1));
 
 								// Build interpolated density
 								if (direction == 0)
@@ -669,7 +669,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 	// Project out null space
 	{
 		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(SolveReal(0));
-		tbb::parallel_for(tbb::blocked_range<int>(0, rhsVector.rows(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, int(rhsVector.rows())), [&](const tbb::blocked_range<int>& range)
 			{
 				SolveReal& localAccumulatedDivergence = parallelAccumulatedDivergence.local();
 
@@ -685,7 +685,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 
 		SolveReal averageDivergence = accumulatedDivergence / SolveReal(solvableCellCount);
 
-		tbb::parallel_for(tbb::blocked_range<int>(0, rhsVector.rows(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, int(rhsVector.rows())), [&](const tbb::blocked_range<int>& range)
 			{
 				for (int row = range.begin(); row != range.end(); ++row)
 					rhsVector(row) -= averageDivergence;
@@ -697,7 +697,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 	if (false/*myUseInitialGuessPressure*/)
 	{
 		assert(myInitialGuessPressure != nullptr);
-		tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 			{
 				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 				{
@@ -719,9 +719,9 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 	{
 		if (printResidual)
 		{
-			UniformGrid<float> residualGrid(materialCellLabels.size(), 0);
+			UniformGrid<double> residualGrid(materialCellLabels.size(), 0);
 
-			tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 				{
 					for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 					{
@@ -750,7 +750,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 		std::vector<UniformGrid<MGCellLabels>> mgDomainCellLabels(myMaterialCount);
 		std::vector<VectorGrid<StoreReal>> mgBoundaryWeights;
 
-		std::vector<Vec2i> mgExpandedOffset(myMaterialCount);
+		VecVec2i mgExpandedOffset(myMaterialCount);
 		std::vector<int> mgLevels(myMaterialCount);
 
 		{
@@ -760,7 +760,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 			{
 				baseDomainCellLabels.emplace_back(materialCellLabels.size(), MGCellLabels::EXTERIOR_CELL);
 
-				tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+				tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 					{
 						for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 						{
@@ -793,7 +793,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 
 				for (int axis : {0, 1})
 				{
-					tbb::parallel_for(tbb::blocked_range<int>(0, poissonFaceWeights[material].grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+					tbb::parallel_for(tbb::blocked_range<int>(0, poissonFaceWeights[material].grid(axis).voxelCount()), [&](const tbb::blocked_range<int>& range)
 						{
 							for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 							{
@@ -828,9 +828,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 										SolveReal forwardPhi = myFluidSurfaces[forwardMaterial](forwardCell);
 
 										SolveReal theta = std::fabs(backwardPhi) / (std::fabs(forwardPhi) + std::fabs(backwardPhi));
-										theta = clamp(theta, SolveReal(0), SolveReal(1));
-
-										int adjacentMaterial = (backwardMaterial != material) ? backwardMaterial : forwardMaterial;
+										theta = std::clamp(theta, SolveReal(0), SolveReal(1));
 
 										SolveReal backwardDensity = myFluidDensities[backwardMaterial];
 										SolveReal forwardDensity = myFluidDensities[forwardMaterial];
@@ -876,7 +874,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 		}
 
 		// Build list of cells at multi-material boundaries
-		std::vector<Vec2i> boundarySmootherCells;
+		VecVec2i boundarySmootherCells;
 
 		{
 			int smootherBandSize = 6;
@@ -884,9 +882,9 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 			UniformGrid<VisitedCellLabels> boundaryCellMarkers(myFluidSurfaces[0].size(), VisitedCellLabels::UNVISITED_CELL);
 
 			// Build initial layer
-			tbb::enumerable_thread_specific<std::vector<Vec2i>> parallelBoundaryCells;
+			tbb::enumerable_thread_specific<VecVec2i> parallelBoundaryCells;
 
-			tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 				{
 					auto& localBoundaryCells = parallelBoundaryCells.local();
 					for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -927,7 +925,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 					}
 				});
 
-			std::vector<Vec2i> tempBoundaryCells;
+			VecVec2i tempBoundaryCells;
 			for (int layer = 0; layer < smootherBandSize; ++layer)
 			{
 				// Compile parallel build bubble list
@@ -935,9 +933,9 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 				mergeLocalThreadVectors(tempBoundaryCells, parallelBoundaryCells);
 
 				// Set visited boundary cells
-				tbb::parallel_for(tbb::blocked_range<int>(0, tempBoundaryCells.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+				tbb::parallel_for(tbb::blocked_range<size_t>(0, tempBoundaryCells.size()), [&](const tbb::blocked_range<size_t>& range)
 					{
-						for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
+						for (size_t cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 						{
 							Vec2i cell = tempBoundaryCells[cellIndex];
 							boundaryCellMarkers(cell) = VisitedCellLabels::VISITED_CELL;
@@ -955,11 +953,11 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 							return false;
 						});
 
-					tbb::parallel_for(tbb::blocked_range<int>(0, tempBoundaryCells.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+					tbb::parallel_for(tbb::blocked_range<size_t>(0, tempBoundaryCells.size()), [&](const tbb::blocked_range<size_t>& range)
 						{
 							auto& localBoundaryCells = parallelBoundaryCells.local();
 
-							int cellIndex = range.begin();
+							size_t cellIndex = range.begin();
 
 							// Advanced past duplicates
 							if (cellIndex > 0)
@@ -1007,7 +1005,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 
 			// Build list of boundary cells
 			parallelBoundaryCells.clear();
-			tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 				{
 					auto& localBoundaryCells = parallelBoundaryCells.local();
 					for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -1124,7 +1122,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 	}
 
 	// Copy resulting vector to pressure grid
-	tbb::parallel_for(tbb::blocked_range<int>(0, solvableCellIndices.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, solvableCellIndices.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -1145,7 +1143,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 	VectorGrid<VisitedCellLabels> validFaces(mySolidSurface.xform(), mySolidSurface.size(), VisitedCellLabels::UNVISITED_CELL, VectorGridSettings::SampleType::STAGGERED);
 	for (int axis : {0, 1})
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, validFaces.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, validFaces.grid(axis).voxelCount()), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
@@ -1168,7 +1166,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 
 	for (int axis : {0, 1})
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, validFaces.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, validFaces.grid(axis).voxelCount()), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
@@ -1208,7 +1206,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 					else
 					{
 						SolveReal theta = std::fabs(phi[0]) / (std::fabs(phi[1]) + std::fabs(phi[0]));
-						theta = clamp(theta, SolveReal(0), SolveReal(1));
+						theta = std::clamp(theta, SolveReal(0), SolveReal(1));
 						density = theta * sampleDensity[0] + (1. - theta) * sampleDensity[1];
 					}
 
@@ -1244,7 +1242,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<float>>& fl
 		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedDivergence(SolveReal(0));
 		tbb::enumerable_thread_specific<SolveReal> parallelCellCount(SolveReal(0));
 
-		tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 			{
 				auto& localMaxDivergence = parallelMaxDivergence.local();
 				auto& localAccumulatedDivergence = parallelAccumulatedDivergence.local();

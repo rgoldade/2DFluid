@@ -5,6 +5,10 @@
 
 #include <Eigen/Sparse>
 
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_deterministic_reduce.h"
+#include "tbb/parallel_for.h"
+
 #include "GeometricMultigridOperators.h"
 #include "GeometricMultigridPoissonSolver.h"
 #include "InitialMultigridTestDomains.h"
@@ -14,41 +18,37 @@
 #include "UniformGrid.h"
 #include "Utilities.h"
 
-using namespace FluidSim2D::RenderTools;
-using namespace FluidSim2D::SimTools;
+using namespace FluidSim2D;
 
-std::unique_ptr<Renderer> renderer;
+std::unique_ptr<Renderer> gRenderer;
 
-static constexpr int gridSize = 512;
-static constexpr bool useComplexDomain = true;
-static constexpr bool useSolidSphere = true;
+static constexpr int gGridSize = 512;
+static constexpr bool gUseComplexDomain = true;
+static constexpr bool gUseSolidSphere = true;
 
 int main(int argc, char** argv)
 {
 	using namespace GeometricMultigridOperators;
 
-	using StoreReal = double;
-	using SolveReal = double;
-
 	UniformGrid<CellLabels> domainCellLabels;
-	VectorGrid<StoreReal> boundaryWeights;
+	VectorGrid<double> boundaryWeights;
 
 	int mgLevels;
 	{
 		UniformGrid<CellLabels> baseDomainCellLabels;
-		VectorGrid<StoreReal> baseBoundaryWeights;
+		VectorGrid<double> baseBoundaryWeights;
 
 		// Complex domain set up
-		if (useComplexDomain)
+		if (gUseComplexDomain)
 			buildComplexDomain(baseDomainCellLabels,
 								baseBoundaryWeights,
-								gridSize,
-								useSolidSphere);
+								gGridSize,
+								gUseSolidSphere);
 		// Simple domain set up
 		else
 			buildSimpleDomain(baseDomainCellLabels,
 								baseBoundaryWeights,
-								gridSize,
+								gGridSize,
 								1 /*dirichlet band*/);
 
 		// Build expanded domain
@@ -57,13 +57,13 @@ int main(int argc, char** argv)
 		mgLevels = mgSettings.second;
 	}
 
-	SolveReal dx = boundaryWeights.dx();
+	double dx = boundaryWeights.dx();
 
-	UniformGrid<StoreReal> rhsGrid(domainCellLabels.size(), 0);
+	UniformGrid<double> rhsGrid(domainCellLabels.size(), 0);
 
-	UniformGrid<StoreReal> solutionGrid(domainCellLabels.size(), 0);
+	UniformGrid<double> solutionGrid(domainCellLabels.size(), 0);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -72,22 +72,21 @@ int main(int argc, char** argv)
 			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 			{
-				Vec2f point(dx * Vec2f(cell));
+				Vec2d point(dx * cell.cast<double>());
 				solutionGrid(cell) = 4. * (std::sin(2 * PI * point[0]) * std::sin(2 * PI * point[1]) +
 											std::sin(4 * PI * point[0]) * std::sin(4 * PI * point[1]));
 			}
 		}
 	});
 
-	auto l1Norm = [&](const UniformGrid<StoreReal> &grid)
+	auto l1Norm = [&](const UniformGrid<double> &grid)
 	{
 		assert(grid.size() == domainCellLabels.size());
 
-		tbb::enumerable_thread_specific<SolveReal> parallelAccumulatedValue(SolveReal(0));
-		tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		tbb::enumerable_thread_specific<double> parallelAccumulatedValue(double(0));
+		double accumulatedValue = tbb::parallel_deterministic_reduce(tbb::blocked_range<int>(0, domainCellLabels.voxelCount()), double(0),
+		[&](const tbb::blocked_range<int>& range, double double accumulatedValue) -> double
 		{
-			auto& localAccumulatedValue = parallelAccumulatedValue.local();
-
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
 				Vec2i cell = domainCellLabels.unflatten(cellIndex);
@@ -95,15 +94,15 @@ int main(int argc, char** argv)
 				if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 					domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 				{
-					localAccumulatedValue += fabs(grid(cell));
+					accumulatedValue += fabs(grid(cell));
 				}
 			}
-		});
-
-		SolveReal accumulatedValue = 0;
-		parallelAccumulatedValue.combine_each([&](const SolveReal localAccumulatedValue)
+			
+			return accumulatedValue;
+		}
+		[](double a, double b) -> double
 		{
-			accumulatedValue += localAccumulatedValue;
+			return a + b;
 		});
 
 		return accumulatedValue;
@@ -130,21 +129,21 @@ int main(int argc, char** argv)
 	// Print domain labels to make sure they are set up correctly
 	int pixelHeight = 1080;
 	int pixelWidth = pixelHeight;
-	renderer = std::make_unique<Renderer>("One level correction test", Vec2i(pixelWidth, pixelHeight), Vec2f(0), 1, &argc, argv);
+	gRenderer = std::make_unique<Renderer>("One level correction test", Vec2i(pixelWidth, pixelHeight), Vec2d::Zero(), 1, &argc, argv);
 
-	ScalarGrid<float> tempGrid(Transform(dx, Vec2f(0)), domainCellLabels.size());
+	ScalarGrid<double> tempGrid(Transform(dx, Vec2d::Zero()), domainCellLabels.size());
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int flatIndex = range.begin(); flatIndex != range.end(); ++flatIndex)
 		{
 			Vec2i cell = tempGrid.unflatten(flatIndex);
 
-			tempGrid(cell) = float(domainCellLabels(cell));
+			tempGrid(cell) = double(domainCellLabels(cell));
 		}
 	});
 
-	tempGrid.drawVolumetric(*renderer, Vec3f(0), Vec3f(1), float(CellLabels::INTERIOR_CELL), float(CellLabels::BOUNDARY_CELL));
+	tempGrid.drawVolumetric(*gRenderer, Vec3d::Zero(), Vec3d::Ones(), double(CellLabels::INTERIOR_CELL), double(CellLabels::BOUNDARY_CELL));
 
-	renderer->run();
+	gRenderer->run();
 }

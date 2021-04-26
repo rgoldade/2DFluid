@@ -8,13 +8,8 @@
 #include "Renderer.h"
 #include "Transform.h"
 #include "Utilities.h"
-#include "Vec.h"
 
-using namespace FluidSim2D::RegularGridSim;
-using namespace FluidSim2D::RenderTools;
-using namespace FluidSim2D::SurfaceTrackers;
-using namespace FluidSim2D::SimTools;
-using namespace FluidSim2D::Utilities;
+using namespace FluidSim2D;
 
 static std::unique_ptr<Renderer> renderer;
 static std::unique_ptr<EulerianLiquidSimulator> simulator;
@@ -30,11 +25,11 @@ static LevelSet seedSurface;
 
 static bool printFrame = false;
 
-static float seedTime = 0;
-static constexpr float seedPeriod = 2;
-static constexpr float dt = 1. / 60;
+static double seedTime = 0;
+static constexpr double seedPeriod = 2;
+static constexpr double dt = 1. / 60.;
 
-static constexpr float cfl = 5;
+static constexpr double cfl = 5;
 
 static Transform xform;
 
@@ -44,20 +39,20 @@ void display()
 {
 	if (runSimulation || runSingleTimestep)
 	{
-		float frameTime = 0.;
+		double frameTime = 0.;
 		std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
 
 		while (frameTime < dt)
 		{
 			// Set CFL condition
-			float speed = simulator->maxVelocityMagnitude();
+			double speed = simulator->maxVelocityMagnitude();
 			
-			float localDt = dt - frameTime;
+			double localDt = dt - frameTime;
 			assert(localDt >= 0);
 
 			if (speed > 1E-6)
 			{
-				float cflDt = cfl * xform.dx() / speed;
+				double cflDt = cfl * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
 					localDt = cflDt;
@@ -74,7 +69,7 @@ void display()
 				seedTime = 0;
 			}
 			
-			simulator->addForce(localDt, Vec2f(0., -9.8));
+			simulator->addForce(localDt, Vec2d(0., -9.8));
 
 			simulator->runTimestep(localDt);
 
@@ -113,7 +108,7 @@ void display()
 	}
 }
 
-void keyboard(unsigned char key, int x, int y)
+void keyboard(unsigned char key, int, int)
 {
 	if (key == ' ')
 		runSimulation = !runSimulation;
@@ -134,16 +129,16 @@ void keyboard(unsigned char key, int x, int y)
 int main(int argc, char** argv)
 {
 	// Scene settings
-	float dx = .0125;
-	Vec2f topRightCorner(2.5);
-	Vec2f bottomLeftCorner(-2.5);
-	Vec2i gridSize((topRightCorner - bottomLeftCorner) / dx);
+	double dx = .0125;
+	Vec2d topRightCorner(2.5, 2.5);
+	Vec2d bottomLeftCorner(-2.5, -2.5);
+	Vec2i gridSize = ((topRightCorner - bottomLeftCorner).array() / dx).matrix().cast<int>();
 	xform = Transform(dx, bottomLeftCorner);
-	Vec2f center = .5 * (topRightCorner + bottomLeftCorner);
+	Vec2d center = .5 * (topRightCorner + bottomLeftCorner);
 
-	renderer = std::make_unique<Renderer>("Levelset Liquid Simulator", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Levelset Liquid Simulator", Vec2i(1000, 1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
-	EdgeMesh liquidMesh = makeCircleMesh(center - Vec2f(0,.65), 1, 100);
+	EdgeMesh liquidMesh = makeCircleMesh(center - Vec2d(0,.65), 1, 100);
 	assert(liquidMesh.unitTestMesh());
 
 	EdgeMesh solidMesh = makeCircleMesh(center, 2, 100);
@@ -159,8 +154,8 @@ int main(int argc, char** argv)
 	solidSurface.setBackgroundNegative();
 	solidSurface.initFromMesh(solidMesh, false);
 	
-	Vec2f seedCenter = xform.offset() + Vec2f(xform.dx()) * Vec2f(gridSize / 2) + Vec2f(.8);
-	EdgeMesh seedMesh = makeSquareMesh(seedCenter, Vec2f(.5));
+	Vec2d seedCenter = xform.offset() + xform.dx() * (gridSize.array() / 2).matrix().cast<double>() + Vec2d(.8, .8);
+	EdgeMesh seedMesh = makeSquareMesh(seedCenter, Vec2d(.5, .5));
 
 	seedSurface = LevelSet(xform, gridSize, 5);
 	seedSurface.initFromMesh(seedMesh, false);

@@ -10,7 +10,7 @@
 #include "Timer.h"
 #include "ViscositySolver.h"
 
-namespace FluidSim2D::RegularGridSim
+namespace FluidSim2D
 {
 
 void EulerianSmokeSimulator::drawGrid(Renderer& renderer) const
@@ -18,24 +18,24 @@ void EulerianSmokeSimulator::drawGrid(Renderer& renderer) const
 	mySolidSurface.drawGrid(renderer, false);
 }
 
-void EulerianSmokeSimulator::drawFluidDensity(Renderer& renderer, float maxDensity)
+void EulerianSmokeSimulator::drawFluidDensity(Renderer& renderer, double maxDensity)
 {
-	mySmokeDensity.drawVolumetric(renderer, Vec3f(1), Vec3f(0), 0, maxDensity);
+	mySmokeDensity.drawVolumetric(renderer, Vec3d::Ones(), Vec3d::Zero(), 0, maxDensity);
 }
 
-void EulerianSmokeSimulator::drawFluidVelocity(Renderer& renderer, float length) const
+void EulerianSmokeSimulator::drawFluidVelocity(Renderer& renderer, double length) const
 {
-	myVelocity.drawSamplePointVectors(renderer, Vec3f(0), myVelocity.dx() * length);
+	myVelocity.drawSamplePointVectors(renderer, Vec3d::Zero(), myVelocity.dx() * length);
 }
 
 void EulerianSmokeSimulator::drawSolidSurface(Renderer& renderer)
 {
-	mySolidSurface.drawSurface(renderer, Vec3f(0), 3);
+	mySolidSurface.drawSurface(renderer, Vec3d::Zero(), 3.f);
 }
 
-void EulerianSmokeSimulator::drawSolidVelocity(Renderer& renderer, float length) const
+void EulerianSmokeSimulator::drawSolidVelocity(Renderer& renderer, double length) const
 {
-	mySolidVelocity.drawSamplePointVectors(renderer, Vec3f(0, 1, 0), mySolidVelocity.dx() * length);
+	mySolidVelocity.drawSamplePointVectors(renderer, Vec3d(0.f, 1.f, 0.f), mySolidVelocity.dx() * length);
 }
 
 // Incoming solid surface must already be inverted
@@ -50,7 +50,7 @@ void EulerianSmokeSimulator::setSolidSurface(const LevelSet& solidSurface)
 	mySolidSurface.initFromMesh(localMesh, false);
 }
 
-void EulerianSmokeSimulator::setSolidVelocity(const VectorGrid<float>& solidVelocity)
+void EulerianSmokeSimulator::setSolidVelocity(const VectorGrid<double>& solidVelocity)
 {
 	assert(mySolidVelocity.isGridMatched(solidVelocity));
 
@@ -67,7 +67,7 @@ void EulerianSmokeSimulator::setSolidVelocity(const VectorGrid<float>& solidVelo
 	}
 }
 
-void EulerianSmokeSimulator::setFluidVelocity(const VectorGrid<float>& velocity)
+void EulerianSmokeSimulator::setFluidVelocity(const VectorGrid<double>& velocity)
 {
 	assert(velocity.isGridMatched(myVelocity));
 
@@ -85,7 +85,7 @@ void EulerianSmokeSimulator::setFluidVelocity(const VectorGrid<float>& velocity)
 
 }
 
-void EulerianSmokeSimulator::setSmokeSource(const ScalarGrid<float>& density, const ScalarGrid<float>& temperature)
+void EulerianSmokeSimulator::setSmokeSource(const ScalarGrid<double>& density, const ScalarGrid<double>& temperature)
 {
 	assert(density.isGridMatched(mySmokeDensity));
 	assert(temperature.isGridMatched(mySmokeTemperature));
@@ -105,22 +105,22 @@ void EulerianSmokeSimulator::setSmokeSource(const ScalarGrid<float>& density, co
 		});
 }
 
-void EulerianSmokeSimulator::advectOldPressure(float dt, InterpolationOrder order)
+void EulerianSmokeSimulator::advectOldPressure(double dt, InterpolationOrder order)
 {
-	auto velocityFunc = [&](float, const Vec2f& pos) { return myVelocity.biLerp(pos); };
+	auto velocityFunc = [&](double, const Vec2d& pos) { return myVelocity.biLerp(pos); };
 
-	ScalarGrid<float> tempPressure(myOldPressure.xform(), myOldPressure.size());
+	ScalarGrid<double> tempPressure(myOldPressure.xform(), myOldPressure.size());
 	advectField(dt, tempPressure, myOldPressure, velocityFunc, IntegrationOrder::RK3, order);
 
 	std::swap(myOldPressure, tempPressure);
 }
 
-void EulerianSmokeSimulator::advectFluidMaterial(float dt, InterpolationOrder order)
+void EulerianSmokeSimulator::advectFluidMaterial(double dt, InterpolationOrder order)
 {
-	auto velocityFunc = [&](float, const Vec2f& pos) { return myVelocity.biLerp(pos); };
+	auto velocityFunc = [&](double, const Vec2d& pos) { return myVelocity.biLerp(pos); };
 
 	{
-		ScalarGrid<float> tempDensity(mySmokeDensity.xform(), mySmokeDensity.size());
+		ScalarGrid<double> tempDensity(mySmokeDensity.xform(), mySmokeDensity.size());
 
 		advectField(dt, tempDensity, mySmokeDensity, velocityFunc, IntegrationOrder::RK3, order);
 
@@ -128,7 +128,7 @@ void EulerianSmokeSimulator::advectFluidMaterial(float dt, InterpolationOrder or
 	}
 
 	{
-		ScalarGrid<float> tempTemperature(mySmokeTemperature.xform(), mySmokeTemperature.size());
+		ScalarGrid<double> tempTemperature(mySmokeTemperature.xform(), mySmokeTemperature.size());
 
 		advectField(dt, tempTemperature, mySmokeTemperature, velocityFunc, IntegrationOrder::RK3, order);
 
@@ -136,11 +136,11 @@ void EulerianSmokeSimulator::advectFluidMaterial(float dt, InterpolationOrder or
 	}
 }
 
-void EulerianSmokeSimulator::advectFluidVelocity(float dt, InterpolationOrder order)
+void EulerianSmokeSimulator::advectFluidVelocity(double dt, InterpolationOrder order)
 {
-	auto velocityFunc = [&](float, const Vec2f& pos) { return myVelocity.biLerp(pos);  };
+	auto velocityFunc = [&](double, const Vec2d& pos) { return myVelocity.biLerp(pos);  };
 
-	VectorGrid<float> tempVelocity(myVelocity.xform(), myVelocity.gridSize(), 0, VectorGridSettings::SampleType::STAGGERED);
+	VectorGrid<double> tempVelocity(myVelocity.xform(), myVelocity.gridSize(), 0, VectorGridSettings::SampleType::STAGGERED);
 
 	for (int axis : {0, 1})
 		advectField(dt, tempVelocity.grid(axis), myVelocity.grid(axis), velocityFunc, IntegrationOrder::RK3, order);
@@ -148,7 +148,7 @@ void EulerianSmokeSimulator::advectFluidVelocity(float dt, InterpolationOrder or
 	std::swap(myVelocity, tempVelocity);
 }
 
-void EulerianSmokeSimulator::runTimestep(float dt)
+void EulerianSmokeSimulator::runTimestep(double dt)
 {
 	std::cout << "\nStarting simulation loop\n" << std::endl;
 
@@ -158,8 +158,8 @@ void EulerianSmokeSimulator::runTimestep(float dt)
 	// Add bouyancy forces
 	//
 
-	float alpha = 1.;
-	float beta = 1.;
+	double alpha = 1.;
+	double beta = 1.;
 
 	tbb::parallel_for(tbb::blocked_range<int>(0, myVelocity.grid(1).voxelCount(), tbbLightGrainSize), [&](tbb::blocked_range<int>& range)
 		{
@@ -168,11 +168,11 @@ void EulerianSmokeSimulator::runTimestep(float dt)
 				Vec2i face = myVelocity.grid(1).unflatten(faceIndex);
 
 				// Average density and temperature values at velocity face
-				Vec2f worldPosition = myVelocity.indexToWorld(Vec2f(face), 1);
-				float density = mySmokeDensity.biLerp(worldPosition);
-				float temperature = mySmokeTemperature.biLerp(worldPosition);
+				Vec2d worldPosition = myVelocity.indexToWorld(face.cast<double>(), 1);
+				double density = mySmokeDensity.biLerp(worldPosition);
+				double temperature = mySmokeTemperature.biLerp(worldPosition);
 
-				float force = dt * (-alpha * density + beta * (temperature - myAmbientTemperature));
+				double force = dt * (-alpha * density + beta * (temperature - myAmbientTemperature));
 				myVelocity(face, 1) += force;
 			}
 		});
@@ -184,8 +184,8 @@ void EulerianSmokeSimulator::runTimestep(float dt)
 	// Build weights for pressure projection
 	//
 
-	VectorGrid<float> cutCellWeights = computeCutCellWeights(mySolidSurface, true);
-	VectorGrid<float> ghostFluidWeights(myVelocity.xform(), myVelocity.gridSize(), 1, myVelocity.sampleType());
+	VectorGrid<double> cutCellWeights = computeCutCellWeights(mySolidSurface, true);
+	VectorGrid<double> ghostFluidWeights(myVelocity.xform(), myVelocity.gridSize(), 1, myVelocity.sampleType());
 
 	std::cout << "  Compute weights: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();

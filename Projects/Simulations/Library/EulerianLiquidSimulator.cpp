@@ -2,6 +2,9 @@
 
 #include <iostream>
 
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_for.h"
+
 #include "ComputeWeights.h"
 #include "ExtrapolateField.h"
 #include "FieldAdvector.h"
@@ -9,7 +12,7 @@
 #include "Timer.h"
 #include "ViscositySolver.h"
 
-namespace FluidSim2D::RegularGridSim
+namespace FluidSim2D
 {
 
 void EulerianLiquidSimulator::drawGrid(Renderer& renderer) const
@@ -19,26 +22,26 @@ void EulerianLiquidSimulator::drawGrid(Renderer& renderer) const
 
 void EulerianLiquidSimulator::drawVolumetricSurface(Renderer& renderer) const
 {
-	ScalarGrid<float> centerAreas = computeSupersampledAreas(myLiquidSurface, ScalarGridSettings::SampleType::CENTER, 3);
+	ScalarGrid<double> centerAreas = computeSupersampledAreas(myLiquidSurface, ScalarGridSettings::SampleType::CENTER, 3);
 
-	Vec2f nodeOffset[4] = { Vec2f(-.51), Vec2f(-.51, .51), Vec2f(.51), Vec2f(.51, -.51) };
+	Vec2d nodeOffset[4] = { Vec2d(-.51, -.51), Vec2d(-.51, .51), Vec2d(.51, .51), Vec2d(.51, -.51) };
 
-	forEachVoxelRange(Vec2i(0), myLiquidSurface.size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), myLiquidSurface.size(), [&](const Vec2i& cell)
 	{
 		if (centerAreas(cell) > 0)
 		{
-			std::vector<Vec2f> quadVertex(4);
-			std::vector<Vec4i> quadFace(1);
-			std::vector<Vec3f> quadColour(1);
+			VecVec2d quadVertex(4);
+			VecVec4i quadFace(1);
+			VecVec3d quadColour(1);
 
 			for (int nodeIndex = 0; nodeIndex < 4; ++nodeIndex)
 			{
-				quadVertex[nodeIndex] = myLiquidSurface.indexToWorld(Vec2f(cell) + nodeOffset[nodeIndex]);
+				quadVertex[nodeIndex] = myLiquidSurface.indexToWorld(cell.cast<double>() + nodeOffset[nodeIndex]);
 				quadFace[0][nodeIndex] = nodeIndex;
 			}
 
-			float s = centerAreas(cell);
-			quadColour[0] = (1 - s) * Vec3f(1) + s * Vec3f(0,1,1);
+			double s = centerAreas(cell);
+			quadColour[0] = (1 - s) * Vec3d::Ones() + s * Vec3d(0, 1, 1);
 			renderer.addQuadFaces(quadVertex, quadFace, quadColour);
 		}
 	});
@@ -46,22 +49,22 @@ void EulerianLiquidSimulator::drawVolumetricSurface(Renderer& renderer) const
 
 void EulerianLiquidSimulator::drawLiquidSurface(Renderer& renderer)
 {
-	myLiquidSurface.drawSurface(renderer, Vec3f(0, 0, 1), 3);
+	myLiquidSurface.drawSurface(renderer, Vec3d(0, 0, 1), 3);
 }
 
-void EulerianLiquidSimulator::drawLiquidVelocity(Renderer& renderer, float length) const
+void EulerianLiquidSimulator::drawLiquidVelocity(Renderer& renderer, double length) const
 {
-	myLiquidVelocity.drawSamplePointVectors(renderer, Vec3f(0), myLiquidVelocity.dx() * length);
+	myLiquidVelocity.drawSamplePointVectors(renderer, Vec3d::Zero(), myLiquidVelocity.dx() * length);
 }
 
 void EulerianLiquidSimulator::drawSolidSurface(Renderer& renderer)
 {
-	mySolidSurface.drawSurface(renderer, Vec3f(0), 3);
+	mySolidSurface.drawSurface(renderer, Vec3d::Zero(), 3);
 }
 
-void EulerianLiquidSimulator::drawSolidVelocity(Renderer& renderer, float length) const
+void EulerianLiquidSimulator::drawSolidVelocity(Renderer& renderer, double length) const
 {
-	mySolidVelocity.drawSamplePointVectors(renderer, Vec3f(0, 1, 0), mySolidVelocity.dx() * length);
+	mySolidVelocity.drawSamplePointVectors(renderer, Vec3d(0, 1, 0), mySolidVelocity.dx() * length);
 }
 
 // Incoming solid surface must already be inverted
@@ -75,7 +78,7 @@ void EulerianLiquidSimulator::setSolidSurface(const LevelSet& solidSurface)
 	mySolidSurface.initFromMesh(localMesh, false);
 }
 
-void EulerianLiquidSimulator::setSolidVelocity(const VectorGrid<float>& solidVelocity)
+void EulerianLiquidSimulator::setSolidVelocity(const VectorGrid<double>& solidVelocity)
 {
 	assert(mySolidVelocity.isGridMatched(solidVelocity));
 
@@ -98,7 +101,7 @@ void EulerianLiquidSimulator::setLiquidSurface(const LevelSet& surface)
 	myLiquidSurface.initFromMesh(localMesh, false);
 }
 
-void EulerianLiquidSimulator::setLiquidVelocity(const VectorGrid<float>& velocity)
+void EulerianLiquidSimulator::setLiquidVelocity(const VectorGrid<double>& velocity)
 {
 	assert(myLiquidVelocity.isGridMatched(velocity));
 
@@ -126,8 +129,8 @@ void EulerianLiquidSimulator::unionLiquidSurface(const LevelSet& addedLiquidSurf
 				{
 					Vec2i face = myLiquidVelocity.grid(axis).unflatten(faceIndex);
 
-					Vec2f facePosition = myLiquidVelocity.indexToWorld(Vec2f(face), axis);
-					if (addedLiquidSurface.biLerp(facePosition) <= 0. && myLiquidSurface.biLerp(facePosition) > 0.)
+					Vec2d facePosition = myLiquidVelocity.indexToWorld(face.cast<double>(), axis);
+					if (addedLiquidSurface.biLerp(facePosition) <= 0 && myLiquidSurface.biLerp(facePosition) > 0)
 						myLiquidVelocity(face, axis) = 0;
 				}
 			});
@@ -139,41 +142,41 @@ void EulerianLiquidSimulator::unionLiquidSurface(const LevelSet& addedLiquidSurf
 }
 
 template<typename ForceSampler>
-void EulerianLiquidSimulator::addForce(float dt, const ForceSampler& force)
+void EulerianLiquidSimulator::addForce(double dt, const ForceSampler& force)
 {
 	for (int axis : {0, 1})
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, myLiquidVelocity.grid(axis).voxelCount(), tbbLightGrainSize), [&](tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, myLiquidVelocity.grid(axis).voxelCount()), [&](tbb::blocked_range<int>& range)
+		{
+			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
-				for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-				{
-					Vec2i face = myLiquidVelocity.grid(axis).unflatten(cellIndex);
+				Vec2i face = myLiquidVelocity.grid(axis).unflatten(cellIndex);
 
-					Vec2f facePosition = myLiquidVelocity.indexToWorld(Vec2f(face), axis);
-					myLiquidVelocity(face, axis) += dt * force(facePosition, axis);
-				}
-			});
+				Vec2d facePosition = myLiquidVelocity.indexToWorld(face.cast<double>(), axis);
+				myLiquidVelocity(face, axis) += dt * force(facePosition, axis);
+			}
+		});
 	}
 }
 
-void EulerianLiquidSimulator::addForce(float dt, const Vec2f& force)
+void EulerianLiquidSimulator::addForce(double dt, const Vec2d& force)
 {
-	addForce(dt, [&](Vec2f, int axis) {return force[axis]; });
+	addForce(dt, [&](Vec2d, int axis) {return force[axis]; });
 }
 
-void EulerianLiquidSimulator::advectOldPressure(const float dt)
+void EulerianLiquidSimulator::advectOldPressure(const double dt)
 {
-	auto velocityFunc = [&](float, const Vec2f& pos) { return myLiquidVelocity.biLerp(pos); };
+	auto velocityFunc = [&](double, const Vec2d& pos) { return myLiquidVelocity.biLerp(pos); };
 
-	ScalarGrid<float> tempPressure(myOldPressure.xform(), myOldPressure.size());
+	ScalarGrid<double> tempPressure(myOldPressure.xform(), myOldPressure.size());
 	advectField(dt, tempPressure, myOldPressure, velocityFunc, IntegrationOrder::RK3, InterpolationOrder::LINEAR);
 
 	std::swap(myOldPressure, tempPressure);
 }
 
-void EulerianLiquidSimulator::advectLiquidSurface(float dt, IntegrationOrder integrator)
+void EulerianLiquidSimulator::advectLiquidSurface(double dt, IntegrationOrder integrator)
 {
-	auto velocityFunc = [&](float, const Vec2f& pos) { return myLiquidVelocity.biLerp(pos);  };
+	auto velocityFunc = [&](double, const Vec2d& pos) { return myLiquidVelocity.biLerp(pos);  };
 
 	EdgeMesh localMesh = myLiquidSurface.buildDCMesh();
 	localMesh.advectMesh(dt, velocityFunc, integrator);
@@ -182,34 +185,34 @@ void EulerianLiquidSimulator::advectLiquidSurface(float dt, IntegrationOrder int
 	myLiquidSurface.initFromMesh(localMesh, false);
 
 	// Remove solid regions from liquid surface
-	tbb::parallel_for(tbb::blocked_range<int>(0, myLiquidSurface.voxelCount(), tbbLightGrainSize), [&](tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, myLiquidSurface.voxelCount()), [&](tbb::blocked_range<int>& range)
+	{
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-			{
-				Vec2i cell = myLiquidSurface.unflatten(cellIndex);
-				myLiquidSurface(cell) = std::max(myLiquidSurface(cell), -mySolidSurface(cell));
-			}
-		});
+			Vec2i cell = myLiquidSurface.unflatten(cellIndex);
+			myLiquidSurface(cell) = std::max(myLiquidSurface(cell), -mySolidSurface(cell));
+		}
+	});
 
 	myLiquidSurface.reinitMesh();
 }
 
-void EulerianLiquidSimulator::advectViscosity(float dt, IntegrationOrder integrator, InterpolationOrder interpolator)
+void EulerianLiquidSimulator::advectViscosity(double dt, IntegrationOrder integrator, InterpolationOrder interpolator)
 {
-	auto velocityFunc = [&](float, const Vec2f& pos) { return myLiquidVelocity.biLerp(pos); };
+	auto velocityFunc = [&](double, const Vec2d& pos) { return myLiquidVelocity.biLerp(pos); };
 
-	ScalarGrid<float> tempViscosity(myViscosity.xform(), myViscosity.size());
+	ScalarGrid<double> tempViscosity(myViscosity.xform(), myViscosity.size());
 
 	advectField(dt, tempViscosity, myViscosity, velocityFunc, integrator, interpolator);
 
 	std::swap(tempViscosity, myViscosity);
 }
 
-void EulerianLiquidSimulator::advectLiquidVelocity(float dt, IntegrationOrder integrator, InterpolationOrder interpolator)
+void EulerianLiquidSimulator::advectLiquidVelocity(double dt, IntegrationOrder integrator, InterpolationOrder interpolator)
 {
-	auto velocityFunc = [&](float, const Vec2f& pos) { return myLiquidVelocity.biLerp(pos); };
+	auto velocityFunc = [&](double, const Vec2d& pos) { return myLiquidVelocity.biLerp(pos); };
 
-	VectorGrid<float> tempVelocity(myLiquidVelocity.xform(), myLiquidVelocity.gridSize(), VectorGridSettings::SampleType::STAGGERED);
+	VectorGrid<double> tempVelocity(myLiquidVelocity.xform(), myLiquidVelocity.gridSize(), VectorGridSettings::SampleType::STAGGERED);
 
 	for (int axis : {0, 1})
 		advectField(dt, tempVelocity.grid(axis), myLiquidVelocity.grid(axis), velocityFunc, integrator, interpolator);
@@ -217,7 +220,7 @@ void EulerianLiquidSimulator::advectLiquidVelocity(float dt, IntegrationOrder in
 	std::swap(myLiquidVelocity, tempVelocity);
 }
 
-void EulerianLiquidSimulator::runTimestep(float dt)
+void EulerianLiquidSimulator::runTimestep(double dt)
 {
 	std::cout << "\nStarting simulation loop\n" << std::endl;
 
@@ -225,27 +228,27 @@ void EulerianLiquidSimulator::runTimestep(float dt)
 
 	LevelSet extrapolatedSurface = myLiquidSurface;
 
-	float dx = extrapolatedSurface.dx();
+	double dx = extrapolatedSurface.dx();
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, myLiquidSurface.voxelCount(), tbbLightGrainSize), [&](tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, myLiquidSurface.voxelCount()), [&](tbb::blocked_range<int>& range)
+	{
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-			{
-				Vec2i cell = myLiquidSurface.unflatten(cellIndex);
+			Vec2i cell = myLiquidSurface.unflatten(cellIndex);
 
-				if (mySolidSurface(cell) <= 0 ||
-					(mySolidSurface(cell) <= dx && myLiquidSurface(cell) <= 0))
-					extrapolatedSurface(cell) -= dx;
-			}
-		});
+			if (mySolidSurface(cell) <= 0 ||
+				(mySolidSurface(cell) <= dx && myLiquidSurface(cell) <= 0))
+				extrapolatedSurface(cell) -= dx;
+		}
+	});
 
 	extrapolatedSurface.reinitMesh();
 
 	std::cout << "  Extrapolate into solids: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();
 
-	VectorGrid<float> cutCellWeights = computeCutCellWeights(mySolidSurface, true);
-	VectorGrid<float> ghostFluidWeights = computeGhostFluidWeights(extrapolatedSurface);
+	VectorGrid<double> cutCellWeights = computeCutCellWeights(mySolidSurface, true);
+	VectorGrid<double> ghostFluidWeights = computeGhostFluidWeights(extrapolatedSurface);
 
 	std::cout << "  Compute weights: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();
@@ -269,23 +272,23 @@ void EulerianLiquidSimulator::runTimestep(float dt)
 		for (int axis : {0, 1})
 		{
 			// Zero out non-valid faces
-			tbb::parallel_for(tbb::blocked_range<int>(0, validFaces.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, validFaces.grid(axis).voxelCount()), [&](const tbb::blocked_range<int>& range)
+			{
+				for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 				{
-					for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
-					{
-						Vec2i face = validFaces.grid(axis).unflatten(faceIndex);
+					Vec2i face = validFaces.grid(axis).unflatten(faceIndex);
 
-						if (validFaces(face, axis) != VisitedCellLabels::FINISHED_CELL)
-							myLiquidVelocity(face, axis) = 0;
-					}
-				});
+					if (validFaces(face, axis) != VisitedCellLabels::FINISHED_CELL)
+						myLiquidVelocity(face, axis) = 0;
+				}
+			});
 		}
 
 		{
-			float velMag = myLiquidVelocity.maxMagnitude();
+			double velMag = myLiquidVelocity.maxMagnitude();
 
 			for (int axis : {0, 1})
-				extrapolateField(myLiquidVelocity.grid(axis), validFaces.grid(axis), 2 * velMag * dt / myLiquidSurface.dx());
+				extrapolateField(myLiquidVelocity.grid(axis), validFaces.grid(axis), int(2. * velMag * dt / myLiquidSurface.dx()));
 		}
 
 		std::cout << "  Solve for pressure: " << simTimer.stop() << "s" << std::endl;
@@ -325,10 +328,10 @@ void EulerianLiquidSimulator::runTimestep(float dt)
 	}
 
 	{
-		float velMag = myLiquidVelocity.maxMagnitude();
+		double velMag = myLiquidVelocity.maxMagnitude();
 
 		for (int axis : {0, 1})
-			extrapolateField(myLiquidVelocity.grid(axis), validFaces.grid(axis), 2 * velMag * dt / myLiquidSurface.dx());
+			extrapolateField(myLiquidVelocity.grid(axis), validFaces.grid(axis), int(2. * velMag * dt / myLiquidSurface.dx()));
 	}
 
 	std::cout << "  Extrapolate velocity: " << simTimer.stop() << "s" << std::endl;

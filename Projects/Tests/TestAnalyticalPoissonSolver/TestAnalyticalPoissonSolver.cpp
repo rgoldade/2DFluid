@@ -6,30 +6,30 @@
 #include "Utilities.h"
 
 
-int main(int argc, char** argv)
+int main(int, char**)
 {
-	auto rhs = [](const Vec2f& pos) -> float
+	auto rhs = [](const Vec2d& pos) -> double
 	{
 		return 2. * std::exp(-pos[0] - pos[1]);
 	};
 
-	auto solution = [](const Vec2f& pos) -> float
+	auto solution = [](const Vec2d& pos) -> double
 	{
 		return std::exp(-pos[0] - pos[1]);
 	};
 
 	int baseGrid = 32;
-	int maxBaseGrid = baseGrid * pow(2,4);
+	int maxBaseGrid = baseGrid * int(std::pow(2,4));
 	
 	for (; baseGrid < maxBaseGrid; baseGrid *= 2)
 	{
-		float dx = PI / float(baseGrid);
-		Vec2f origin(0);
-		Vec2i size(round(PI / dx));
+		double dx = PI / double(baseGrid);
+		Vec2d origin = Vec2d::Zero();
+		Vec2i size = Vec2i(std::round(PI / dx), std::round(PI / dx));
 		Transform xform(dx, origin);
 
 		AnalyticalPoissonSolver solver(xform, size);
-		float error = solver.solve(rhs, solution);
+		double error = solver.solve(rhs, solution);
 
 		std::cout << "L-infinity error at " << baseGrid << "^2: " << error << std::endl;
 	}

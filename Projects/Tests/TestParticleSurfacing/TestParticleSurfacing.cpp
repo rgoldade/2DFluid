@@ -9,8 +9,7 @@
 #include "Transform.h"
 #include "Utilities.h"
 
-using namespace FluidSim2D::RenderTools;
-using namespace FluidSim2D::SurfaceTrackers;
+using namespace FluidSim2D;
 
 static std::unique_ptr<FluidParticles> particles;
 static std::unique_ptr<Renderer> renderer;
@@ -30,16 +29,16 @@ void display()
 		
 		sphereUnionSurface.drawGrid(*renderer, true);
 		sphereUnionSurface.drawSupersampledValues(*renderer, .5, 5, 3);
-		sphereUnionSurface.drawDCSurface(*renderer, Vec3f(1, 0, 0), 2);
-		sphereUnionSurface.drawNormals(*renderer, Vec3f(.5), .1);
+		sphereUnionSurface.drawDCSurface(*renderer, Vec3d(1., 0., 0.), 2.);
+		sphereUnionSurface.drawNormals(*renderer, Vec3d(.5, .5, .5), .1);
 
-		particles->drawPoints(*renderer, Vec3f(1, 0, 0), 5);
+		particles->drawPoints(*renderer, Vec3d(1., 0., 0.), 5.);
 
 		glutPostRedisplay();
 	}
 }
 
-void keyboard(unsigned char key, int x, int y)
+void keyboard(unsigned char key, int, int)
 {
 	if (key == 'n')
 	{
@@ -52,24 +51,24 @@ int main(int argc, char** argv)
 {
 	EdgeMesh initialMesh = makeCircleMesh();
 	
-	EdgeMesh tempMesh = makeCircleMesh(Vec2f(.5), 1., 10);
+	EdgeMesh tempMesh = makeCircleMesh(Vec2d(.5, .5), 1., 10);
 	assert(tempMesh.unitTestMesh());
 	initialMesh.insertMesh(tempMesh);
 
-	tempMesh = makeCircleMesh(Vec2f(.05), .5, 10);
+	tempMesh = makeCircleMesh(Vec2d(.05, .05), .5, 10);
 	assert(tempMesh.unitTestMesh());
 	initialMesh.insertMesh(tempMesh);
 
 	assert(initialMesh.unitTestMesh());
 
-	float dx = .125;
-	Vec2f topRightCorner(2.25);
-	Vec2f bottomLeftCorner(-1.5);
-	gridSize = Vec2i((topRightCorner - bottomLeftCorner) / dx);
+	double dx = .125;
+	Vec2d topRightCorner(2.25, 2.25);
+	Vec2d bottomLeftCorner(-1.5, -1.5);
+	gridSize = ((topRightCorner - bottomLeftCorner) / dx).cast<int>();
 	xform = Transform(dx, bottomLeftCorner);
-	Vec2f center = .5 * (topRightCorner + bottomLeftCorner);
+	Vec2d center = .5 * (topRightCorner + bottomLeftCorner);
 
-	renderer = std::make_unique<Renderer>("Particle Surfacing Test", Vec2i(1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
+	renderer = std::make_unique<Renderer>("Particle Surfacing Test", Vec2i(1000, 1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
 	LevelSet initialSurface(xform, gridSize, 5);
 	initialSurface.initFromMesh(initialMesh, false);

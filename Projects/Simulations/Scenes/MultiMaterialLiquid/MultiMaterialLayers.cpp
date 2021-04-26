@@ -8,13 +8,8 @@
 #include "Renderer.h"
 #include "Transform.h"
 #include "Utilities.h"
-#include "Vec.h"
 
-using namespace FluidSim2D::RegularGridSim;
-using namespace FluidSim2D::RenderTools;
-using namespace FluidSim2D::SurfaceTrackers;
-using namespace FluidSim2D::SimTools;
-using namespace FluidSim2D::Utilities;
+using namespace FluidSim2D;
 
 std::unique_ptr<MultiMaterialLiquidSimulator> multiMaterialSimulator;
 std::unique_ptr<Renderer> renderer;
@@ -24,9 +19,9 @@ static bool runSimulation = false;
 static bool runSingleTimestep = false;
 static bool isDisplayDirty = true;
 
-static constexpr float dt = 1. / 60.;
+static constexpr double dt = 1. / 60.;
 
-static constexpr float cfl = 5;
+static constexpr double cfl = 5;
 
 static bool printFrame = false;
 
@@ -36,27 +31,27 @@ static int currentMaterial = 0;
 static Transform xform;
 static Vec2i gridSize;
 
-static const float lowDensity = 1;
-static const float mediumDensity = 1000;
-static const float highDensity = 10000;
+static const double lowDensity = 1;
+static const double mediumDensity = 1000;
+static const double highDensity = 10000;
 
 void display()
 {
     if (runSimulation || runSingleTimestep)
     {
-		float frameTime = 0.;
+		double frameTime = 0.;
 		std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
 
 		while (frameTime < dt)
 		{
 			// Set CFL condition
-			float speed = multiMaterialSimulator->maxVelocityMagnitude();
-			float localDt = dt - frameTime;
+			double speed = multiMaterialSimulator->maxVelocityMagnitude();
+			double localDt = dt - frameTime;
 			assert(localDt >= 0);
 
 			if (speed > 1E-6)
 			{
-				float cflDt = cfl * xform.dx() / speed;
+				double cflDt = cfl * xform.dx() / speed;
 				if (localDt > cflDt)
 				{
 					localDt = cflDt;
@@ -68,9 +63,9 @@ void display()
 				break;
 
 			for (int material = 0; material < liquidMaterialCount; ++material)
-				multiMaterialSimulator->addForce(localDt, material, Vec2f(0., -9.8));
+				multiMaterialSimulator->addForce(localDt, material, Vec2d(0., -9.8));
 
-			multiMaterialSimulator->runTimestep(localDt, *renderer, frameCount);
+			multiMaterialSimulator->runTimestep(localDt);
 
 			// Store accumulated substep times
 			frameTime += localDt;
@@ -108,7 +103,7 @@ void display()
     }
 }
 
-void keyboard(unsigned char key, int x, int y)
+void keyboard(unsigned char key, int, int)
 {
 	if (key == ' ')
 		runSimulation = !runSimulation;
@@ -129,27 +124,27 @@ void keyboard(unsigned char key, int x, int y)
 int main(int argc, char** argv)
 {
 	// Scene settings
-	float dx = .015;
-	float boundaryPadding = 10.;
+	double dx = .015;
+	double boundaryPadding = 10;
 
-	Vec2f topRightCorner(1.5, 2.5);
-	topRightCorner += dx * boundaryPadding;
+	Vec2d topRightCorner(1.5, 2.5);
+	topRightCorner.array() += dx * boundaryPadding;
 
-	Vec2f bottomLeftCorner(-1.5, -2.5);
-	bottomLeftCorner -= dx * boundaryPadding;
+	Vec2d bottomLeftCorner(-1.5, -2.5);
+	bottomLeftCorner.array() -= dx * boundaryPadding;
 
-	Vec2f simulationSize = topRightCorner - bottomLeftCorner;
-	gridSize = Vec2i(simulationSize / dx);
+	Vec2d simulationSize = topRightCorner - bottomLeftCorner;
+	gridSize = (simulationSize.array() / dx).matrix().cast<int>();
 
 	xform = Transform(dx, bottomLeftCorner);
-	Vec2f center = .5 * (topRightCorner + bottomLeftCorner);
+	Vec2d center = .5f * (topRightCorner + bottomLeftCorner);
 
 	unsigned pixelHeight = 1080;
-	unsigned pixelWidth = pixelHeight * (topRightCorner[0] - bottomLeftCorner[0]) / (topRightCorner[1] - bottomLeftCorner[1]);
+	unsigned pixelWidth = pixelHeight * int((topRightCorner[0] - bottomLeftCorner[0]) / (topRightCorner[1] - bottomLeftCorner[1]));
 	renderer = std::make_unique<Renderer>("Multimaterial Liquid Simulator", Vec2i(pixelWidth, pixelHeight), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
 
 	// Build outer boundary grid.
-	EdgeMesh solidMesh = makeSquareMesh(center, .5 * simulationSize - Vec2f(boundaryPadding * xform.dx()));
+	EdgeMesh solidMesh = makeSquareMesh(center, .5 * simulationSize - Vec2d(boundaryPadding * xform.dx(), boundaryPadding * xform.dx()));
 	solidMesh.reverse();
 	assert(solidMesh.unitTestMesh());
 
@@ -157,19 +152,19 @@ int main(int argc, char** argv)
 	solidSurface.setBackgroundNegative();
 	solidSurface.initFromMesh(solidMesh, false);
 
-	multiMaterialSimulator = std::make_unique<MultiMaterialLiquidSimulator>(xform, gridSize, 3, 5);
+	multiMaterialSimulator = std::make_unique<MultiMaterialLiquidSimulator>(xform, gridSize, 3, 5.);
 
 	multiMaterialSimulator->setSolidSurface(solidSurface);
 
 	// Build three material surfaces
 
-	EdgeMesh lowDensityMesh = makeSquareMesh(Vec2f(center[0], bottomLeftCorner[1] + dx * boundaryPadding + 1. / 6. * (topRightCorner[1] - bottomLeftCorner[1] - 2 * dx * boundaryPadding)), .5 * Vec2f(simulationSize[0] - 2. * boundaryPadding * xform.dx(), .33 * (simulationSize[1] - 2. * boundaryPadding * xform.dx())));
+	EdgeMesh lowDensityMesh = makeSquareMesh(Vec2d(center[0], bottomLeftCorner[1] + dx * boundaryPadding + 1. / 6. * (topRightCorner[1] - bottomLeftCorner[1] - 2 * dx * boundaryPadding)), .5 * Vec2d(simulationSize[0] - 2. * boundaryPadding * xform.dx(), .33 * (simulationSize[1] - 2. * boundaryPadding * xform.dx())));
 
 	LevelSet lowDensitySurface(xform, gridSize, 5);
 	lowDensitySurface.initFromMesh(lowDensityMesh, false);
 	lowDensityMesh.reverse();
 
-	EdgeMesh highDensityMesh = makeSquareMesh(Vec2f(center[0], bottomLeftCorner[1] + dx * boundaryPadding + 5. / 6. * (topRightCorner[1] - bottomLeftCorner[1] - 2 * dx * boundaryPadding)), .5 * Vec2f(simulationSize[0] - 2. * boundaryPadding * xform.dx(), .33 * (simulationSize[1] - 2. * boundaryPadding * xform.dx())));
+	EdgeMesh highDensityMesh = makeSquareMesh(Vec2d(center[0], bottomLeftCorner[1] + dx * boundaryPadding + 5. / 6. * (topRightCorner[1] - bottomLeftCorner[1] - 2 * dx * boundaryPadding)), .5 * Vec2d(simulationSize[0] - 2. * boundaryPadding * xform.dx(), .33 * (simulationSize[1] - 2. * boundaryPadding * xform.dx())));
 
 	LevelSet highDensitySurface(xform, gridSize, 5);
 	highDensitySurface.initFromMesh(highDensityMesh, false);

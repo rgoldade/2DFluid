@@ -1,5 +1,5 @@
-#ifndef LIBRARY_VISCOSITY_SOLVER_H
-#define LIBRARY_VISCOSITY_SOLVER_H
+#ifndef FLUIDSIM2D_VISCOSITY_SOLVER_H
+#define FLUIDSIM2D_VISCOSITY_SOLVER_H
 
 #include "LevelSet.h"
 #include "ScalarGrid.h"
@@ -19,17 +19,15 @@
 //
 ////////////////////////////////////
 
-namespace FluidSim2D::SimTools
+namespace FluidSim2D
 {
-using namespace SurfaceTrackers;
-using namespace Utilities;
 
-void ViscositySolver(float dt,
+void ViscositySolver(double dt,
 						const LevelSet& surface,
-						VectorGrid<float>& velocity,
+						VectorGrid<double>& velocity,
 						const LevelSet& solidSurface,
-						const VectorGrid<float>& solidVelocity,
-						const ScalarGrid<float>& viscosity);
+						const VectorGrid<double>& solidVelocity,
+						const ScalarGrid<double>& viscosity);
 }
 
 #endif

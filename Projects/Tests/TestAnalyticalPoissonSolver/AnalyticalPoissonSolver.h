@@ -11,9 +11,7 @@
 #include "Utilities.h"
 #include "VectorGrid.h"
 
-using namespace FluidSim2D::RenderTools;
-using namespace FluidSim2D::SurfaceTrackers;
-using namespace FluidSim2D::Utilities;
+using namespace FluidSim2D;
 
 class AnalyticalPoissonSolver
 {
@@ -24,11 +22,11 @@ public:
 	AnalyticalPoissonSolver(const Transform& xform, const Vec2i& size)
 		: myXform(xform)
 	{
-		myPoissonGrid = ScalarGrid<float>(myXform, size, 0);
+		myPoissonGrid = ScalarGrid<double>(myXform, size, 0);
 	}
 
 	template<typename RHS, typename Solution>
-	float solve(const RHS& rhsFunction, const Solution& solutionFunction);
+	double solve(const RHS& rhsFunction, const Solution& solutionFunction);
 
 	void drawGrid(Renderer& renderer) const;
 	void drawValues(Renderer& renderer) const;
@@ -36,11 +34,11 @@ public:
 private:
 	
 	Transform myXform;
-	ScalarGrid<float> myPoissonGrid;
+	ScalarGrid<double> myPoissonGrid;
 };
 
 template<typename RHS, typename Solution>
-float AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solutionFunction)
+double AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solutionFunction)
 {
 	UniformGrid<int> solvableCells(myPoissonGrid.size(), -1);
 
@@ -48,7 +46,7 @@ float AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solu
 
 	Vec2i gridSize = myPoissonGrid.size();
 
-	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), gridSize, [&](const Vec2i& cell)
 	{
 		solvableCells(cell) = solutionDOFCount++;
 	});
@@ -57,17 +55,17 @@ float AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solu
 
 	Vector rhsVector = Vector::Zero(solutionDOFCount);
 
-	float dx = myPoissonGrid.dx();
-	float coeff = sqr(dx);
+	double dx = myPoissonGrid.dx();
+	double coeff = std::pow(dx, 2);
 
-	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), gridSize, [&](const Vec2i& cell)
 	{
 		int row = solvableCells(cell);
 
 		assert(row >= 0);
 
 		// Build RHS
-		Vec2f gridPoint = myPoissonGrid.indexToWorld(Vec2f(cell));
+		Vec2d gridPoint = myPoissonGrid.indexToWorld(cell.cast<double>());
 
 		rhsVector(row) = coeff * rhsFuction(gridPoint);
 
@@ -80,7 +78,7 @@ float AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solu
 				if ((direction == 0 && adjacentCell[axis] < 0) ||
 					(direction == 1 && adjacentCell[axis] >= gridSize[axis]))
 				{
-					Vec2f adjacentPoint = myPoissonGrid.indexToWorld(Vec2f(adjacentCell));
+					Vec2d adjacentPoint = myPoissonGrid.indexToWorld(adjacentCell.cast<double>());
 					rhsVector(row) -= solutionFunction(adjacentPoint);
 				}
 				else
@@ -115,16 +113,16 @@ float AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& solu
 		return -1;
 	}
 
-	float error = 0;
+	double error = 0;
 
-	forEachVoxelRange(Vec2i(0), gridSize, [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), gridSize, [&](const Vec2i& cell)
 	{
 		int row = solvableCells(cell);
 
 		assert(row >= 0);
 
-		Vec2f gridPoint = myPoissonGrid.indexToWorld(Vec2f(cell));
-		float localError = fabs(solutionVector(row) - solutionFunction(gridPoint));
+		Vec2d gridPoint = myPoissonGrid.indexToWorld(cell.cast<double>());
+		double localError = fabs(solutionVector(row) - solutionFunction(gridPoint));
 
 		if (error < localError) error = localError;
 
