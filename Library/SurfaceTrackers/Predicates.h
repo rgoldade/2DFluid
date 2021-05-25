@@ -15,22 +15,6 @@ REAL orient2d(const REAL *pa,
 	const REAL *pb,
 	const REAL *pc);
 
-REAL orient3d(const REAL *pa,
-	const REAL *pb,
-	const REAL *pc,
-	const REAL *pd);
-
-REAL incircle(const REAL *pa,
-	const REAL *pb,
-	const REAL *pc,
-	const REAL *pd);
-
-REAL insphere(const REAL *pa,
-	const REAL *pb,
-	const REAL *pc,
-	const REAL *pd,
-	const REAL *pe);
-
 enum class IntersectionLabels { YES, ON, NO };
 
 // Check that a mesh edge crosses over a grid edge.
