@@ -14,7 +14,7 @@ VectorGrid<double> computeGhostFluidWeights(const LevelSet& surface)
 
 	for (int axis : {0, 1})
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, ghostFluidWeights.grid(axis).voxelCount()), [&](const tbb::blocked_range<int> &range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, ghostFluidWeights.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int> &range)
 		{
 			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
@@ -23,7 +23,7 @@ VectorGrid<double> computeGhostFluidWeights(const LevelSet& surface)
 				Vec2i forwardCell = faceToCell(face, axis, 1);
 
 				if (backwardCell[axis] < 0 || forwardCell[axis] >= surface.size()[axis])
-					return;
+					continue;
 				else
 				{
 					double phiBackward = surface(backwardCell);
@@ -81,10 +81,9 @@ ScalarGrid<double> computeSupersampledAreas(const LevelSet& surface, ScalarGridS
 
 	ScalarGrid<double> areas(surface.xform(), surface.size(), 0, sampleType);
 
-	double dx = 1. / double(samples);
-	double sampleArea = std::pow(dx, 2);
-
-	tbb::parallel_for(tbb::blocked_range<int>(0, areas.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	double sampleDx = 1. / double(samples);
+    double sampleCount = std::pow(double(samples), 2);
+	tbb::parallel_for(tbb::blocked_range<int>(0, areas.voxelCount(), tbbHeavyGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int sampleIndex = range.begin(); sampleIndex != range.end(); ++sampleIndex)
 		{
@@ -92,22 +91,21 @@ ScalarGrid<double> computeSupersampledAreas(const LevelSet& surface, ScalarGridS
 			double sdf = surface.biLerp(areas.indexToWorld(sampleCoord.cast<double>()));
 
 			if (sdf > 2. * surface.dx())
-				return;
+				continue;
 
 			if (sdf <= -2. * surface.dx())
 			{
 				areas(sampleCoord) = 1;
-				return;
+				continue;
 			}
 
-			Vec2d start = sampleCoord.cast<double>() - Vec2d(.5, .5) + Vec2d(.5 * dx, .5 * dx);
-			Vec2d end = sampleCoord.cast<double>() + Vec2d(.5, .5) - Vec2d(.5 * dx, .5 * dx);
+			Vec2d start = sampleCoord.cast<double>() - .5 * Vec2d::Ones() + .5 * Vec2d(sampleDx, sampleDx);
+            Vec2d end = sampleCoord.cast<double>() + .5 * Vec2d::Ones();
 
-			Vec2d sample;
 			int insideMaterialCount = 0;
 
-			for (sample[0] = start[0]; sample[0] <= end[0]; sample[0] += dx)
-				for (sample[1] = start[1]; sample[1] <= end[1]; sample[1] += dx)
+			for (Vec2d sample = start; sample[0] <= end[0]; sample[0] += sampleDx)
+                for (sample[1] = start[1]; sample[1] <= end[1]; sample[1] += sampleDx)
 				{
 					Vec2d worldSamplePoint = areas.indexToWorld(sample);
 
@@ -117,7 +115,7 @@ ScalarGrid<double> computeSupersampledAreas(const LevelSet& surface, ScalarGridS
 
 			if (insideMaterialCount > 0)
 			{
-				double supersampledArea = double(insideMaterialCount) * sampleArea;
+				double supersampledArea = double(insideMaterialCount) / sampleCount;
 				supersampledArea = std::clamp(supersampledArea, 0., 1.);
 				areas(sampleCoord) = supersampledArea;
 			}
@@ -133,8 +131,8 @@ VectorGrid<double> computeSupersampledFaceAreas(const LevelSet& surface, int sam
 
 	VectorGrid<double> areas(surface.xform(), surface.size(), 0, VectorGridSettings::SampleType::STAGGERED);
 
-	double dx = 1. / double(samples);
-	double sampleArea = std::pow(dx, 2);
+	double sampleDx = 1. / double(samples);
+    double sampleCount = std::pow(double(samples), 2);
 
 	for (int axis : {0, 1})
 	{
@@ -142,28 +140,27 @@ VectorGrid<double> computeSupersampledFaceAreas(const LevelSet& surface, int sam
 		{
 			for (int sampleIndex = range.begin(); sampleIndex != range.end(); ++sampleIndex)
 			{
-				Vec2i sampleCoord = areas.grid(axis).unflatten(sampleIndex);
-				double sdf = surface.biLerp(areas.indexToWorld(sampleCoord.cast<double>(), axis));
+				Vec2i face = areas.grid(axis).unflatten(sampleIndex);
+                double sdf = surface.biLerp(areas.indexToWorld(face.cast<double>(), axis));
 
 				if (sdf > 2. * surface.dx())
-					return;
+					continue;
 
 				if (sdf <= -2. * surface.dx())
 				{
-					areas(sampleCoord, axis) = 1;
-					return;
+                    areas(face, axis) = 1;
+					continue;
 				}
 
-				Vec2d start = sampleCoord.cast<double>() - Vec2d(.5, .5) + Vec2d(.5 * dx, .5 * dx);
-				Vec2d end = sampleCoord.cast<double>() + Vec2d(.5, .5) - Vec2d(.5 * dx, .5 * dx);
+				Vec2d start = face.cast<double>() - .5 * Vec2d::Ones() + .5 * Vec2d(sampleDx, sampleDx);
+                Vec2d end = face.cast<double>() + .5 * Vec2d::Ones();
 
-				Vec2d sample;
 				double insideMaterialCount = 0;
 
-				for (sample[0] = start[0]; sample[0] <= end[0]; sample[0] += dx)
-					for (sample[1] = start[1]; sample[1] <= end[1]; sample[1] += dx)
+				for (Vec2d point = start; point[0] <= end[0]; point[0] += sampleDx)
+                    for (point[1] = start[1]; point[1] <= end[1]; point[1] += sampleDx)
 					{
-						Vec2d worldSamplePoint = areas.indexToWorld(sample, axis);
+                        Vec2d worldSamplePoint = areas.indexToWorld(point, axis);
 
 						if (surface.biLerp(worldSamplePoint) <= 0.)
 							++insideMaterialCount;
@@ -171,9 +168,9 @@ VectorGrid<double> computeSupersampledFaceAreas(const LevelSet& surface, int sam
 
 				if (insideMaterialCount > 0)
 				{
-					double supersampledArea = insideMaterialCount * sampleArea;
+					double supersampledArea = insideMaterialCount / sampleCount;
 					supersampledArea = std::clamp(supersampledArea, 0., 1.);
-					areas(sampleCoord, axis) = supersampledArea;
+                    areas(face, axis) = supersampledArea;
 				}
 			}
 		});
