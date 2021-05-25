@@ -83,9 +83,8 @@ int main(int argc, char** argv)
 	{
 		assert(grid.size() == domainCellLabels.size());
 
-		tbb::enumerable_thread_specific<double> parallelAccumulatedValue(double(0));
 		double accumulatedValue = tbb::parallel_deterministic_reduce(tbb::blocked_range<int>(0, domainCellLabels.voxelCount()), double(0),
-		[&](const tbb::blocked_range<int>& range, double double accumulatedValue) -> double
+		[&](const tbb::blocked_range<int>& range, double accumulatedValue) -> double
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
@@ -99,7 +98,7 @@ int main(int argc, char** argv)
 			}
 			
 			return accumulatedValue;
-		}
+		},
 		[](double a, double b) -> double
 		{
 			return a + b;
