@@ -62,7 +62,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 
 	UniformGrid<MaterialLabels> materialCellLabels(mySurface.size(), MaterialLabels::SOLID_CELL);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -112,7 +112,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 	{
 		tbb::enumerable_thread_specific<std::vector<Eigen::Triplet<SolveReal>>> parallelSparseMatrixElements;
 
-		tbb::parallel_for(tbb::blocked_range<int>(0, liquidCellIndices.voxelCount()), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, liquidCellIndices.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			auto& localSparseMatrixElements = parallelSparseMatrixElements.local();
 
@@ -228,7 +228,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 	}
 
 	// Copy resulting vector to pressure grid
-	tbb::parallel_for(tbb::blocked_range<int>(0, liquidCellIndices.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, liquidCellIndices.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -252,7 +252,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 	// Build valid faces
 	for (int axis : {0, 1})
 	{
-		tbb::parallel_for(tbb::blocked_range<int>(0, myValidFaces.grid(axis).voxelCount()), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, myValidFaces.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
@@ -331,7 +331,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 		SolveReal accumulatedDivergence = 0;
 		int cellCount = 0;
 
-		Vec3d stats = tbb::parallel_reduce(tbb::blocked_range<int>(0, materialCellLabels.voxelCount()), Vec3d::Zero(),
+		Vec3d stats = tbb::parallel_reduce(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), Vec3d::Zero().eval(),
 		[&](const tbb::blocked_range<int>& range, Vec3d stats)
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -363,7 +363,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 
 			return stats;
 
-		}
+		},
 		[](const Vec3d &vec0, const Vec3d& vec1)
 		{
 			return Vec3d(vec0[0] + vec1[0], std::max(vec0[1], vec1[1]), vec0[2] + vec1[2]);
