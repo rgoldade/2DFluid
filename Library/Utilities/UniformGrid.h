@@ -120,7 +120,7 @@ public:
 protected:
 
 	//Grid center container
-	VectorX<T> myGrid;
+	VectorXt<T> myGrid;
 	Vec2i mySize;
 };
 

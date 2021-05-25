@@ -90,8 +90,6 @@ public:
 		}
 	}
 
-	SampleType sampleType() const { return mySampleType; }
-
 	// Check that the two grids are of the same size, 
 	// positioned at the same spot, have the same grid
 	// spacing and the same sampling sceme
@@ -119,10 +117,10 @@ public:
 		return std::make_pair<T, T>(minValue(), maxValue());
 	}
 
-	T biLerp(double x, double y, bool isIndexSpace = false) const { return biLerp(Vec2d(x, y), isIndexSpace); }
+	FORCE_INLINE T biLerp(double x, double y, bool isIndexSpace = false) const { return biLerp(Vec2d(x, y), isIndexSpace); }
 	T biLerp(const Vec2d& samplePoint, bool isIndexSpace = false) const;
 
-	T biCubicInterp(double x, double y, bool isIndexSpace = false, bool applyClamp = false) const
+	FORCE_INLINE T biCubicInterp(double x, double y, bool isIndexSpace = false, bool applyClamp = false) const
 	{
 		return biCubicInterp(Vec2d(x, y), isIndexSpace, applyClamp);
 	}
@@ -130,12 +128,12 @@ public:
 	T biCubicInterp(const Vec2d& pos, bool isIndexSpace = false, bool applyClamp = false) const;
 
 	// Converters between world space and local index space
-	Vec2d indexToWorld(const Vec2d& indexPoint) const
+	FORCE_INLINE Vec2d indexToWorld(const Vec2d& indexPoint) const
 	{
 		return myXform.indexToWorld(indexPoint + myCellOffset);
 	}
 
-	Vec2d worldToIndex(const Vec2d& worldPoint) const
+	FORCE_INLINE Vec2d worldToIndex(const Vec2d& worldPoint) const
 	{
 		return myXform.worldToIndex(worldPoint) - myCellOffset;
 	}
@@ -146,6 +144,8 @@ public:
 	double dx() const { return myXform.dx(); }
 	Vec2d offset() const { return myXform.offset(); }
 	Transform xform() const { return myXform; }
+
+	SampleType sampleType() const { return mySampleType; }
 
 	// Render methods
 	void drawGrid(Renderer& renderer) const;
@@ -476,7 +476,7 @@ void ScalarGrid<T>::drawSamplePoints(Renderer& renderer, const Vec3d& colour, do
 	VecVec2d samplePoints;
 	samplePoints.reserve(this->voxelCount());
 
-	forEachVoxelRange(Vec2i::Zeros(), this->size(), [&](const Vec2i& cell)
+	forEachVoxelRange(Vec2i::Zero(), this->size(), [&](const Vec2i& cell)
 	{
 		Vec2d worldPoint = indexToWorld(cell.cast<double>());
 		samplePoints.push_back(worldPoint);
@@ -522,7 +522,7 @@ void ScalarGrid<T>::drawSampleGradients(Renderer& renderer, const Vec3d& colour,
 		Vec2d worldPoint = indexToWorld(cell.cast<double>());
 		samplePoints.push_back(worldPoint);
 
-		Vec2t<T> gradVector = gradient(worldPoint);
+		Vec2t<T> gradVector = biLerpGradient(worldPoint);
 		Vec2d vectorEnd = worldPoint + length * gradVector;
 		gradientPoints.push_back(vectorEnd);
 	});

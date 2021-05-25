@@ -6,6 +6,7 @@
 
 #include "Eigen/Dense"
 #include "Eigen/Geometry"
+#include "Eigen/Sparse"
 
 #include "tbb/enumerable_thread_specific.h"
 
@@ -38,24 +39,27 @@ static const int marchingSquaresTemplate[16][4] = { { -1,-1,-1,-1 },
 // TBB utilities
 //
 
-template<typename StorageType>
-void mergeLocalThreadVectors(std::vector<StorageType>& combinedVector,
-	tbb::enumerable_thread_specific<std::vector<StorageType>>& parallelVector)
+template<typename VectorType>
+void mergeLocalThreadVectors(VectorType& combinedVector,
+	tbb::enumerable_thread_specific<VectorType>& parallelVector)
 {
 	int vectorSize = 0;
 
-	parallelVector.combine_each([&](const std::vector<StorageType>& localVector)
+	parallelVector.combine_each([&](const VectorType& localVector)
 	{
-		vectorSize += localVector.size();
+		vectorSize += int(localVector.size());
 	});
 
 	combinedVector.reserve(combinedVector.size() + vectorSize);
 
-	parallelVector.combine_each([&](const std::vector<StorageType>& localVector)
+	parallelVector.combine_each([&](const VectorType& localVector)
 	{
 		combinedVector.insert(combinedVector.end(), localVector.begin(), localVector.end());
 	});
 }
+
+constexpr int tbbHeavyGrainSize = 100;
+constexpr int tbbLightGrainSize = 1000;
 
 //
 // BFS markers
@@ -113,7 +117,7 @@ using VecAlignedBox2i = std::vector<AlignedBox2i, Eigen::aligned_allocator<Align
 using VectorXd = Eigen::VectorXd;
 
 template<typename T>
-using VectorX = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+using VectorXt = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
 template<typename T, int N>
 VecXt<T, N> clamp(const VecXt<T, N>& vIn, const VecXt<T, N>& vMin, const VecXt<T, N>& vMax)

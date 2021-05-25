@@ -1,6 +1,10 @@
 #ifndef FLUIDSIM2D_VECTOR_GRID_H
 #define FLUIDSIM2D_VECTOR_GRID_H
 
+#include "tbb/blocked_range.h"
+#include "tbb/blocked_range2d.h"
+#include "tbb/parallel_for.h"
+
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "Utilities.h"
@@ -131,12 +135,12 @@ public:
 	// World space vs. index space converters need to be done at the 
 	// underlying scalar grid level because the alignment of the two 
 	// grids are different depending on the SampleType.
-	Vec2d indexToWorld(const Vec2d& indexPoint, int axis) const
+	FORCE_INLINE Vec2d indexToWorld(const Vec2d& indexPoint, int axis) const
 	{
 		return myGrids[axis].indexToWorld(indexPoint);
 	}
 
-	Vec2d worldToIndex(const Vec2d& worldPoint, int axis) const
+	FORCE_INLINE Vec2d worldToIndex(const Vec2d& worldPoint, int axis) const
 	{
 		return myGrids[axis].worldToIndex(worldPoint);
 	}
@@ -185,19 +189,19 @@ T VectorGrid<T>::maxMagnitude() const
 
 	if (mySampleType == SampleType::CENTER || mySampleType == SampleType::NODE)
 	{
-		sqr_mag = tbb::parallel_reduce(tbb::blocked_range<int>(0, myGrids[0].voxelCount()), T(0),
+		sqr_mag = tbb::parallel_reduce(tbb::blocked_range<int>(0, myGrids[0].voxelCount(), tbbLightGrainSize), T(0),
 		[&](const tbb::blocked_range<int>& range, T maxMagnitude) -> T
 		{
 			for (int index = range.begin(); index != range.end(); ++index)
 			{
 				Vec2i coord = myGrids[0].unflatten(index);
-				T localMagnitude = mag2(Vec<2, T>(myGrids[0](coord), myGrids[1](coord)));
+				T localMagnitude = Vec2t<T>(myGrids[0](coord), myGrids[1](coord)).squaredNorm();
 
 				maxMagnitude = std::max(maxMagnitude, localMagnitude);
 			}
 
 			return maxMagnitude;
-		}
+		},
 		[](T a, T b) -> double
 		{
 			return std::max(a, b);
@@ -205,7 +209,7 @@ T VectorGrid<T>::maxMagnitude() const
 	}
 	else if (mySampleType == SampleType::STAGGERED)
 	{
-		auto blocked_range = tbb::blocked_range2d<int>(0, myGridSize[0], std::sqrt(tbbLightGrainSize), 0, myGridSize[1], std::cbrt(tbbLightGrainSize));
+		auto blocked_range = tbb::blocked_range2d<int>(0, myGridSize[0], 0, myGridSize[1]);
 
 		sqr_mag = tbb::parallel_reduce(blocked_range, T(0),
 		[&](const tbb::blocked_range2d<int>& range, T maxMagnitude) -> T
@@ -224,10 +228,12 @@ T VectorGrid<T>::maxMagnitude() const
 							averageVector[axis] += .5 * myGrids[axis](face);
 						}
 
-					T localMagnitude = mag2(averageVector);
+					T localMagnitude = averageVector.squaredNorm();
 					maxMagnitude = std::max(maxMagnitude, localMagnitude);
 				}
-		}
+
+			return maxMagnitude;
+		},
 		[](T a, T b) -> T
 		{
 			return std::max(a, b);
