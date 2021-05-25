@@ -194,14 +194,17 @@ TEST(GRID_UTILITIES_TESTS, FACE_TO_NODE)
 	{
 		Vec2i face = (10000. * Vec2d::Random()).cast<int>();
 
-		for (int axis : {0, 1})
+		for (int faceAxis : {0, 1})
 		{
 			for (int direction : {0, 1})
 			{
-				Vec2i node = faceToNode(face, axis, direction);
-				Vec2i returnFace = nodeToFace(node, axis, (direction + 1) % 2);
+                Vec2i node = faceToNode(face, faceAxis, direction);
 
-				EXPECT_EQ(face, returnFace);
+				int offsetAxis = (faceAxis + 1) % 2;
+                Vec2i returnFace = nodeToFace(node, offsetAxis, (direction + 1) % 2);
+
+				EXPECT_EQ(face[0], returnFace[0]);
+                EXPECT_EQ(face[1], returnFace[1]);
 			}
 		}
 	}

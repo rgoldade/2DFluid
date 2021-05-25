@@ -18,16 +18,18 @@ TEST(UNIFORM_GRID_TESTS, CONSTRUCTOR_SIZE_TEST)
 	Vec2i size(75, 100);
 	UniformGrid<int> testGrid(size);
 
-	EXPECT_EQ(size, testGrid.size());
+	EXPECT_EQ(size[0], testGrid.size()[0]);
+    EXPECT_EQ(size[1], testGrid.size()[1]);
 }
 
 TEST(UNIFORM_GRID_TESTS, CONSTRUCTOR_SIZE_AND_VALUE_TEST)
 {
 	Vec2i size(75, 100);
-	double val = 10.;
+    int val = 10;
 	UniformGrid<int> testGrid(size, val);
 
-	EXPECT_EQ(size, testGrid.size());
+	EXPECT_EQ(size[0], testGrid.size()[0]);
+    EXPECT_EQ(size[1], testGrid.size()[1]);
 
 	forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 	{
@@ -62,7 +64,8 @@ TEST(UNIFORM_GRID_TESTS, CLEAR_TEST)
 
 	testGrid.clear();
 	EXPECT_TRUE(testGrid.empty());
-	EXPECT_EQ(testGrid.size(), Vec2i::Zero());
+	EXPECT_EQ(testGrid.size()[0], Vec2i::Zero()[0]);
+    EXPECT_EQ(testGrid.size()[1], Vec2i::Zero()[1]);
 }
 
 TEST(UNIFORM_GRID_TESTS, RESIZE_LARGER_TEST)
@@ -82,7 +85,8 @@ TEST(UNIFORM_GRID_TESTS, RESIZE_LARGER_TEST)
 	testGrid.resize(expandSize);
 	fillUniformGrid<double>(valFunc, testGrid);
 
-	EXPECT_EQ(expandSize, testGrid.size());
+	EXPECT_EQ(expandSize[0], testGrid.size()[0]);
+    EXPECT_EQ(expandSize[1], testGrid.size()[1]);
 
 	forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 	{
@@ -107,7 +111,8 @@ TEST(UNIFORM_GRID_TESTS, RESIZE_SMALLER_TEST)
 	testGrid.resize(shrinkSize);
 	fillUniformGrid<double>(valFunc, testGrid);
 
-	EXPECT_EQ(shrinkSize, testGrid.size());
+	EXPECT_EQ(shrinkSize[0], testGrid.size()[0]);
+	EXPECT_EQ(shrinkSize[1], testGrid.size()[1]);
 
 	forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 	{
@@ -126,7 +131,8 @@ TEST(UNIFORM_GRID_TESTS, RESIZE_VALUE_TEST)
 	double expandValue = 100.;
 	testGrid.resize(expandSize, expandValue);
 
-	EXPECT_EQ(expandSize, testGrid.size());
+	EXPECT_EQ(expandSize[0], testGrid.size()[0]);
+    EXPECT_EQ(expandSize[1], testGrid.size()[1]);
 
 	forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 	{
@@ -143,7 +149,8 @@ TEST(UNIFORM_GRID_TESTS, RESET_TEST)
 	double resetValue = 100.;
 	testGrid.reset(resetValue);
 
-	EXPECT_EQ(size, testGrid.size());
+	EXPECT_EQ(size[0], testGrid.size()[0]);
+    EXPECT_EQ(size[1], testGrid.size()[1]);
 
 	forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 	{
@@ -173,7 +180,8 @@ TEST(UNIFORM_GRID_TESTS, FLATTEN_UNFLATTEN_TEST)
 
 		forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 		{
-			EXPECT_EQ(cell, testGrid.unflatten(testGrid.flatten(cell)));
+			EXPECT_EQ(cell[0], testGrid.unflatten(testGrid.flatten(cell))[0]);
+            EXPECT_EQ(cell[1], testGrid.unflatten(testGrid.flatten(cell))[1]);
 		});
 	}
 }
@@ -181,18 +189,19 @@ TEST(UNIFORM_GRID_TESTS, FLATTEN_UNFLATTEN_TEST)
 TEST(UNIFORM_GRID_TESTS, COPY_GRID_TEST)
 {
 	Vec2i size(75, 100);
-	UniformGrid<int> testGrid(size, 10.);
+	UniformGrid<int> testGrid(size, 10);
 
 	UniformGrid<int> copyGrid = testGrid;
 
-	EXPECT_EQ(testGrid.size(), copyGrid.size());
+	EXPECT_EQ(testGrid.size()[0], copyGrid.size()[0]);
+    EXPECT_EQ(testGrid.size()[1], copyGrid.size()[1]);
 
 	forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 	{
 		EXPECT_EQ(testGrid(cell), copyGrid(cell));
 	});
 
-	copyGrid.reset(15.);
+	copyGrid.reset(15);
 
 	forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 	{

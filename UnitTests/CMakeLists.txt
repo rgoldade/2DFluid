@@ -12,8 +12,8 @@ mark_as_advanced(
 
 macro(package_add_test TESTNAME)
     add_executable(${TESTNAME} ${ARGN})
-    target_link_libraries(${TESTNAME} PRIVATE gmock gtest gtest_main Utilities)
+    target_link_libraries(${TESTNAME} PRIVATE gmock gtest gtest_main SimTools SurfaceTrackers Utilities)
     set_target_properties(${TESTNAME} PROPERTIES FOLDER UnitTests)
 endmacro()
 
-package_add_test(2DFLuidTests "GridUtilitiesTests.cpp" "ScalarGridTests.cpp" "UniformGridTests.cpp")
+package_add_test(2DFluidTests AnalyticalPoissonSolverTests.cpp AnalyticalViscosityTests.cpp ComputeWeightsTests.cpp EdgeMeshTests.cpp GeometricCGTests.cpp GeometricMultigridTests.cpp GridUtilitiesTests.cpp LevelSetTests.cpp ScalarGridTests.cpp UniformGridTests.cpp VectorGridTests.cpp)

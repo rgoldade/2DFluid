@@ -11,7 +11,6 @@
 #include "Transform.h"
 #include "Utilities.h"
 
-
 using namespace FluidSim2D;
 
 static void testSampleType(const ScalarGridSettings::SampleType sampleType)
@@ -24,7 +23,6 @@ static void testSampleType(const ScalarGridSettings::SampleType sampleType)
 
 	ScalarGrid<double> testGrid(xform, cellSize, sampleType);
 
-	EXPECT_TRUE(testGrid.xform() == xform);
 	EXPECT_EQ(testGrid.sampleType(), sampleType);
 
 	// Test sample count related to the grid size 
@@ -32,25 +30,21 @@ static void testSampleType(const ScalarGridSettings::SampleType sampleType)
 	{
 		case ScalarGridSettings::SampleType::CENTER:
 		{
-			// CEnter
 			EXPECT_TRUE(testGrid.size() == cellSize);
 			break;
 		}
 		case ScalarGridSettings::SampleType::XFACE:
 		{
-			// X-face
 			EXPECT_TRUE(testGrid.size() == (cellSize + Vec2i(1, 0)).eval());
 			break;
 		}
 		case ScalarGridSettings::SampleType::YFACE:
 		{
-			// Y-face
 			EXPECT_TRUE(testGrid.size() == (cellSize + Vec2i(0, 1)).eval());
 			break;
 		}
 		case ScalarGridSettings::SampleType::NODE:
 		{
-			// Node
 			EXPECT_TRUE(testGrid.size() == (cellSize + Vec2i::Ones()).eval());
 		}
 	}
@@ -92,8 +86,8 @@ static void testSampleType(const ScalarGridSettings::SampleType sampleType)
 
 		Vec2d indexPoint = testGrid.worldToIndex(worldPoint);
 
-		EXPECT_TRUE(isNearlyEqual(indexPoint[0], double(coord[0]), 1e-5, false)) << "Sample type: " << int(sampleType) << ". Index point: " << indexPoint[0] << " " << indexPoint[1] << ". Coord point: " << coord[0] << " " << coord[1];
-		EXPECT_TRUE(isNearlyEqual(indexPoint[1], double(coord[1]), 1e-5, false)) << "Sample type: " << int(sampleType) << ". Index point: " << indexPoint[0] << " " << indexPoint[1] << ". Coord point: " << coord[0] << " " << coord[1];
+		EXPECT_TRUE(isNearlyEqual(indexPoint[0], double(coord[0]), 1e-5, false));
+		EXPECT_TRUE(isNearlyEqual(indexPoint[1], double(coord[1]), 1e-5, false));
 	});
 
 	// Copy test
@@ -119,7 +113,8 @@ static void testSampleType(const ScalarGridSettings::SampleType sampleType)
 
 	// Transform test
 	EXPECT_EQ(testGrid.dx(), xform.dx());
-	EXPECT_EQ(testGrid.offset(), xform.offset());
+	EXPECT_EQ(testGrid.offset()[0], xform.offset()[0]);
+    EXPECT_EQ(testGrid.offset()[1], xform.offset()[1]);
 	EXPECT_EQ(testGrid.xform(), xform);
 }
 
@@ -141,6 +136,23 @@ TEST(SCALAR_GRID_TESTS, YFACE_SAMPLE_TEST)
 TEST(SCALAR_GRID_TESTS, NODE_SAMPLE_TEST)
 {
 	testSampleType(ScalarGridSettings::SampleType::NODE);
+}
+
+TEST(SCALAR_GRID_TESTS, INITIALIZE_TEST)
+{
+	double dx = .01;
+	Vec2d origin(-1., -1.);
+	Vec2i cellSize(100, 100);
+
+	double value = 1.;
+
+	Transform xform(dx, origin);
+	ScalarGrid<double> testGrid(xform, cellSize, value);
+
+	forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
+	{
+		EXPECT_EQ(testGrid(cell), value);
+	});
 }
 
 // Min/max tests
@@ -176,6 +188,61 @@ TEST(SCALAR_GRID_TESTS, MIN_MAX_TEST)
 	EXPECT_EQ(maxValue, minMaxPair.second);
 }
 
+static void readWriteTest(const ScalarGridSettings::SampleType sampleType)
+{
+	Vec2d origin(-1., -1.);
+	Vec2d topCorner(1., 1.);
+	Vec2i cellSize(64, 64);
+	double dx = (topCorner[0] - origin[0]) / double(cellSize[0]);
+
+	Transform xform(dx, origin);
+
+	ScalarGrid<double> grid(xform, cellSize, sampleType);
+	auto testFunc = [](const Vec2d& point) -> double
+	{
+		return std::sin(point[0] * PI) * std::cos(point[1] * PI);
+	};
+
+	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	{
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
+		{
+			Vec2i coord = grid.unflatten(cellIndex);
+			Vec2d point = grid.indexToWorld(coord.cast<double>());
+			grid(coord) = testFunc(point);
+		}
+	});
+
+	forEachVoxelRange(Vec2i::Zero(), grid.size(), [&](const Vec2i& coord)
+	{
+		Vec2d point = grid.indexToWorld(coord.cast<double>());
+		double val = testFunc(point);
+		double storedVal = grid(coord);
+
+		EXPECT_EQ(val, storedVal);
+	});
+}
+
+TEST(SCALAR_GRID_TESTS, CENTER_READ_WRITE_TEST)
+{
+	readWriteTest(ScalarGridSettings::SampleType::CENTER);
+}
+
+TEST(SCALAR_GRID_TESTS, XFACE_READ_WRITE_TEST)
+{
+	readWriteTest(ScalarGridSettings::SampleType::XFACE);
+}
+
+TEST(SCALAR_GRID_TESTS, YFACE_READ_WRITE_TEST)
+{
+	readWriteTest(ScalarGridSettings::SampleType::YFACE);
+}
+
+TEST(SCALAR_GRID_TESTS, NODE_READ_WRITE_TEST)
+{
+	readWriteTest(ScalarGridSettings::SampleType::NODE);
+}
+
 // Interpolation test
 
 static double interpolationErrorTest(const Transform& xform, const Vec2i& cellSize, const ScalarGridSettings::SampleType sampleType)
@@ -186,7 +253,7 @@ static double interpolationErrorTest(const Transform& xform, const Vec2i& cellSi
 		return std::sin(point[0] * PI) * std::cos(point[1] * PI);
 	};
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -196,7 +263,7 @@ static double interpolationErrorTest(const Transform& xform, const Vec2i& cellSi
 		}
 	});
 
-	double error = tbb::parallel_reduce(tbb::blocked_range<int>(0, grid.voxelCount()), double(0),
+	double error = tbb::parallel_reduce(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), double(0),
 		[&](const tbb::blocked_range<int>& range, double error) -> double
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -286,7 +353,7 @@ static double cubicInterpolationError(const Transform& xform, const Vec2i& cellS
 		return std::sin(point[0] * PI) * std::cos(point[1] * PI);
 	};
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -296,7 +363,7 @@ static double cubicInterpolationError(const Transform& xform, const Vec2i& cellS
 		}
 	});
 
-	double error = tbb::parallel_reduce(tbb::blocked_range<int>(0, grid.voxelCount()), double(0),
+	double error = tbb::parallel_reduce(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), double(0),
 		[&](const tbb::blocked_range<int>& range, double error) -> double
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -395,7 +462,7 @@ static double gradientErrorTest(const Transform& xform, const Vec2i& cellSize, c
 			-PI * std::sin(PI * point[0]) * std::sin(PI * point[1]));
 	};
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -405,7 +472,7 @@ static double gradientErrorTest(const Transform& xform, const Vec2i& cellSize, c
 		}
 	});
 
-	double error = tbb::parallel_reduce(tbb::blocked_range<int>(0, grid.voxelCount()), double(0),
+	double error = tbb::parallel_reduce(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), double(0),
 		[&](const tbb::blocked_range<int>& range, double error) -> double
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -500,7 +567,7 @@ static double cubicGradientErrorTest(const Transform& xform, const Vec2i& cellSi
 			-PI * std::sin(PI * point[0]) * std::sin(PI * point[1]));
 	};
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
@@ -510,7 +577,7 @@ static double cubicGradientErrorTest(const Transform& xform, const Vec2i& cellSi
 			}
 		});
 
-	double error = tbb::parallel_reduce(tbb::blocked_range<int>(0, grid.voxelCount()), double(0),
+	double error = tbb::parallel_reduce(tbb::blocked_range<int>(0, grid.voxelCount(), tbbLightGrainSize), double(0),
 		[&](const tbb::blocked_range<int>& range, double error) -> double
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
