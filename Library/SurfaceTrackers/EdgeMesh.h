@@ -92,6 +92,8 @@ public:
 		return Vec2d::Zero();
 	}
 
+	AlignedBox2d boundingBox() const;
+
 	//Reverse winding order
 	void reverse();
 
@@ -129,7 +131,7 @@ private:
 template<typename VelocityField>
 void EdgeMesh::advectMesh(double dt, const VelocityField& velocity, const IntegrationOrder order)
 {
-	for (Vec2& vertex : myVertices)
+	for (Vec2d& vertex : myVertices)
 	{
 		vertex = Integrator(dt, vertex, velocity, order);
 	}

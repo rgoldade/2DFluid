@@ -50,6 +50,16 @@ const VecVec2d EdgeMesh::vertices() const
 	return myVertices;
 }
 
+AlignedBox2d EdgeMesh::boundingBox() const
+{
+	AlignedBox2d bbox;
+
+	for (const Vec2d& vertex : myVertices)
+		bbox.extend(vertex);
+
+	return bbox;
+}
+
 void EdgeMesh::clear()
 {
 	myVertices.clear();
