@@ -138,12 +138,12 @@ FORCE_INLINE Vec2i faceToNode(const Vec2i& face, int faceAxis, int direction)
 }
 
 // Offset node index in the axis direction.
-FORCE_INLINE Vec2i nodeToFace(const Vec2i& node, int faceAxis, int direction)
+FORCE_INLINE Vec2i nodeToFace(const Vec2i& node, int offsetAxis, int direction)
 {
 	Vec2i face(node);
 
 	if (direction == 0)
-		--face[(faceAxis + 1) % 2];
+		--face[offsetAxis];
 	else assert(direction == 1);
 
 	return face;
