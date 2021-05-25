@@ -36,7 +36,7 @@ void extrapolateField(Field& field, UniformGrid<VisitedCellLabels> finishedCellM
 	VecVec2i toVisitCells;
 
 	tbb::enumerable_thread_specific<VecVec2i> parallelToVisitCells;
-	tbb::parallel_for(tbb::blocked_range<int>(0, finishedCellMask.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, finishedCellMask.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		auto& localToVisitCells = parallelToVisitCells.local();
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -73,7 +73,7 @@ void extrapolateField(Field& field, UniformGrid<VisitedCellLabels> finishedCellM
 		});
 
 		// Compute values from adjacent finished cells
-		tbb::parallel_for(tbb::blocked_range<int>(0, int(toVisitCells.size())), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, int(toVisitCells.size()), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			// Because the list could contain duplicates, we need to advance forward through possible duplicates
 			int cellIndex = range.begin();
@@ -84,7 +84,7 @@ void extrapolateField(Field& field, UniformGrid<VisitedCellLabels> finishedCellM
 					++cellIndex;
 			}
 
-			Vec2i oldCell(-1);
+			Vec2i oldCell(-1, -1);
 
 			for (; cellIndex < range.end(); ++cellIndex)
 			{
@@ -123,7 +123,7 @@ void extrapolateField(Field& field, UniformGrid<VisitedCellLabels> finishedCellM
 		});
 
 		// Set visited cells to finished
-		tbb::parallel_for(tbb::blocked_range<int>(0, int(toVisitCells.size())), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, int(toVisitCells.size()), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			// Because the list could contain duplicates, we need to advance forward through possible duplicates
 			int cellIndex = range.begin();
@@ -134,7 +134,7 @@ void extrapolateField(Field& field, UniformGrid<VisitedCellLabels> finishedCellM
 					++cellIndex;
 			}
 
-			Vec2i oldCell(-1);
+			Vec2i oldCell(-1, -1);
 
 			for (; cellIndex < range.end(); ++cellIndex)
 			{
@@ -155,7 +155,7 @@ void extrapolateField(Field& field, UniformGrid<VisitedCellLabels> finishedCellM
 		{
 			parallelToVisitCells.clear();
 
-			tbb::parallel_for(tbb::blocked_range<int>(0, int(toVisitCells.size())), [&](const tbb::blocked_range<int>& range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, int(toVisitCells.size()), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
 				auto& localToVisitCells = parallelToVisitCells.local();
 
