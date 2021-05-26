@@ -40,7 +40,7 @@ public:
 
 	LevelSet(const Transform& xform, const Vec2i& size) : LevelSet(xform, size, double(size[0] * size[1])) {}
 	LevelSet(const Transform& xform, const Vec2i& size, double bandwidth, bool isBoundaryNegative = false)
-		: myNarrowBand(std::ceil(bandwidth * xform.dx()))
+		: myNarrowBand(bandwidth * xform.dx())
 		, myPhiGrid(xform, size, isBoundaryNegative ? -myNarrowBand : myNarrowBand)
 		, myIsBackgroundNegative(isBoundaryNegative)
 	{
@@ -52,14 +52,12 @@ public:
 
 	void initFromMesh(const EdgeMesh& initialMesh, bool doResizeGrid = true);
 
-	void reinit();
-
-	void reinitMesh(bool useMarchingSquares = false)
+	void reinit(bool useMarchingSquares = false)
 	{
 		EdgeMesh tempMesh;
 		if (useMarchingSquares) tempMesh = buildMSMesh();
 		else tempMesh = buildDCMesh();
-		initFromMesh(tempMesh, false);
+		initFromMeshImpl(tempMesh, false);
 	}
 
 	bool isGridMatched(const LevelSet& grid) const
@@ -71,7 +69,7 @@ public:
 
 	bool isGridMatched(const ScalarGrid<double>& grid) const
 	{
-		if (grid.sampleType() == ScalarGridSettings::SampleType::CENTER) return false;
+		if (grid.sampleType() != ScalarGridSettings::SampleType::CENTER) return false;
 		if ((size().array() != grid.size().array()).all()) return false;
 		if (xform() != grid.xform()) return false;
 		return true;
@@ -88,9 +86,18 @@ public:
 	template<typename VelocityField>
 	void advect(double dt, const VelocityField& velocity, IntegrationOrder order);
 
-	Vec2d normal(const Vec2d& worldPoint) const
+	FORCE_INLINE Vec2d normal(const Vec2d& worldPoint, bool useLinearIntep = true) const
 	{
-		Vec2d normal = myPhiGrid.gradient(worldPoint);
+		Vec2d normal;
+		
+		if (useLinearIntep)
+		{
+			normal = myPhiGrid.biLerpGradient(worldPoint);
+		}
+		else
+		{
+			normal = myPhiGrid.biCubicGradient(worldPoint);
+		}
 
 		if ((normal.array() == Vec2d::Zero().array()).all()) return Vec2d::Zero();
 
@@ -100,7 +107,7 @@ public:
 	void clear() { myPhiGrid.clear(); }
 	void resize(const Vec2i& size) { myPhiGrid.resize(size); }
 
-	double narrowBand() { return myNarrowBand / dx(); }
+	double narrowBand() { return myNarrowBand; }
 
 	// There's no way to change the grid spacing inside the class.
 	// The best way is to build a new grid and sample this one
@@ -112,7 +119,15 @@ public:
 	Vec2d indexToWorld(const Vec2d& indexPoint) const { return myPhiGrid.indexToWorld(indexPoint); }
 	Vec2d worldToIndex(const Vec2d& worldPoint) const { return myPhiGrid.worldToIndex(worldPoint); }
 
-	double biLerp(const Vec2d& worldPoint) const { return myPhiGrid.biLerp(worldPoint); }
+	FORCE_INLINE double biLerp(const Vec2d& worldPoint) const
+	{
+		return myPhiGrid.biLerp(worldPoint);
+	}
+	
+	FORCE_INLINE double biCubicInterp(const Vec2d& worldPoint) const
+	{
+		return myPhiGrid.biCubicInterp(worldPoint);
+	}
 
 	double& operator()(int i, int j) { return myPhiGrid(i, j); }
 	double& operator()(const Vec2i& cell) { return myPhiGrid(cell); }
@@ -123,7 +138,7 @@ public:
 	int voxelCount() const { return myPhiGrid.voxelCount(); }
 	Vec2i unflatten(int cellIndex) const { return myPhiGrid.unflatten(cellIndex); }
 
-	Vec2d findSurface(const Vec2d& worldPoint, int iterationLimit) const;
+	Vec2d findSurface(const Vec2d& worldPoint, int iterationLimit, double tolerance) const;
 
 	// Interpolate the interface position between two nodes. This assumes
 	// the caller has verified an interface (sign change) between the two.
@@ -138,16 +153,18 @@ public:
 
 private:
 
+	void initFromMeshImpl(const EdgeMesh& initialMesh, bool doResizeGrid);
+
 	void reinitFastMarching(UniformGrid<VisitedCellLabels>& interfaceCells);
 
-	Vec2d findSurfaceIndex(const Vec2d& indexPoint, int iterationLimit = 10) const;
-
-	ScalarGrid<double> myPhiGrid;
+	Vec2d findSurfaceIndex(const Vec2d& indexPoint, int iterationLimit, double tolerance) const;
 
 	// The narrow band of signed distances around the interface
 	double myNarrowBand;
 
 	bool myIsBackgroundNegative;
+
+	ScalarGrid<double> myPhiGrid;
 };
 
 template<typename VelocityField>
