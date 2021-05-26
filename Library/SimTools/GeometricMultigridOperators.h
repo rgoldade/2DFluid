@@ -3,7 +3,8 @@
 
 #include <utility>
 
-#include "tbb/tbb.h"
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_for.h"
 
 #include "UniformGrid.h"
 #include "Utilities.h"
@@ -70,6 +71,8 @@ double squaredl2Norm(const UniformGrid<double>& vectorGrid,
 
 double lInfinityNorm(const UniformGrid<double>& vectorGrid,
 						const UniformGrid<CellLabels>& domainCellLabels);
+
+Vec2i getChildCell(const Vec2i& cell, const int childIndex);
 
 UniformGrid<CellLabels> buildCoarseCellLabels(const UniformGrid<CellLabels>& sourceCellLabels);
 

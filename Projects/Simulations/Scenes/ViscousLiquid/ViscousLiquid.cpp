@@ -148,7 +148,7 @@ int main(int argc, char** argv)
 
 	movingSolidsMesh = makeCircleMesh(center + Vec2d(1.2, 0), .25, 20);
 	
-	staticSolidsMesh = makeSquareMesh(center, Vec2d(2));
+	staticSolidsMesh = makeSquareMesh(center, Vec2d(2, 2));
 	staticSolidsMesh.reverse();
 	assert(staticSolidsMesh.unitTestMesh());
 	

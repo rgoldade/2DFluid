@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include "tbb/blocked_range.h"
-#include "tbb/parallel_deterministic_reduce.h"
+#include "tbb/parallel_deterministic_reduce"
 #include "tbb/parallel_for.h"
 
 #include "GeometricConjugateGradientSolver.h"
@@ -133,7 +133,7 @@ void GeometricPressureProjection::project(VectorGrid<double>& velocity,
 	// Set a single interior cell to dirichlet and remove the average divergence
 	if (!hasDirichletCell)
 	{
-		Vec2d accumulatedDivergence = tbb::parallel_deterministic_reduce(tbb::blocked_range<int>(0, baseDomainCellLabels.voxelCount()), Vec2d::Zero(),
+		Vec2d accumulatedDivergence = tbb::parallel_deterministic_reduce(tbb::blocked_range<int>(0, baseDomainCellLabels.voxelCount(), tbbLightGrainSize), Vec2d::Zero().eval(),
 		[&](const tbb::blocked_range<int>& range, Vec2d divergenceStats) -> Vec2d
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -147,12 +147,11 @@ void GeometricPressureProjection::project(VectorGrid<double>& velocity,
 				}
 			}
 			return divergenceStats;
-		}
+		},
 		[](const Vec2d& stats0, const Vec2d& stats1) -> Vec2d
 		{
 			return stats0 + stats1;
 		});
-
 
 		double averageDivergence = accumulatedDivergence[0] / accumulatedDivergence[1];
 

@@ -1,5 +1,8 @@
 #include "GeometricMultigridOperators.h"
 
+#include "tbb/parallel_deterministic_reduce.h"
+#include "tbb/parallel_reduce.h"
+
 namespace FluidSim2D::GeometricMultigridOperators
 {
 
@@ -165,7 +168,7 @@ void boundaryJacobiPoissonSmoother(UniformGrid<double>& solution,
 
 	std::vector<double> tempSolution(boundaryCells.size(), 0);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, boundaryCells.size(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, int(boundaryCells.size()), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -175,24 +178,24 @@ void boundaryJacobiPoissonSmoother(UniformGrid<double>& solution,
 
 			assert(label == CellLabels::INTERIOR_CELL || label == CellLabels::BOUNDARY_CELL);
 				
-			std::pair<SolveReal, SolveReal> laplacianResult = computeLaplacian<SolveReal>(solution, domainCellLabels, cell, boundaryWeights);
+			std::pair<double, double> laplacianResult = computeLaplacian(solution, domainCellLabels, cell, boundaryWeights);
 
-			SolveReal laplacian = laplacianResult.first;
-			SolveReal diagonal = laplacianResult.second;
+			double laplacian = laplacianResult.first;
+			double diagonal = laplacianResult.second;
 
 			if (label == CellLabels::INTERIOR_CELL)
 				assert(diagonal == 4.);
 			else
 				assert(diagonal > 0);
 
-			SolveReal residual = SolveReal(rhs(cell)) - gridScalar * laplacian;
+			double residual = double(rhs(cell)) - gridScalar * laplacian;
 			residual /= (diagonal * gridScalar);
 
-			tempSolution[cellIndex] = SolveReal(solution(cell)) + dampedWeight * residual;
+			tempSolution[cellIndex] = double(solution(cell)) + dampedWeight * residual;
 		}
 	});
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, boundaryCells.size()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, int(boundaryCells.size()), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -221,7 +224,7 @@ void applyPoissonMatrix(UniformGrid<double>& destination,
 
 	const double gridScalar = 1. / std::pow(dx, 2);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, destination.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, destination.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -374,16 +377,20 @@ double dotProduct(const UniformGrid<double>& vectorGridA,
 {
 	assert(vectorGridA.size() == vectorGridB.size() && vectorGridB.size() == domainCellLabels.size());
 
-	double result = tbb::parallel_deterministic_reduce(tbb::blocked_range<int>(0, domainCellLabels.voxelCount()), double(0), 
+	double result = tbb::parallel_deterministic_reduce(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), double(0), 
 	[&](const tbb::blocked_range<int>& range, double result) -> double
-	{				
-		if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
-			domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
-			result += vectorGridA(cell) * vectorGridB(cell);
+	{
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
+		{
+			Vec2i cell = domainCellLabels.unflatten(cellIndex);
+			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
+				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+				result += vectorGridA(cell) * vectorGridB(cell);
+		}
 
 		return result;
-	}
-	[](const double a, const double b) -> double
+	},
+	[](double a, double b) -> double
 	{
 		return a + b;
 	});
@@ -398,10 +405,11 @@ void addToVector(UniformGrid<double>& destination,
 {
 	assert(destination.size() == source.size() && source.size() == domainCellLabels.size());
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, destination.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, destination.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
+			Vec2i cell = destination.unflatten(cellIndex);
 			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 				destination(cell) += scale * source(cell);
@@ -419,10 +427,11 @@ void addVectors(UniformGrid<double>& destination,
 		source.size() == scaledSource.size() &&
 		scaledSource.size() == domainCellLabels.size());
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, destination.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, destination.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
+			Vec2i cell = destination.unflatten(cellIndex);
 			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 				destination(cell) = source(cell) + scale * scaledSource(cell);
@@ -435,18 +444,19 @@ double squaredl2Norm(const UniformGrid<double>& vectorGrid,
 {
 	assert(vectorGrid.size() == domainCellLabels.size());
 
-	double squaredNorm = tbb::parallel_deterministic_reduce(tbb::blocked_range<int>(0, domainCellLabels.voxelCount()), double(0),
+	double squaredNorm = tbb::parallel_deterministic_reduce(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), double(0),
 	[&](const tbb::blocked_range<int>& range, double squaredNorm) -> double
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
+			Vec2i cell = domainCellLabels.unflatten(cellIndex);
 			if (domainCellLabels(cell) == CellLabels::INTERIOR_CELL ||
 				domainCellLabels(cell) == CellLabels::BOUNDARY_CELL)
 				squaredNorm += std::pow(vectorGrid(cell), 2);
 		}
 
 		return squaredNorm;
-	}
+	},
 	[](double a, double b) -> double
 	{
 		return a + b;
@@ -460,7 +470,7 @@ double lInfinityNorm(const UniformGrid<double>& vectorGrid,
 {
 	assert(vectorGrid.size() == domainCellLabels.size());
 
-	double infNorm = tbb::parallel_reduce(tbb::blocked_range<int>(0, domainCellLabels.voxelCount()), double(0),
+	double infNorm = tbb::parallel_reduce(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), double(0),
 	[&](const tbb::blocked_range<int>& range, double infNorm) -> double
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
@@ -472,7 +482,7 @@ double lInfinityNorm(const UniformGrid<double>& vectorGrid,
 		}
 
 		return infNorm;
-	}
+	},
 	[](double a, double b) -> double
 	{
 		return std::max(a, b);
@@ -490,7 +500,7 @@ void setBoundaryDomainLabels(UniformGrid<CellLabels>& domainCellLabels,
 		boundaryWeights.size(1)[0] == domainCellLabels.size()[0] &&
 		boundaryWeights.size(1)[1] == domainCellLabels.size()[1] + 1);
 
-	tbb::enumerable_thread_specific<std::vector<Vec2i>> parallelBoundaryCells;
+	tbb::enumerable_thread_specific<VecVec2i> parallelBoundaryCells;
 
 	// Build initial layer
 	tbb::parallel_for(tbb::blocked_range<int>(0, domainCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
@@ -536,10 +546,10 @@ void setBoundaryDomainLabels(UniformGrid<CellLabels>& domainCellLabels,
 	});
 
 	// Combine parallel list of boundary cells
-	std::vector<Vec2i> boundaryCells;
+	VecVec2i boundaryCells;
 	mergeLocalThreadVectors(boundaryCells, parallelBoundaryCells);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, boundaryCells.size()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, int(boundaryCells.size()), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
@@ -566,7 +576,7 @@ void buildExpandedBoundaryWeights(VectorGrid<double>& expandedBoundaryWeights,
 
 	expandedBoundaryWeights.grid(axis).reset(0);
 
-	tbb::parallel_for(tbb::blocked_range<int>(0, baseBoundaryWeights.grid(axis).voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, baseBoundaryWeights.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 		{
@@ -686,31 +696,29 @@ VecVec2i buildBoundaryCells(const UniformGrid<CellLabels>& sourceCellLabels,
 
 	UniformGrid<VisitedCellLabels> visitedCells(sourceCellLabels.size(), VisitedCellLabels::UNVISITED_CELL);
 
-	std::vector<Vec2i> boundaryCells;	
+	VecVec2i boundaryCells;	
+	tbb::enumerable_thread_specific<VecVec2i> parallelBoundaryCells;
+
+	// Build initial layer
+	tbb::parallel_for(tbb::blocked_range<int>(0, sourceCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
-		tbb::enumerable_thread_specific<std::vector<Vec2i>> parallelBoundaryCells;
+		auto& localBoundaryCells = parallelBoundaryCells.local();
 
-		// Build initial layer
-		tbb::parallel_for(tbb::blocked_range<int>(0, sourceCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
+		for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 		{
-			auto& localBoundaryCells = parallelBoundaryCells.local();
+			Vec2i cell = sourceCellLabels.unflatten(cellIndex);
 
-			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
-			{
-				Vec2i cell = sourceCellLabels.unflatten(cellIndex);
+			if (sourceCellLabels(cell) == CellLabels::BOUNDARY_CELL)
+				localBoundaryCells.push_back(cell);
+		}
+	});
 
-				if (sourceCellLabels(cell) == CellLabels::BOUNDARY_CELL)
-					localBoundaryCells.push_back(cell);
-			}
-		});
-
-		mergeLocalThreadVectors(boundaryCells, parallelBoundaryCells);
-	}
+	mergeLocalThreadVectors(boundaryCells, parallelBoundaryCells);
 	
 	for (int layer = 1; layer < boundaryWidth; ++layer)
 	{
 		// Set cells to visited
-		tbb::parallel_for(tbb::blocked_range<int>(0, boundaryCells.size()), [&](const tbb::blocked_range<int>& range)
+		tbb::parallel_for(tbb::blocked_range<int>(0, int(boundaryCells.size()), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
 			for (int cellIndex = range.begin(); cellIndex != range.end(); ++cellIndex)
 			{
@@ -723,7 +731,7 @@ VecVec2i buildBoundaryCells(const UniformGrid<CellLabels>& sourceCellLabels,
 		{
 			parallelBoundaryCells.clear();
 
-			tbb::parallel_for(tbb::blocked_range<int>(0, boundaryCells.size()), [&](const tbb::blocked_range<int>& range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, int(boundaryCells.size()), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
 				auto &localBoundaryCells = parallelBoundaryCells.local();
 
@@ -758,7 +766,7 @@ VecVec2i buildBoundaryCells(const UniformGrid<CellLabels>& sourceCellLabels,
 	parallelBoundaryCells.clear();
 
 	// Build initial layer
-	tbb::parallel_for(tbb::blocked_range<int>(0, sourceCellLabels.voxelCount()), [&](const tbb::blocked_range<int>& range)
+	tbb::parallel_for(tbb::blocked_range<int>(0, sourceCellLabels.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
 		auto &localBoundaryCells = parallelBoundaryCells.local();
 		

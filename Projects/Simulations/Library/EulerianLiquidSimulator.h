@@ -31,7 +31,7 @@ public:
 		, myDoSolveViscosity(false)
 		, myCFL(cfl)
 	{
-		myLiquidVelocity = VectorGrid<double>(myXform, size, VectorGridSettings::SampleType::STAGGERED);
+		myLiquidVelocity = VectorGrid<double>(myXform, size, 0, VectorGridSettings::SampleType::STAGGERED);
 		mySolidVelocity = VectorGrid<double>(myXform, size, 0, VectorGridSettings::SampleType::STAGGERED);
 
 		myLiquidSurface = LevelSet(myXform, size, myCFL);

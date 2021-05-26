@@ -108,13 +108,13 @@ void EulerianLiquidSimulator::setLiquidVelocity(const VectorGrid<double>& veloci
 	for (int axis : {0, 1})
 	{
 		tbb::parallel_for(tbb::blocked_range<int>(0, myLiquidVelocity.grid(axis).voxelCount(), tbbLightGrainSize), [&](tbb::blocked_range<int>& range)
+		{
+			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
-				for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
-				{
-					Vec2i face = velocity.grid(axis).unflatten(faceIndex);
-					myLiquidVelocity(face, axis) = velocity(face, axis);
-				}
-			});
+				Vec2i face = velocity.grid(axis).unflatten(faceIndex);
+				myLiquidVelocity(face, axis) = velocity(face, axis);
+			}
+		});
 	}
 }
 
@@ -124,21 +124,21 @@ void EulerianLiquidSimulator::unionLiquidSurface(const LevelSet& addedLiquidSurf
 	for (int axis : {0, 1})
 	{
 		tbb::parallel_for(tbb::blocked_range<int>(0, myLiquidVelocity.grid(axis).voxelCount(), tbbLightGrainSize), [&](tbb::blocked_range<int>& range)
+		{
+			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
-				for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
-				{
-					Vec2i face = myLiquidVelocity.grid(axis).unflatten(faceIndex);
+				Vec2i face = myLiquidVelocity.grid(axis).unflatten(faceIndex);
 
-					Vec2d facePosition = myLiquidVelocity.indexToWorld(face.cast<double>(), axis);
-					if (addedLiquidSurface.biLerp(facePosition) <= 0 && myLiquidSurface.biLerp(facePosition) > 0)
-						myLiquidVelocity(face, axis) = 0;
-				}
-			});
+				Vec2d facePosition = myLiquidVelocity.indexToWorld(face.cast<double>(), axis);
+				if (addedLiquidSurface.biLerp(facePosition) <= 0 && myLiquidSurface.biLerp(facePosition) > 0)
+					myLiquidVelocity(face, axis) = 0;
+			}
+		});
 	}
 
 	// Combine surfaces
 	myLiquidSurface.unionSurface(addedLiquidSurface);
-	myLiquidSurface.reinitMesh();
+	myLiquidSurface.reinit();
 }
 
 template<typename ForceSampler>
@@ -194,7 +194,7 @@ void EulerianLiquidSimulator::advectLiquidSurface(double dt, IntegrationOrder in
 		}
 	});
 
-	myLiquidSurface.reinitMesh();
+	myLiquidSurface.reinit();
 }
 
 void EulerianLiquidSimulator::advectViscosity(double dt, IntegrationOrder integrator, InterpolationOrder interpolator)
@@ -242,7 +242,7 @@ void EulerianLiquidSimulator::runTimestep(double dt)
 		}
 	});
 
-	extrapolatedSurface.reinitMesh();
+	extrapolatedSurface.reinit();
 
 	std::cout << "  Extrapolate into solids: " << simTimer.stop() << "s" << std::endl;
 	simTimer.reset();
@@ -287,8 +287,10 @@ void EulerianLiquidSimulator::runTimestep(double dt)
 		{
 			double velMag = myLiquidVelocity.maxMagnitude();
 
+			int bandwidth = int(std::ceil(2. * velMag * dt / myLiquidSurface.dx()));
+
 			for (int axis : {0, 1})
-				extrapolateField(myLiquidVelocity.grid(axis), validFaces.grid(axis), int(2. * velMag * dt / myLiquidSurface.dx()));
+				extrapolateField(myLiquidVelocity.grid(axis), validFaces.grid(axis), bandwidth);
 		}
 
 		std::cout << "  Solve for pressure: " << simTimer.stop() << "s" << std::endl;
@@ -316,22 +318,23 @@ void EulerianLiquidSimulator::runTimestep(double dt)
 	{
 		// Zero out non-valid faces
 		tbb::parallel_for(tbb::blocked_range<int>(0, validFaces.grid(axis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
+		{
+			for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
 			{
-				for (int faceIndex = range.begin(); faceIndex != range.end(); ++faceIndex)
-				{
-					Vec2i face = validFaces.grid(axis).unflatten(faceIndex);
+				Vec2i face = validFaces.grid(axis).unflatten(faceIndex);
 
-					if (validFaces(face, axis) != VisitedCellLabels::FINISHED_CELL)
-						myLiquidVelocity(face, axis) = 0;
-				}
-			});
+				if (validFaces(face, axis) != VisitedCellLabels::FINISHED_CELL)
+					myLiquidVelocity(face, axis) = 0;
+			}
+		});
 	}
 
 	{
 		double velMag = myLiquidVelocity.maxMagnitude();
 
+		int bandwidth = int(std::ceil(2. * velMag * dt / myLiquidSurface.dx()));
 		for (int axis : {0, 1})
-			extrapolateField(myLiquidVelocity.grid(axis), validFaces.grid(axis), int(2. * velMag * dt / myLiquidSurface.dx()));
+			extrapolateField(myLiquidVelocity.grid(axis), validFaces.grid(axis), bandwidth);
 	}
 
 	std::cout << "  Extrapolate velocity: " << simTimer.stop() << "s" << std::endl;

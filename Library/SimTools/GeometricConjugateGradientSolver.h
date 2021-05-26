@@ -24,14 +24,16 @@ void solveGeometricConjugateGradient(UniformGrid<double>& solutionGrid,
 										const AddToVectorFunctor& addToVectorFunctor,
 										const AddScaledVectorFunctor& addScaledVectorFunctor,
 										const double tolerance,
-										const int maxIterations)
+										const int maxIterations,
+										bool verbose = false)
 {
 	assert(solutionGrid.size() == rhsGrid.size());
 
 	double rhsNorm2 = squaredNormFunctor(rhsGrid);
 	if (rhsNorm2 == 0)
 	{
-		std::cout << "RHS is zero. Nothing to solve" << std::endl;
+        if (verbose)
+			std::cout << "RHS is zero. Nothing to solve" << std::endl;
 		return;
 	}
 
@@ -46,7 +48,8 @@ void solveGeometricConjugateGradient(UniformGrid<double>& solutionGrid,
 
 	if (residualNorm2 < threshold)
 	{
-		std::cout << "Residual already below error: " << std::sqrt(residualNorm2 / rhsNorm2) << std::endl;
+        if (verbose)
+			std::cout << "Residual already below error: " << std::sqrt(residualNorm2 / rhsNorm2) << std::endl;
 		return;
 	}
 
@@ -64,7 +67,8 @@ void solveGeometricConjugateGradient(UniformGrid<double>& solutionGrid,
 	int iteration = 0;
 	for (; iteration < maxIterations; ++iteration)
 	{
-		std::cout << "  Iteration: " << iteration << std::endl;
+		if (verbose)
+			std::cout << "  Iteration: " << iteration << std::endl;
 
 		// Matrix-vector multiplication
 		matrixVectorMultiplyFunctor(tempGrid, pGrid);
@@ -80,7 +84,8 @@ void solveGeometricConjugateGradient(UniformGrid<double>& solutionGrid,
 
 		residualNorm2 = squaredNormFunctor(residualGrid);
 
-		std::cout << "    Relative error: " << std::sqrt(residualNorm2 / rhsNorm2) << std::endl;
+		if (verbose)
+			std::cout << "    Relative error: " << std::sqrt(residualNorm2 / rhsNorm2) << std::endl;
 
 		if (residualNorm2 < threshold)
 			break;
@@ -96,15 +101,21 @@ void solveGeometricConjugateGradient(UniformGrid<double>& solutionGrid,
 		addScaledVectorFunctor(pGrid, zGrid, pGrid, beta);
 	}
 
-	std::cout << "Iterations: " << iteration << std::endl;
+	if (verbose)
+		std::cout << "Iterations: " << iteration << std::endl;
+
 	double error = std::sqrt(residualNorm2 / rhsNorm2);
-	std::cout << "Drifted relative L2 Error: " << error << std::endl;
+
+	if (verbose)
+		std::cout << "Drifted relative L2 Error: " << error << std::endl;
 
 	// Recompute residual
 	matrixVectorMultiplyFunctor(residualGrid, solutionGrid);
 	addScaledVectorFunctor(residualGrid, rhsGrid, residualGrid, -1);
 	error = std::sqrt(squaredNormFunctor(residualGrid) / rhsNorm2);
-	std::cout << "Recomputed relative L2 Error: " << error << std::endl;
+	
+	if (verbose)
+		std::cout << "Recomputed relative L2 Error: " << error << std::endl;
 }
 
 }

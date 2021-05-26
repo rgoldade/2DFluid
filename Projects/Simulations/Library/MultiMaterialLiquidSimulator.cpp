@@ -104,7 +104,7 @@ void MultiMaterialLiquidSimulator::advectFluidSurfaces(double dt, IntegrationOrd
 		});
 
 	for (int material = 0; material < myMaterialCount; ++material)
-		myFluidSurfaces[material].reinitMesh();
+		myFluidSurfaces[material].reinit();
 }
 
 void MultiMaterialLiquidSimulator::setSolidSurface(const LevelSet& solidSurface)
@@ -150,7 +150,7 @@ void MultiMaterialLiquidSimulator::runTimestep(double dt)
 		});
 
 	for (int material = 0; material < myMaterialCount; ++material)
-		extrapolatedSurfaces[material].reinitMesh();
+		extrapolatedSurfaces[material].reinit();
 
 	std::cout << "  Extrapolate into solids: " << simTimer.stop() << "s" << std::endl;
 
