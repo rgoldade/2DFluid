@@ -1,7 +1,8 @@
 #ifndef FLUIDSIM2D_FIELD_ADVECTOR_H
 #define FLUIDSIM2D_FIELD_ADVECTOR_H
 
-#include "tbb/tbb.h"
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_for.h"
 
 #include "Integrator.h"
 #include "ScalarGrid.h"

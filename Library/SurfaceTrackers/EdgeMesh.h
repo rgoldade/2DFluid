@@ -93,7 +93,6 @@ public:
 	}
 
 	AlignedBox2d boundingBox() const;
-	std::vector<Vec2f> vertexNormals() const;
 
 	//Reverse winding order
 	void reverse();

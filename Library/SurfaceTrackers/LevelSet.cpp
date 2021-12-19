@@ -1,6 +1,7 @@
 #include "LevelSet.h"
 
 #include <iostream>
+#include <queue>
 
 #include <Eigen/Dense>
 #include <Eigen/SVD>

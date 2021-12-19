@@ -1,7 +1,8 @@
 #ifndef TESTS_GEOMETRIC_MULTIGRID_UTILITIES_H
 #define TESTS_GEOMETRIC_MULTIGRID_UTILITIES_H
 
-#include "tbb/tbb.h"
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_for.h"
 
 #include "ComputeWeights.h"
 #include "GeometricMultigridOperators.h"

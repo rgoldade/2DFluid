@@ -1,6 +1,6 @@
 #include "GeometricMultigridOperators.h"
 
-#include "tbb/parallel_deterministic_reduce.h"
+#include "tbb/blocked_range.h"
 #include "tbb/parallel_reduce.h"
 
 namespace FluidSim2D::GeometricMultigridOperators

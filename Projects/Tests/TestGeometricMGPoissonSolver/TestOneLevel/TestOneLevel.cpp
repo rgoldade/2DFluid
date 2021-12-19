@@ -6,7 +6,7 @@
 #include <Eigen/Sparse>
 
 #include "tbb/blocked_range.h"
-#include "tbb/parallel_deterministic_reduce.h"
+#include "tbb/parallel_reduce.h"
 #include "tbb/parallel_for.h"
 
 #include "GeometricMultigridOperators.h"

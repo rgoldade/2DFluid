@@ -4,7 +4,8 @@
 #include <iostream>
 #include <memory>
 
-#include "tbb/tbb.h"
+#include "tbb/blocked_range.h"
+#include "tbb/parallel_for.h"
 
 #include "ConjugateGradientSolver.h"
 #include "GeometricMultigridPoissonSolver.h"
