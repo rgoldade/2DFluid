@@ -92,7 +92,7 @@ public:
 
 	// Check that the two grids are of the same size, 
 	// positioned at the same spot, have the same grid
-	// spacing and the same sampling sceme
+	// spacing and the same sampling scheme
 	template<typename S>
 	bool isGridMatched(const ScalarGrid<S>& grid) const
 	{
@@ -282,11 +282,11 @@ T ScalarGrid<T>::biLerpLocal(const Vec2d& indexPoint) const
 	}
 
 	// Use base grid class operator
-	T v00 = (*this)(Vec2i(baseSampleCell[0], baseSampleCell[1]));
-	T v10 = (*this)(Vec2i(baseSampleCell[0] + 1, baseSampleCell[1]));
+	T v00 = (*this)(baseSampleCell[0], baseSampleCell[1]);
+	T v10 = (*this)(baseSampleCell[0] + 1, baseSampleCell[1]);
 
-	T v01 = (*this)(Vec2i(baseSampleCell[0], baseSampleCell[1] + 1));
-	T v11 = (*this)(Vec2i(baseSampleCell[0] + 1, baseSampleCell[1] + 1));
+	T v01 = (*this)(baseSampleCell[0], baseSampleCell[1] + 1);
+	T v11 = (*this)(baseSampleCell[0] + 1, baseSampleCell[1] + 1);
 
 	Vec2d dx = indexPoint - floorPoint;
 
