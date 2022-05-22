@@ -109,6 +109,8 @@ using VecXt = Eigen::Matrix<T, N, 1>;
 template<typename VecType>
 using VecVecT = std::vector<VecType, Eigen::aligned_allocator<VecType>>;
 
+using Matrix2x2d = Eigen::Matrix<double, 2, 2>;
+
 using AlignedBox2d = Eigen::AlignedBox<double, 2>;
 using AlignedBox2i = Eigen::AlignedBox<int, 2>;
 
@@ -282,6 +284,41 @@ S cubicInterpGradient(const S& value_1, const S& value0, const S& value1, const 
 		+ (-T(9) * sqrfx + T(8) * fx + 1) * value1
 		+ (T(3) * sqrfx - T(2) * fx) * value2);
 };
+
+
+FORCE_INLINE double computeRayBBoxIntersection(const AlignedBox2d& bbox, const Vec2d& rayOrigin, const Vec2d& rayDirection)
+{
+	AlignedBox2d expandedBbox(bbox);
+	expandedBbox.extend(bbox.max() + Vec2d::Constant(1e-3));
+	expandedBbox.extend(bbox.min() - Vec2d::Constant(1e-3));
+
+	double alpha = std::numeric_limits<double>::max();
+	for (int axis : {0, 1})
+		for (int direction : {0, 1})
+		{
+			double planeValue;
+			if (direction == 0)
+			{
+				planeValue = bbox.min()[axis];
+			}
+			else
+			{
+				planeValue = bbox.max()[axis];
+			}
+
+			double localAlpha = (planeValue - rayOrigin[axis]) / rayDirection[axis];
+			Vec2d point = rayOrigin + localAlpha * rayDirection;
+
+			if (expandedBbox.contains(point))
+			{
+				alpha = std::min(alpha, localAlpha);
+			}
+		}
+
+	return alpha;
+}
+
+
 
 }
 #endif

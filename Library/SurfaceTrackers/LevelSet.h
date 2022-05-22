@@ -107,17 +107,17 @@ public:
 	void clear() { myPhiGrid.clear(); }
 	void resize(const Vec2i& size) { myPhiGrid.resize(size); }
 
-	double narrowBand() { return myNarrowBand; }
+	FORCE_INLINE double narrowBand() { return myNarrowBand; }
 
 	// There's no way to change the grid spacing inside the class.
 	// The best way is to build a new grid and sample this one
-	double dx() const { return myPhiGrid.dx(); }
-	Vec2d offset() const { return myPhiGrid.offset(); }
-	Transform xform() const { return myPhiGrid.xform(); }
-	Vec2i size() const { return myPhiGrid.size(); }
+	FORCE_INLINE double dx() const { return myPhiGrid.dx(); }
+	FORCE_INLINE Vec2d offset() const { return myPhiGrid.offset(); }
+	FORCE_INLINE Transform xform() const { return myPhiGrid.xform(); }
+	FORCE_INLINE Vec2i size() const { return myPhiGrid.size(); }
 
-	Vec2d indexToWorld(const Vec2d& indexPoint) const { return myPhiGrid.indexToWorld(indexPoint); }
-	Vec2d worldToIndex(const Vec2d& worldPoint) const { return myPhiGrid.worldToIndex(worldPoint); }
+	FORCE_INLINE Vec2d indexToWorld(const Vec2d& indexPoint) const { return myPhiGrid.indexToWorld(indexPoint); }
+	FORCE_INLINE Vec2d worldToIndex(const Vec2d& worldPoint) const { return myPhiGrid.worldToIndex(worldPoint); }
 
 	FORCE_INLINE double biLerp(const Vec2d& worldPoint) const
 	{
@@ -129,14 +129,14 @@ public:
 		return myPhiGrid.biCubicInterp(worldPoint);
 	}
 
-	double& operator()(int i, int j) { return myPhiGrid(i, j); }
-	double& operator()(const Vec2i& cell) { return myPhiGrid(cell); }
+	FORCE_INLINE double& operator()(int i, int j) { return myPhiGrid(i, j); }
+	FORCE_INLINE double& operator()(const Vec2i& cell) { return myPhiGrid(cell); }
 
-	const double& operator()(int i, int j) const { return myPhiGrid(i, j); }
-	const double& operator()(const Vec2i& cell) const { return myPhiGrid(cell); }
+	FORCE_INLINE const double& operator()(int i, int j) const { return myPhiGrid(i, j); }
+	FORCE_INLINE const double& operator()(const Vec2i& cell) const { return myPhiGrid(cell); }
 
-	int voxelCount() const { return myPhiGrid.voxelCount(); }
-	Vec2i unflatten(int cellIndex) const { return myPhiGrid.unflatten(cellIndex); }
+	FORCE_INLINE int voxelCount() const { return myPhiGrid.voxelCount(); }
+	FORCE_INLINE Vec2i unflatten(int cellIndex) const { return myPhiGrid.unflatten(cellIndex); }
 
 	Vec2d findSurface(const Vec2d& worldPoint, int iterationLimit, double tolerance) const;
 

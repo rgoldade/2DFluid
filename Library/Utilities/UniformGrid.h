@@ -3,7 +3,6 @@
 
 #include <iostream>
 #include <fstream>
-#include <vector>
 
 #include "GridUtilities.h"
 #include "Utilities.h"

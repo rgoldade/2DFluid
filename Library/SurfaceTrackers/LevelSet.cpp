@@ -132,7 +132,7 @@ void LevelSet::initFromMeshImpl(const EdgeMesh& initialMesh, bool doResizeGrid)
 	if (doResizeGrid)
 	{
 		// Determine the bounding box of the mesh to build the underlying grids
-		AlignedBox2d bbox = initialMesh.boundingBox();;
+		AlignedBox2d bbox = initialMesh.boundingBox();
 
 		// Expand grid beyond the narrow band of the mesh
 		double maxPadding = 50. * dx();
@@ -543,11 +543,11 @@ EdgeMesh LevelSet::buildDCMesh() const
 	// Run dual contouring loop
 	forEachVoxelRange(Vec2i::Zero(), dcPointIndex.size(), [&](const Vec2i& cell)
 	{
-		Eigen::MatrixXd AtA = Eigen::MatrixXd::Zero(2, 2);
+		Eigen::Matrix2d AtA = Eigen::Matrix2d::Zero(2, 2);
 
-		Eigen::VectorXd rhs = Eigen::VectorXd::Zero(2);
+		Vec2d rhs = Vec2d::Zero();
 
-		Eigen::VectorXd pointCOM = Eigen::VectorXd::Zero(2);
+		Vec2d pointCOM = Vec2d::Zero();
 
 		double pointCount = 0;
 
@@ -576,9 +576,9 @@ EdgeMesh LevelSet::buildDCMesh() const
 					AtA(1, 0) += localNormal[0] * localNormal[1];
 					AtA(1, 1) += localNormal[1] * localNormal[1];
 
-					double norm_dot = localNormal.dot(point);
-					rhs(0) += localNormal[0] * norm_dot;
-					rhs(1) += localNormal[1] * norm_dot;
+					double normDot = localNormal.dot(point);
+					rhs(0) += localNormal[0] * normDot;
+					rhs(1) += localNormal[1] * normDot;
 
 					pointCOM[0] += point[0];
 					pointCOM[1] += point[1];
@@ -671,7 +671,6 @@ Vec2d LevelSet::interpolateInterface(const Vec2i& startPoint, const Vec2i& endPo
 void LevelSet::unionSurface(const LevelSet& unionPhi)
 {
 	assert(isGridMatched(unionPhi));
-
 
 	tbb::parallel_for(tbb::blocked_range<int>(0, voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 	{
