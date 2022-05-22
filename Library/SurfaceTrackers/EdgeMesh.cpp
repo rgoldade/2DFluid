@@ -40,12 +40,12 @@ void EdgeMesh::insertMesh(const EdgeMesh& mesh)
 	}
 }
 
-const VecVec2i EdgeMesh::edges() const
+const VecVec2i& EdgeMesh::edges() const
 {
 	return myEdges;
 }
 
-const VecVec2d EdgeMesh::vertices() const
+const VecVec2d& EdgeMesh::vertices() const
 {
 	return myVertices;
 }

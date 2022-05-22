@@ -41,8 +41,8 @@ public:
 	// to be offset by the edge/vertex size in the existing mesh.
 	void insertMesh(const EdgeMesh& mesh);
 
-	const VecVec2i edges() const;
-	const VecVec2d vertices() const;
+	const VecVec2i& edges() const;
+	const VecVec2d& vertices() const;
 
 	FORCE_INLINE const Vec2i& edge(int index) const
 	{
