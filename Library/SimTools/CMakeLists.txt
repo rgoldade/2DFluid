@@ -3,9 +3,9 @@ add_library(SimTools
 				GeometricMultigridOperators.cpp
 				GeometricMultigridPoissonSolver.cpp
 				GeometricPressureProjection.cpp
+				Noise.cpp
 				PressureProjection.cpp
-				ViscositySolver.cpp
-				Noise.cpp)
+				ViscositySolver.cpp)
 
 target_link_libraries(SimTools
 						PRIVATE

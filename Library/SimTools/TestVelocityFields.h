@@ -224,6 +224,19 @@ public:
 	}
 };
 
+class DeformationField
+{
+public:
+
+	// Procedural velocity field
+	Vec2d operator()(double, const Vec2d& pos) const
+	{
+		return Vec2d(-std::sin(4 * PI * (pos[0] + .5)) * std::sin(4 * PI * (pos[1] + .5)), -std::cos(4 * PI * (pos[0] + .5)) * std::cos(4 * PI * (pos[1] + .5)));
+	}
+};
+
+
+
 }
 
 #endif

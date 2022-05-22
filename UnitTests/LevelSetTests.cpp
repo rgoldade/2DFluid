@@ -374,6 +374,8 @@ TEST(LEVEL_SET_TESTS, CIRCLE_UNION_TEST)
     AlignedBox2d bbox;
     bbox.extend(Vec2d(-2, -2));
     bbox.extend(Vec2d(2, 2));
+
+    testUnionFunctions(isoFuncs, bbox, .01);
 }
 
 static void testInitFromMesh(const EdgeMesh& mesh, double dx)
@@ -415,7 +417,6 @@ static void testInitFromMesh(const EdgeMesh& mesh, double dx)
     {
         EXPECT_TRUE(isNearlyEqual(surfaceGrid.biLerp(vertex), 0., 1e-5, false)) << "Bilerp: " << surfaceGrid.biLerp(vertex);
         EXPECT_TRUE(isNearlyEqual(surfaceGrid.biCubicInterp(vertex), 0., 1e-5, false)) << "Bicubic: " << surfaceGrid.biLerp(vertex);
-        ;
     }
 
     // Verify the norm of the gradient is 1

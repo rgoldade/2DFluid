@@ -13,7 +13,7 @@ using namespace FluidSim2D;
 //
 // Ghost fluid weights tests
 //
-//
+
 void testGhostFluidWeights(const LevelSet& surface)
 {
 	// Build ghost fluid weights

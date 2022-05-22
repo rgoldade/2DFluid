@@ -66,7 +66,7 @@ double AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& sol
             // Build RHS
             Vec2d gridPoint = myPoissonGrid.indexToWorld(cell.cast<double>());
 
-            rhsVector(row) = coeff * rhsFuction(gridPoint);
+            rhsVector(row) = -coeff * rhsFuction(gridPoint);
 
             for (auto axis : {0, 1})
                 for (auto direction : {0, 1})
@@ -85,10 +85,10 @@ double AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& sol
                         int adjacentRow = solvableCells(adjacentCell);
                         assert(adjacentRow >= 0);
 
-                        localSparseElements.emplace_back(row, adjacentRow, 1);
+                        localSparseElements.emplace_back(row, adjacentRow, -1);
                     }
                 }
-            localSparseElements.emplace_back(row, row, -4);
+            localSparseElements.emplace_back(row, row, 4);
         }
     });
 

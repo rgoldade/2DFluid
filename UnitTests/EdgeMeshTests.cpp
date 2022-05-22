@@ -230,7 +230,7 @@ TEST(EDGE_MESH_TESTS, EDGE_MESH_OFFSET_TEST)
         EXPECT_TRUE(isNearlyEqual(offsetNorm[0], meshNorm[0]));
         EXPECT_TRUE(isNearlyEqual(offsetNorm[1], meshNorm[1]));
 
-        EXPECT_TRUE(isNearlyEqual(offsetNorm[1], biggerMeshNorm[1]));
+        EXPECT_TRUE(isNearlyEqual(offsetNorm[0], biggerMeshNorm[0]));
         EXPECT_TRUE(isNearlyEqual(offsetNorm[1], biggerMeshNorm[1]));
     }
 }
