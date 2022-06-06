@@ -3,7 +3,7 @@
 
 #include "GridUtilities.h"
 
-namespace FluidSim2D
+namespace FluidSim2D::Predicates
 {
 
 using REAL = double;

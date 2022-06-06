@@ -125,7 +125,7 @@
 
 #include "Predicates.h"
 
-namespace FluidSim2D
+namespace FluidSim2D::Predicates
 {
 
 IntersectionLabels exactEdgeIntersect(Vec2R q, Vec2R r, Vec2R s, Axis axis)

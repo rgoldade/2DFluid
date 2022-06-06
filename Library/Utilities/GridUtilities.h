@@ -92,7 +92,9 @@ FORCE_INLINE Vec2i cellToNode(const Vec2i& cell, int nodeIndex)
 	for (int axis : {0, 1})
 	{
 		if (nodeIndex & (1 << axis))
+		{
 			++node[axis];
+		}
 	}
 
 	return node;

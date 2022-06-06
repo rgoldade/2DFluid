@@ -53,9 +53,6 @@ void PressureProjection::drawPressure(Renderer& renderer) const
 
 void PressureProjection::project(VectorGrid<double>& velocity)
 {
-	using SolveReal = double;
-	using Vector = Eigen::VectorXd;
-
 	assert(velocity.isGridMatched(mySolidVelocity));
 
 	enum class MaterialLabels { SOLID_CELL, AIR_CELL, LIQUID_CELL };
@@ -104,13 +101,13 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 			liquidCellIndices(cell) = liquidCellCount++;
 	});
 
-	Vector rhsVector = Vector::Zero(liquidCellCount);
-	Vector initialGuessVector = Vector::Zero(liquidCellCount);
+	VectorXd rhsVector = VectorXd::Zero(liquidCellCount);
+	VectorXd initialGuessVector = VectorXd::Zero(liquidCellCount);
 
-	Eigen::SparseMatrix<SolveReal> sparseMatrix(liquidCellCount, liquidCellCount);
+	SparseMatrix sparseMatrix(liquidCellCount, liquidCellCount);
 
 	{
-		tbb::enumerable_thread_specific<std::vector<Eigen::Triplet<SolveReal>>> parallelSparseMatrixElements;
+		tbb::enumerable_thread_specific<std::vector<Eigen::Triplet<double>>> parallelSparseMatrixElements;
 
 		tbb::parallel_for(tbb::blocked_range<int>(0, liquidCellIndices.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 		{
@@ -127,16 +124,16 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 					assert(materialCellLabels(cell) == MaterialLabels::LIQUID_CELL);
 
 					// Compute divergence to add to RHS
-					SolveReal divergence = 0;
+					double divergence = 0;
 
 					for (int axis : {0, 1})
 						for (int direction : {0, 1})
 						{
 							Vec2i face = cellToFace(cell, axis, direction);
 
-							SolveReal weight = myCutCellWeights(face, axis);
+							double weight = myCutCellWeights(face, axis);
 
-							SolveReal sign = (direction == 0) ? 1 : -1;
+							double sign = (direction == 0) ? 1 : -1;
 
 							// Add divergence from faces
 							if (weight > 0)
@@ -147,7 +144,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 
 					rhsVector(liquidIndex) = divergence;
 
-					SolveReal diagonal = 0;
+					double diagonal = 0;
 
 					for (int axis : {0, 1})
 						for (int direction : {0, 1})
@@ -160,7 +157,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 
 							Vec2i face = cellToFace(cell, axis, direction);
 
-							SolveReal weight = myCutCellWeights(face, axis);
+							double weight = myCutCellWeights(face, axis);
 
 							if (weight > 0)
 							{
@@ -176,9 +173,9 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 								{
 									assert(materialCellLabels(adjacentCell) == MaterialLabels::AIR_CELL);
 
-									SolveReal theta = myGhostFluidWeights(face, axis);
+									double theta = myGhostFluidWeights(face, axis);
 
-									theta = std::clamp(theta, SolveReal(.01), SolveReal(1));
+									theta = std::clamp(theta, double(.01), double(1));
 									diagonal += weight / theta;
 								}
 							}
@@ -198,12 +195,12 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 			}
 		});
 
-		std::vector<Eigen::Triplet<SolveReal>> sparseMatrixElements;
+		std::vector<Eigen::Triplet<double>> sparseMatrixElements;
 		mergeLocalThreadVectors(sparseMatrixElements, parallelSparseMatrixElements);
 		sparseMatrix.setFromTriplets(sparseMatrixElements.begin(), sparseMatrixElements.end());
 	}
 
-	Eigen::ConjugateGradient<Eigen::SparseMatrix<SolveReal>, Eigen::Upper | Eigen::Lower> solver;
+	Eigen::ConjugateGradient<SparseMatrix, Eigen::Upper | Eigen::Lower> solver;
 	solver.compute(sparseMatrix);
 
 	if (solver.info() != Eigen::Success)
@@ -214,7 +211,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 
 	solver.setTolerance(1E-5);
 
-	Vector solutionVector = solver.solveWithGuess(rhsVector, initialGuessVector);
+	VectorXd solutionVector = solver.solveWithGuess(rhsVector, initialGuessVector);
 
 	if (solver.info() != Eigen::Success)
 	{
@@ -292,7 +289,7 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 			{
 				Vec2i face = myValidFaces.grid(axis).unflatten(faceIndex);
 
-				SolveReal tempVelocity = 0;
+				double tempVelocity = 0;
 
 				if (myValidFaces(face, axis) == VisitedCellLabels::FINISHED_CELL)
 				{
@@ -303,13 +300,13 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 					assert(backwardCell[axis] >= 0 && forwardCell[axis] <= mySurface.size()[axis]);
 					assert(materialCellLabels(backwardCell) == MaterialLabels::LIQUID_CELL || materialCellLabels(forwardCell) == MaterialLabels::LIQUID_CELL);
 
-					SolveReal gradient = myPressure(forwardCell) - myPressure(backwardCell);
+					double gradient = myPressure(forwardCell) - myPressure(backwardCell);
 
 					if (materialCellLabels(backwardCell) == MaterialLabels::AIR_CELL ||
 						materialCellLabels(forwardCell) == MaterialLabels::AIR_CELL)
 					{
-						SolveReal theta = myGhostFluidWeights(face, axis);
-						theta = std::clamp(theta, SolveReal(.01), SolveReal(1));
+						double theta = myGhostFluidWeights(face, axis);
+						theta = std::clamp(theta, double(.01), double(1));
 
 						gradient /= theta;
 					}
@@ -327,8 +324,8 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 	//
 
 	{
-		SolveReal maxDivergence = 0;
-		SolveReal accumulatedDivergence = 0;
+		double maxDivergence = 0;
+		double accumulatedDivergence = 0;
 		int cellCount = 0;
 
 		Vec3d stats = tbb::parallel_reduce(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), Vec3d::Zero().eval(),
@@ -341,14 +338,14 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 				{
 					assert(liquidCellIndices(cell) >= 0);
 
-					SolveReal divergence = 0;
+					double divergence = 0;
 					for (int axis : {0, 1})
 						for (int direction : {0, 1})
 						{
 							Vec2i face = cellToFace(cell, axis, direction);
-							SolveReal sign = (direction == 0) ? -1 : 1;
+							double sign = (direction == 0) ? -1 : 1;
 
-							SolveReal weight = myCutCellWeights(face, axis);
+							double weight = myCutCellWeights(face, axis);
 
 							if (weight > 0)
 								divergence += sign * weight * velocity(face, axis);

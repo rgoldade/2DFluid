@@ -36,7 +36,7 @@ public:
 		: myNarrowBand(0)
 		, myPhiGrid(Transform(0, Vec2d::Zero()), Vec2i::Zero())
 		, myIsBackgroundNegative(false)
-	{ exactinit(); }
+	{ Predicates::exactinit(); }
 
 	LevelSet(const Transform& xform, const Vec2i& size) : LevelSet(xform, size, double(size[0] * size[1])) {}
 	LevelSet(const Transform& xform, const Vec2i& size, double bandwidth, bool isBoundaryNegative = false)
@@ -47,7 +47,7 @@ public:
 		assert(size[0] >= 0 && size[1] >= 0);
 		// In order to deal with triangle meshes, we need to initialize
 		// the geometric predicate library.
-		exactinit();
+		Predicates::exactinit();
 	}
 
 	void initFromMesh(const EdgeMesh& initialMesh, bool doResizeGrid = true);

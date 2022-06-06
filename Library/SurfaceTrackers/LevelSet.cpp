@@ -174,12 +174,12 @@ void LevelSet::initFromMeshImpl(const EdgeMesh& initialMesh, bool doResizeGrid)
 			for (int i = edgeFloorMax[0]; i >= edgeFloorMin[0]; --i)
 			{
 				Vec2d gridNode(i, j);
-				IntersectionLabels intersectionResult = exactEdgeIntersect(startPoint, endPoint, gridNode, Axis::XAXIS);
+				Predicates::IntersectionLabels intersectionResult = Predicates::exactEdgeIntersect(startPoint, endPoint, gridNode, Axis::XAXIS);
 
 				assert(gridNode[0] >= 0 && gridNode[1] >= 0 && gridNode[0] < myPhiGrid.size()[0] - 1 &&
 					gridNode[1] < myPhiGrid.size()[1] - 1);
 
-				if (intersectionResult == IntersectionLabels::NO) continue;
+				if (intersectionResult == Predicates::IntersectionLabels::NO) continue;
 
 				// Increment the parity since the grid_node is
 				// "left" of the mesh-edge crossing the grid-edge.
@@ -189,11 +189,11 @@ void LevelSet::initFromMeshImpl(const EdgeMesh& initialMesh, bool doResizeGrid)
 				if (startPoint[1] < endPoint[1])
 					parityChange = 1;
 
-				if (intersectionResult == IntersectionLabels::YES)
+				if (intersectionResult == Predicates::IntersectionLabels::YES)
 					meshCellParities(i + 1, j) += parityChange;
 				else
 				{
-					assert(intersectionResult == IntersectionLabels::ON);
+					assert(intersectionResult == Predicates::IntersectionLabels::ON);
 
 					if (parityChange == 1)
 						meshCellParities(i, j) += parityChange;

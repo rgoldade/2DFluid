@@ -4,9 +4,9 @@
 #include <limits>
 #include <vector>
 
-#include "Eigen/Dense"
-#include "Eigen/Geometry"
-#include "Eigen/Sparse"
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+#include <Eigen/Sparse>
 
 #include "tbb/enumerable_thread_specific.h"
 
@@ -121,6 +121,8 @@ using VectorXd = Eigen::VectorXd;
 template<typename T>
 using VectorXt = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
+using SparseMatrix = Eigen::SparseMatrix<double, Eigen::RowMajor>;
+
 template<typename T, int N>
 VecXt<T, N> clamp(const VecXt<T, N>& vIn, const VecXt<T, N>& vMin, const VecXt<T, N>& vMax)
 {
@@ -142,18 +144,6 @@ template<typename T, int N>
 VecXt<T, N> floor(const VecXt<T, N>& vIn)
 {
 	return vIn.array().floor().matrix();
-}
-
-template<typename T, int N>
-bool operator==(const VecXt<T, N>& v0, const VecXt<T, N>& v1)
-{
-	return (v0.array() == v1.array()).all();
-}
-
-template<typename T, int N>
-bool operator!=(const VecXt<T, N>& v0, const VecXt<T, N>& v1)
-{
-	return (v0.array() != v1.array()).all();
 }
 
 template<typename RealType>
