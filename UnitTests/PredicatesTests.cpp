@@ -7,7 +7,7 @@ using namespace FluidSim2D;
 
 TEST(PREDICATES_TEST, ORIENT_2D_ZERO_DET_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	for (int testIndex = 0; testIndex < testCases; ++testIndex)
@@ -17,16 +17,16 @@ TEST(PREDICATES_TEST, ORIENT_2D_ZERO_DET_TEST)
 
 		Vec2d testPoint = startPoint;
 		
-		EXPECT_EQ(orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
+		EXPECT_EQ(Predicates::orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
 
 		testPoint = endPoint;
-		EXPECT_EQ(orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
+		EXPECT_EQ(Predicates::orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
 	}
 }
 
 TEST(PREDICATES_TEST, ORIENT_2D_POSITIVE_DET_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	for (int testIndex = 0; testIndex < testCases; ++testIndex)
@@ -43,19 +43,19 @@ TEST(PREDICATES_TEST, ORIENT_2D_POSITIVE_DET_TEST)
 		double offsetScalar = 1e-12;
 		Vec2d testPoint = startPoint + offsetScalar * norm;
 
-		EXPECT_GT(orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
+		EXPECT_GT(Predicates::orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
 
 		testPoint = endPoint + offsetScalar * norm;
-		EXPECT_GT(orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
+		EXPECT_GT(Predicates::orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
 
 		testPoint = .5 * (startPoint + endPoint) + offsetScalar * norm;
-		EXPECT_GT(orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
+		EXPECT_GT(Predicates::orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
 	}
 }
 
 TEST(PREDICATES_TEST, ORIENT_2D_NEGATIVE_DET_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	for (int testIndex = 0; testIndex < testCases; ++testIndex)
@@ -72,19 +72,19 @@ TEST(PREDICATES_TEST, ORIENT_2D_NEGATIVE_DET_TEST)
 		double offsetScalar = -1e-12;
 		Vec2d testPoint = startPoint + offsetScalar * norm;
 
-		EXPECT_LT(orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
+		EXPECT_LT(Predicates::orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
 
 		testPoint = endPoint + offsetScalar * norm;
-		EXPECT_LT(orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
+		EXPECT_LT(Predicates::orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
 
 		testPoint = .5 * (startPoint + endPoint) + offsetScalar * norm;
-		EXPECT_LT(orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
+		EXPECT_LT(Predicates::orient2d(&startPoint[0], &endPoint[0], &testPoint[0]), 0.);
 	}
 }
 
 TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_CROSSING_EDGE_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	int offsetCases = 1000;
@@ -116,11 +116,11 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_CROSSING_EDGE_TEST)
 					endPoint[0] -= offset[0] + std::fabs(1e5 * double(std::rand()) / double(RAND_MAX));
 				}
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::YES);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::YES);
 	
 				std::swap(startPoint, endPoint);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::YES);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::YES);
 			}
 		}
 	}
@@ -128,7 +128,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_CROSSING_EDGE_TEST)
 
 TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_CROSSING_POINT_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	int offsetCases = 1000;
@@ -149,11 +149,11 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_CROSSING_POINT_TEST)
 				startPoint += Vec2d(-offset, -offset);
 				endPoint += Vec2d(offset, offset);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::ON);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::ON);
 
 				std::swap(startPoint, endPoint);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::ON);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::ON);
 			}
 
 			// Start up-left, end down-right
@@ -165,11 +165,11 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_CROSSING_POINT_TEST)
 				startPoint += Vec2d(-offset, offset);
 				endPoint += Vec2d(offset, -offset);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::ON);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::ON);
 
 				std::swap(startPoint, endPoint);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::ON);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::ON);
 			}
 
 			// Start up, end down
@@ -189,11 +189,11 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_CROSSING_POINT_TEST)
 					endPoint[0] -= offset;
 				}
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::ON);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::ON);
 
 				std::swap(startPoint, endPoint);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::ON);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::ON);
 			}
 		}
 	}
@@ -201,7 +201,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_CROSSING_POINT_TEST)
 
 TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_DEGENERATE_EDGE_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	int offsetCases = 1000;
@@ -221,7 +221,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_DEGENERATE_EDGE_TEST)
 
 				Vec2d endPoint = startPoint;
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::NO);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::NO);
 			}
 
 			for (int offsetIndex = 0; offsetIndex < offsetCases; ++offsetIndex)
@@ -240,7 +240,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_DEGENERATE_EDGE_TEST)
 					endPoint[1] += offset[1] + std::fabs(1e5 * double(std::rand()) / double(RAND_MAX));
 				}
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::NO);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::NO);
 			}
 		}
 	}
@@ -248,7 +248,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_DEGENERATE_EDGE_TEST)
 
 TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_DEGENERATE_POINT_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	int offsetCases = 1000;
@@ -263,7 +263,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_DEGENERATE_POINT_TEST)
 				Vec2d startPoint = rayStart;
 				Vec2d endPoint = startPoint;
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::NO);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::NO);
 			}
 
 			for (int offsetIndex = 0; offsetIndex < offsetCases; ++offsetIndex)
@@ -280,7 +280,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_DEGENERATE_POINT_TEST)
 					endPoint[1] += offset[1] + std::fabs(1e5 * double(std::rand()) / double(RAND_MAX));
 				}
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::NO);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::NO);
 			}
 		}
 	}
@@ -288,7 +288,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_DEGENERATE_POINT_TEST)
 
 TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_JITTER_EDGE_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	int offsetCases = 1000;
@@ -316,11 +316,11 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_JITTER_EDGE_TEST)
 				else
 					endPoint[0] += offset[0] + std::fabs(1e5 * double(std::rand()) / double(RAND_MAX));
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::YES);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::YES);
 
 				std::swap(startPoint, endPoint);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::YES);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::YES);
 			}
 
 			// Start point on grid edge, end point below
@@ -339,11 +339,11 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_JITTER_EDGE_TEST)
 				else
 					endPoint[0] -= offset[0] + std::fabs(1e5 * double(std::rand()) / double(RAND_MAX));
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::NO);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::NO);
 
 				std::swap(startPoint, endPoint);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::NO);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::NO);
 			}
 		}
 	}
@@ -351,7 +351,7 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_JITTER_EDGE_TEST)
 
 TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_JITTER_POINT_TEST)
 {
-	exactinit();
+	Predicates::exactinit();
 
 	int testCases = 1000;
 	int offsetCases = 1000;
@@ -373,11 +373,11 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_JITTER_POINT_TEST)
 				else
 					endPoint[0] += offset[0] + std::fabs(1e5 * double(std::rand()) / double(RAND_MAX));
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::ON);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::ON);
 
 				std::swap(startPoint, endPoint);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::ON);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::ON);
 			}
 
 			// Start point on grid edge, end point below
@@ -391,11 +391,11 @@ TEST(PREDICATES_TEST, EXACT_EDGE_INTERSECTION_JITTER_POINT_TEST)
 				else
 					endPoint[0] -= offset[0] + std::fabs(1e5 * double(std::rand()) / double(RAND_MAX));
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::NO);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::NO);
 
 				std::swap(startPoint, endPoint);
 
-				EXPECT_EQ(exactEdgeIntersect(startPoint, endPoint, rayStart, axis), IntersectionLabels::NO);
+				EXPECT_EQ(Predicates::exactEdgeIntersect(startPoint, endPoint, rayStart, axis), Predicates::IntersectionLabels::NO);
 			}
 		}
 	}

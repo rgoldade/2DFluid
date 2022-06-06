@@ -1,4 +1,5 @@
 add_library(SimTools
+				AdaptiveViscositySolver.cpp
 				ComputeWeights.cpp
 				GeometricMultigridOperators.cpp
 				GeometricMultigridPoissonSolver.cpp
