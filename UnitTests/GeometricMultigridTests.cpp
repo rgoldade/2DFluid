@@ -360,10 +360,10 @@ static void geometricVectorTest(const UniformGrid<CellLabels>& cellLabels)
             
             int cellIndex = cellLabels.flatten(cell);
 
-            EXPECT_EQ(vecC(cellIndex), gridC(cell));
+            EXPECT_DOUBLE_EQ(vecC(cellIndex), gridC(cell));
         });
     }
-  
+
     // Add to vector
     {
         double scale = 20;
@@ -374,7 +374,7 @@ static void geometricVectorTest(const UniformGrid<CellLabels>& cellLabels)
         forEachVoxelRange(Vec2i::Zero(), cellLabels.size(), [&](const Vec2i& cell) {
             int cellIndex = cellLabels.flatten(cell);
 
-            EXPECT_EQ(vecA(cellIndex), gridA(cell));
+            EXPECT_DOUBLE_EQ(vecA(cellIndex), gridA(cell));
         });
     }
 }

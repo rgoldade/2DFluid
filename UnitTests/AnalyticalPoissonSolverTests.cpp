@@ -77,7 +77,7 @@ double AnalyticalPoissonSolver::solve(const RHS& rhsFuction, const Solution& sol
                     if ((direction == 0 && adjacentCell[axis] < 0) || (direction == 1 && adjacentCell[axis] >= gridSize[axis]))
                     {
                         Vec2d adjacentPoint = myPoissonGrid.indexToWorld(adjacentCell.cast<double>());
-                        rhsVector(row) -= solutionFunction(adjacentPoint);
+                        rhsVector(row) += solutionFunction(adjacentPoint);
                     }
                     else
                     {

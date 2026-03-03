@@ -668,7 +668,7 @@ Vec2d LevelSet::interpolateInterface(const Vec2i& startPoint, const Vec2i& endPo
 	return startPoint.cast<double>() + theta * (endPoint - startPoint).cast<double>();
 }
 
-void LevelSet::unionSurface(const LevelSet& unionPhi)
+void LevelSet::unionSurface(const LevelSet& unionPhi, bool doReinit)
 {
 	assert(isGridMatched(unionPhi));
 
@@ -681,7 +681,7 @@ void LevelSet::unionSurface(const LevelSet& unionPhi)
         }
 	});
 
-	reinit();
+	if (doReinit) reinit();
 }
 
 }

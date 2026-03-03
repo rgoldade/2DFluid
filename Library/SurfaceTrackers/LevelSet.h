@@ -75,7 +75,7 @@ public:
 		return true;
 	}
 
-	void unionSurface(const LevelSet& unionPhi);
+	void unionSurface(const LevelSet& unionPhi, bool doReinit = true);
 
 	bool isBackgroundNegative() const { return myIsBackgroundNegative; }
 	void setBackgroundNegative() { myIsBackgroundNegative = true; }

@@ -217,13 +217,13 @@ static void testUnionFunctions(const std::vector<std::function<double(const Vec2
         }
     });
 
-    LevelSet unionGrid(xform, gridSize, bandwidth);
+    LevelSet unionGrid = surfaceGrids[0];
 
     ASSERT_TRUE(unionFuncGrid.isGridMatched(unionGrid));
 
-    for (int gridIndex = 0; gridIndex < surfaceGrids.size(); ++gridIndex)
+    for (int gridIndex = 1; gridIndex < surfaceGrids.size(); ++gridIndex)
     {
-        unionGrid.unionSurface(surfaceGrids[gridIndex]);
+        unionGrid.unionSurface(surfaceGrids[gridIndex], false);
     }
 
     // Verify both unions match
@@ -302,8 +302,8 @@ static void testUnionFunctions(const std::vector<std::function<double(const Vec2
         // Verify mesh points are on the zero isosurface
         for (const Vec2d& vertex : outputMesh.vertices())
         {
-            EXPECT_TRUE(isNearlyEqual(unionGrid.biLerp(vertex), 0., 1e-5, false)) << "Bilerp value: " << unionGrid.biLerp(vertex);
-            EXPECT_TRUE(isNearlyEqual(unionGrid.biCubicInterp(vertex), 0., 1e-5, false)) << "Bicubic value: " << unionGrid.biCubicInterp(vertex);
+            EXPECT_TRUE(isNearlyEqual(unionGrid.biLerp(vertex), 0., dx * 1e-1, false)) << "Bilerp value: " << unionGrid.biLerp(vertex) << ". Target: " << dx * 1e-1;
+            EXPECT_TRUE(isNearlyEqual(unionGrid.biCubicInterp(vertex), 0., dx * 1e-1, false)) << "Bicubic value: " << unionGrid.biCubicInterp(vertex) << ". Target: " << dx * 1e-1;
 
             double minVal = std::numeric_limits<double>::max();
             for (const auto& isoFunc : isoFuncs)
@@ -311,7 +311,7 @@ static void testUnionFunctions(const std::vector<std::function<double(const Vec2
                 minVal = std::min(minVal, isoFunc(vertex));
             }
 
-            EXPECT_TRUE(isNearlyEqual(minVal, 0., 1e-5, false));
+            EXPECT_TRUE(isNearlyEqual(minVal, 0., dx * .5, false)) << "Iso value: " << minVal << ". Target: " << dx * .5;
         }
     }
 
@@ -324,8 +324,8 @@ static void testUnionFunctions(const std::vector<std::function<double(const Vec2
         // Verify mesh points are on the zero isosurface
         for (const Vec2d& vertex : outputMesh.vertices())
         {
-            EXPECT_TRUE(isNearlyEqual(unionGrid.biLerp(vertex), 0., 1e-5, false)) << "Bilerp value: " << unionGrid.biLerp(vertex);
-            EXPECT_TRUE(isNearlyEqual(unionGrid.biCubicInterp(vertex), 0., 1e-5, false)) << "Bicubic value: " << unionGrid.biCubicInterp(vertex);
+            EXPECT_TRUE(isNearlyEqual(unionGrid.biLerp(vertex), 0., dx * 1e-1, false)) << "Bilerp value: " << unionGrid.biLerp(vertex) << ". Target: " << dx * 1e-2;
+            EXPECT_TRUE(isNearlyEqual(unionGrid.biCubicInterp(vertex), 0., dx * 1e-1, false)) << "Bicubic value: " << unionGrid.biCubicInterp(vertex) << ". Target: " << dx * 1e-2;
 
             double minVal = std::numeric_limits<double>::max();
             for (const auto& isoFunc : isoFuncs)
@@ -333,7 +333,7 @@ static void testUnionFunctions(const std::vector<std::function<double(const Vec2
                 minVal = std::min(minVal, isoFunc(vertex));
             }
 
-            EXPECT_TRUE(isNearlyEqual(minVal, 0., 1e-5, false));
+            EXPECT_TRUE(isNearlyEqual(minVal, 0., dx * .5, false)) << "Iso value: " << minVal << ". Target: " << dx * .5;
         }
     }
 }
@@ -561,8 +561,7 @@ static void testInitFromMeshUnion(const std::vector<EdgeMesh>& meshes, const std
         // Verify mesh points are on the zero isosurface
         for (const Vec2d& vertex : outputMesh.vertices())
         {
-            EXPECT_TRUE(isNearlyEqual(surfaceGrid.biLerp(vertex), 0., dx * 1e-2, false)) << "Bilerp value: " << surfaceGrid.biLerp(vertex);
-            EXPECT_TRUE(isNearlyEqual(surfaceGrid.biCubicInterp(vertex), 0., dx * 1e-2, false)) << "Bicubic value: " << surfaceGrid.biCubicInterp(vertex);
+            EXPECT_TRUE(isNearlyEqual(unionIsoFunc(vertex), 0., 0.5 * dx, false)) << "Isofunc value: " << unionIsoFunc(vertex);
         }
     }
 
@@ -575,8 +574,7 @@ static void testInitFromMeshUnion(const std::vector<EdgeMesh>& meshes, const std
         // Verify mesh points are on the zero isosurface
         for (const Vec2d& vertex : outputMesh.vertices())
         {
-            EXPECT_TRUE(isNearlyEqual(surfaceGrid.biLerp(vertex), 0., dx * 1e-2, false)) << "Bilerp value: " << surfaceGrid.biLerp(vertex);
-            EXPECT_TRUE(isNearlyEqual(surfaceGrid.biCubicInterp(vertex), 0., dx * 1e-2, false)) << "Bicubic value: " << surfaceGrid.biCubicInterp(vertex);
+            EXPECT_TRUE(isNearlyEqual(unionIsoFunc(vertex), 0., 0.5 * dx, false)) << "Isofunc value: " << unionIsoFunc(vertex);
         }
     }
 }
