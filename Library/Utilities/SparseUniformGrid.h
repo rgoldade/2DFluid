@@ -242,7 +242,7 @@ public:
 
 	T maxValue() const
 	{
-		return tbb::parallel_reduce(tbb::blocked_range<int>(0, tileCount()) std::numeric_limits<T>::lowest(), [&](const tbb::blocked_range<int>& range, T localMaxValue)
+		return tbb::parallel_reduce(tbb::blocked_range<int>(0, tileCount()), std::numeric_limits<T>::lowest(), [&](const tbb::blocked_range<int>& range, T localMaxValue)
 				{
 					for (int flatTileIndex = range.begin(); flatTileIndex != range.end(); ++flatTileIndex)
 					{
@@ -260,7 +260,7 @@ public:
 
 	T minValue() const
 	{
-		return tbb::parallel_reduce(tbb::blocked_range<int>(0, tileCount()) std::numeric_limits<T>::max(), [&](const tbb::blocked_range<int>& range, T localMinValue)
+		return tbb::parallel_reduce(tbb::blocked_range<int>(0, tileCount()), std::numeric_limits<T>::max(), [&](const tbb::blocked_range<int>& range, T localMinValue)
 			{
 				for (int flatTileIndex = range.begin(); flatTileIndex != range.end(); ++flatTileIndex)
 				{

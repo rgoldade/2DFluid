@@ -1,6 +1,8 @@
 #ifndef FLUIDSIM2D_INTEGRATOR_H
 #define FLUIDSIM2D_INTEGRATOR_H
 
+#include <cassert>
+
 #include "Utilities.h"
 
 ///////////////////////////////////

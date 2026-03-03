@@ -146,8 +146,8 @@ if(NOT TBB_FOUND)
     list(APPEND TBB_LIB_PATH_SUFFIX "lib/${TBB_ARCHITECTURE}/vc_mt")
 
   elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    # OS X
-    set(TBB_DEFAULT_SEARCH_DIR "/opt/intel/tbb")
+    # OS X — include Homebrew paths (Apple Silicon and Intel)
+    set(TBB_DEFAULT_SEARCH_DIR "/opt/intel/tbb" "/opt/homebrew" "/usr/local")
     
     # TODO: Check to see which C++ library is being used by the compiler.
     if(NOT ${CMAKE_SYSTEM_VERSION} VERSION_LESS 13.0)
@@ -184,7 +184,16 @@ if(NOT TBB_FOUND)
   ##################################
 
   if(TBB_INCLUDE_DIRS)
-    file(READ "${TBB_INCLUDE_DIRS}/tbb/tbb_stddef.h" _tbb_version_file)
+    # Classic TBB stored version in tbb_stddef.h; oneTBB uses oneapi/tbb/version.h
+    if(EXISTS "${TBB_INCLUDE_DIRS}/tbb/tbb_stddef.h")
+      file(READ "${TBB_INCLUDE_DIRS}/tbb/tbb_stddef.h" _tbb_version_file)
+    elseif(EXISTS "${TBB_INCLUDE_DIRS}/oneapi/tbb/version.h")
+      file(READ "${TBB_INCLUDE_DIRS}/oneapi/tbb/version.h" _tbb_version_file)
+    elseif(EXISTS "${TBB_INCLUDE_DIRS}/tbb/version.h")
+      file(READ "${TBB_INCLUDE_DIRS}/tbb/version.h" _tbb_version_file)
+    else()
+      set(_tbb_version_file "")
+    endif()
     string(REGEX REPLACE ".*#define TBB_VERSION_MAJOR ([0-9]+).*" "\\1"
         TBB_VERSION_MAJOR "${_tbb_version_file}")
     string(REGEX REPLACE ".*#define TBB_VERSION_MINOR ([0-9]+).*" "\\1"

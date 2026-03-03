@@ -1,5 +1,7 @@
 #include "Renderer.h"
 
+#include <cassert>
+
 #include "simple_svg_1.0.0.hpp"
 
 namespace FluidSim2D

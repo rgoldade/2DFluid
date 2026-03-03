@@ -30,7 +30,11 @@ if(NOT Eigen3_FIND_VERSION)
 endif(NOT Eigen3_FIND_VERSION)
 
 macro(_eigen3_check_version)
-  file(READ "${EIGEN3_INCLUDE_DIR}/Eigen/src/Core/util/Macros.h" _eigen3_version_header)
+  if(EXISTS "${EIGEN3_INCLUDE_DIR}/Eigen/Version")
+    file(READ "${EIGEN3_INCLUDE_DIR}/Eigen/Version" _eigen3_version_header)
+  else()
+    file(READ "${EIGEN3_INCLUDE_DIR}/Eigen/src/Core/util/Macros.h" _eigen3_version_header)
+  endif()
 
   string(REGEX MATCH "define[ \t]+EIGEN_WORLD_VERSION[ \t]+([0-9]+)" _eigen3_world_version_match "${_eigen3_version_header}")
   set(EIGEN3_WORLD_VERSION "${CMAKE_MATCH_1}")
@@ -58,6 +62,8 @@ if (EIGEN3_INCLUDE_DIR)
   # in cache already
   _eigen3_check_version()
   set(EIGEN3_FOUND ${EIGEN3_VERSION_OK})
+  include(FindPackageHandleStandardArgs)
+  find_package_handle_standard_args(Eigen3 DEFAULT_MSG EIGEN3_INCLUDE_DIR EIGEN3_VERSION_OK)
 
 else (EIGEN3_INCLUDE_DIR)
 
@@ -65,6 +71,8 @@ else (EIGEN3_INCLUDE_DIR)
       PATHS
       ${CMAKE_INSTALL_PREFIX}/include
       ${KDE4_INCLUDE_DIR}
+      /opt/homebrew/include
+      /usr/local/include
       PATH_SUFFIXES eigen3 eigen
     )
 
