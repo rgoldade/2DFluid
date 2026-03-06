@@ -5,7 +5,6 @@
 #include "FieldAdvector.h"
 #include "Integrator.h"
 #include "Predicates.h"
-#include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "Utilities.h"
@@ -144,12 +143,12 @@ public:
 	// the caller has verified an interface (sign change) between the two.
 	Vec2d interpolateInterface(const Vec2i& startPoint, const Vec2i& endPoint) const;
 
-	void drawGrid(Renderer& renderer, bool doOnlyNarrowBand) const;
-	void drawMeshGrid(Renderer& renderer) const;
-	void drawSupersampledValues(Renderer& renderer, double radius = .5, int samples = 1, double sampleSize = 1) const;
-	void drawNormals(Renderer& renderer, const Vec3d& colour = Vec3d(0, 0, 1), double length = .25) const;
-	void drawSurface(Renderer& renderer, const Vec3d& colour = Vec3d::Zero(), double lineWidth = 1) const;
-	void drawDCSurface(Renderer& renderer, const Vec3d& colour = Vec3d::Zero(), double lineWidth = 1) const;
+	void drawGrid(const std::string& label, bool doOnlyNarrowBand) const;
+	void drawMeshGrid(const std::string& label) const;
+	void drawSupersampledValues(const std::string& label, double radius = .5, int samples = 1, double sampleSize = 1) const;
+	void drawNormals(const std::string& label, const Vec3d& colour = Vec3d(0, 0, 1), double length = .25) const;
+	void drawSurface(const std::string& label, const Vec3d& colour = Vec3d::Zero(), double lineWidth = .001) const;
+	void drawDCSurface(const std::string& label, const Vec3d& colour = Vec3d::Zero(), double lineWidth = .001) const;
 
 private:
 

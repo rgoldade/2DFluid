@@ -3,7 +3,7 @@ add_executable(TestMGSmoother TestSmoother.cpp)
 target_link_libraries(TestMGSmoother
 						PRIVATE
 						GeometricMGUtilities
-						RenderTools
+						polyscope
 						SurfaceTrackers
 						SimTools
 						Utilities)

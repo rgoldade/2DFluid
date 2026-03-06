@@ -155,15 +155,15 @@ public:
 	Vec2i gridSize() const { return myGridSize; }
 	SampleType sampleType() const { return mySampleType; }
 
-	// Rendering methods
-	void drawGrid(Renderer& renderer) const;
-	void drawSamplePoints(Renderer& renderer,
-							const Vec3d& colour0 = Vec3d(1, 0, 0),
-							const Vec3d& colour1 = Vec3d(0, 0, 1),
-							const Vec2d& sampleSizes = Vec2d(1.)) const;
+	// Polyscope rendering methods
+	void drawGrid(const std::string& label) const;
+	void drawSamplePoints(const std::string& label,
+								const Vec3d& colour0 = Vec3d(1, 0, 0),
+								const Vec3d& colour1 = Vec3d(0, 0, 1),
+								const Vec2d& sampleSizes = Vec2d(1.)) const;
 
-	void drawSupersampledValues(Renderer& renderer, double sampleRadius = .5, int samples = 5, double sampleSize = 1.) const;
-	void drawSamplePointVectors(Renderer& renderer, const Vec3d& colour = Vec3d(0, 0, 1), double length = .25) const;
+	void drawSupersampledValues(const std::string& label, double sampleRadius = .5, int samples = 5, double sampleSize = 1.) const;
+	void drawSamplePointVectors(const std::string& label, const Vec3d& colour = Vec3d(0, 0, 1), double length = .25) const;
 
 private:
 
@@ -246,45 +246,46 @@ T VectorGrid<T>::maxMagnitude() const
 }
 
 template<typename T>
-void VectorGrid<T>::drawGrid(Renderer& renderer) const
+void VectorGrid<T>::drawGrid(const std::string& label) const
 {
-	myGrids[0].drawGrid(renderer);
+	myGrids[0].drawGrid(label);
 }
 
 template<typename T>
-void VectorGrid<T>::drawSamplePoints(Renderer& renderer,
-										const Vec3d& colour0,
-										const Vec3d& colour1,
-										const Vec2d& sampleSizes) const
+void VectorGrid<T>::drawSamplePoints(const std::string& label,
+											const Vec3d& colour0,
+											const Vec3d& colour1,
+											const Vec2d& sampleSizes) const
 {
-	myGrids[0].drawSamplePoints(renderer, colour0, sampleSizes[0]);
-	myGrids[1].drawSamplePoints(renderer, colour1, sampleSizes[1]);
+	myGrids[0].drawSamplePoints(label + " x", colour0, sampleSizes[0]);
+	myGrids[1].drawSamplePoints(label + " y", colour1, sampleSizes[1]);
 }
 
 template<typename T>
-void VectorGrid<T>::drawSupersampledValues(Renderer& renderer, double sampleRadius, int samples, double sampleSize) const
+void VectorGrid<T>::drawSupersampledValues(const std::string& label, double sampleRadius, int samples, double sampleSize) const
 {
-	myGrids[0].drawSupersampledValues(renderer, sampleRadius, samples, sampleSize);
-	myGrids[1].drawSupersampledValues(renderer, sampleRadius, samples, sampleSize);
+	myGrids[0].drawSupersampledValues(label + " x", sampleRadius, samples, sampleSize);
+	myGrids[1].drawSupersampledValues(label + " y", sampleRadius, samples, sampleSize);
 }
 
 template<typename T>
-void VectorGrid<T>::drawSamplePointVectors(Renderer& renderer, const Vec3d& colour, double length) const
+void VectorGrid<T>::drawSamplePointVectors(const std::string& label, const Vec3d& colour, double length) const
 {
-	VecVec2d startPoints;
-	VecVec2d endPoints;
-	
+	VecVec2d nodes;
+
 	forEachVoxelRange(Vec2i::Zero(), myGridSize, [&](const Vec2i& cell)
 	{
-		Vec2d worldPoint = indexToWorld(cell.cast<double>() + Vec2d(.5f, .5f));
-		startPoints.push_back(worldPoint);
-
+		Vec2d worldPoint = indexToWorld(cell.cast<double>() + Vec2d(.5, .5));
 		Vec2t<T> sampleVector = biLerp(worldPoint);
 		Vec2d vectorEnd = worldPoint + length * sampleVector;
-		endPoints.push_back(vectorEnd);
+
+		nodes.push_back(worldPoint);
+		nodes.push_back(vectorEnd);
 	});
 
-	renderer.addLines(startPoints, endPoints, colour);
+	auto* cn = polyscope::registerCurveNetworkSegments2D(label + " vectors", nodes);
+	cn->setColor(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
+	cn->setRadius(.0001);
 }
 
 }

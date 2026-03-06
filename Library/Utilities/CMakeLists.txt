@@ -5,5 +5,5 @@ target_include_directories(Utilities INTERFACE
 							  $<INSTALL_INTERFACE:include>)
 
 target_link_libraries(Utilities
-						INTERFACE
-						RenderTools)
+					INTERFACE
+					polyscope)

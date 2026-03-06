@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "Integrator.h"
-#include "Renderer.h"
 #include "Utilities.h"
 
 ///////////////////////////////////
@@ -108,7 +107,7 @@ public:
 		return myVertices[edge[0]] == myVertices[edge[1]];
 	}
 
-	void drawMesh(Renderer& renderer,
+	void drawMesh(const std::string& label,
 					Vec3d edgeColour = Vec3d::Zero(),
 					double edgeWidth = 1,
 					bool doRenderEdgeNormals = false,

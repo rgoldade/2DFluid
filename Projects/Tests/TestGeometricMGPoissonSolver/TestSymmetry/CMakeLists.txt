@@ -3,7 +3,7 @@ add_executable(TestSymmetry TestSymmetry.cpp)
 target_link_libraries(TestSymmetry
 						PRIVATE
 						GeometricMGUtilities
-						RenderTools
+						polyscope
 						SurfaceTrackers
 						SimTools
 						Utilities)

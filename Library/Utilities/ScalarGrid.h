@@ -4,10 +4,13 @@
 #include <array>
 
 #include "GridUtilities.h"
-#include "Renderer.h"
 #include "Transform.h"
 #include "UniformGrid.h"
 #include "Utilities.h"
+
+#include "polyscope/curve_network.h"
+#include "polyscope/point_cloud.h"
+#include "polyscope/surface_mesh.h"
 
 ///////////////////////////////////
 //
@@ -147,15 +150,15 @@ public:
 
 	SampleType sampleType() const { return mySampleType; }
 
-	// Render methods
-	void drawGrid(Renderer& renderer) const;
-	void drawGridCell(Renderer& renderer, const Vec2i& cell, const Vec3d& colour = Vec3d::Zero()) const;
+	// Polyscope render methods
+	void drawGrid(const std::string& label) const;
+	void drawGridCell(const std::string& label, const Vec2i& cell) const;
 
-	void drawSamplePoints(Renderer& renderer, const Vec3d& colour = Vec3d(1, 0, 0), double sampleSize = 1.) const;
-	void drawSupersampledValues(Renderer& renderer, double sampleRadius = .5, int samples = 5, double sampleSize = 1.) const;
+	void drawSamplePoints(const std::string& label, const Vec3d& colour = Vec3d(1, 0, 0), double sampleSize = 1.) const;
+	void drawSupersampledValues(const std::string& label, double sampleRadius = .5, int samples = 5, double sampleSize = 1.) const;
 
-	void drawSampleGradients(Renderer& renderer, const Vec3d& colour = Vec3d(.5, .5, .5), double length = .25) const;
-	void drawVolumetric(Renderer& renderer, const Vec3d& minColour, const Vec3d& maxColour, T minVal, T maxVal) const;
+	void drawSampleGradients(const std::string& label, const Vec3d& colour = Vec3d(.5, .5, .5), double length = .25) const;
+	void drawVolumetric(const std::string& label, const Vec3d& minColour, const Vec3d& maxColour, T minVal, T maxVal) const;
 
 	void printAsCSV(std::string filename) const;
 	void printAsOBJ(std::string filename) const;
@@ -418,83 +421,85 @@ Vec2t<T> ScalarGrid<T>::biCubicGradient(const Vec2d& samplePoint, bool isIndexSp
 }
 
 template<typename T>
-void ScalarGrid<T>::drawGrid(Renderer& renderer) const
+void ScalarGrid<T>::drawGrid(const std::string& label) const
 {
-	VecVec2d startPoints;
-	VecVec2d endPoints;
+	VecVec2d nodes;
 
 	for (int axis : {0, 1})
 	{
-		Vec2i start(0);
+		Vec2i start = Vec2i::Zero();
 		Vec2i end = myGridSize + Vec2i::Ones();
 		end[axis] = 1;
 
 		forEachVoxelRange(start, end, [&](const Vec2i& cell)
 		{
 			Vec2d gridStart = cell.cast<double>();
-
 			Vec2d startPoint = indexToWorld(gridStart - myCellOffset);
-			startPoints.push_back(startPoint);
 
 			Vec2d gridEnd = cell.cast<double>();
 			gridEnd[axis] = double(myGridSize[axis]);
-
 			Vec2d endPoint = indexToWorld(gridEnd - myCellOffset);
-			endPoints.push_back(endPoint);
+
+			nodes.push_back(startPoint);
+			nodes.push_back(endPoint);
 		});
 	}
 
-	renderer.addLines(startPoints, endPoints, Vec3d(0));
+	polyscope::registerCurveNetworkSegments2D(label + " grid", nodes);
+	polyscope::getCurveNetwork(label + " grid")->setColor(glm::vec3(0.f, 0.f, 0.f));
+	polyscope::getCurveNetwork(label + " grid")->setRadius(.0005);
 }
 
 template<typename T>
-void ScalarGrid<T>::drawGridCell(Renderer& renderer, const Vec2i& cell, const Vec3d& colour) const
+void ScalarGrid<T>::drawGridCell(const std::string& label, const Vec2i& cell) const
 {
-	VecVec2d startPoints;
-	VecVec2d endPoints;
+	const Vec2d edgeToNodeOffset[4][2] = { {Vec2d::Zero(), Vec2d(1., 0.)},
+										   {Vec2d(0., 1.), Vec2d::Ones()},
+										   {Vec2d::Zero(), Vec2d(0., 1.)},
+										   {Vec2d(1., 0.), Vec2d::Ones()} };
 
-	const Vec2d edgeToNodeOffset[4][2] = { {Vec2d::Zero(), Vec2d(1.f, 0.f) },
-											{ Vec2d(0.f, 1.f), Vec2d::Ones() },
-											{ Vec2d::Zero(), Vec2d(0.f, 1.f) },
-											{ Vec2d(1.f, 0.f), Vec2d::Ones()} };
+	VecVec2d nodes;
 
 	for (int edgeIndex = 0; edgeIndex < 4; ++edgeIndex)
 	{
 		Vec2d startNode = indexToWorld(cell.cast<double>() - myCellOffset + edgeToNodeOffset[edgeIndex][0]);
 		Vec2d endNode = indexToWorld(cell.cast<double>() - myCellOffset + edgeToNodeOffset[edgeIndex][1]);
 
-		startPoints.push_back(startNode);
-		endPoints.push_back(endNode);
+		nodes.push_back(startNode);
+		nodes.push_back(endNode);
 	}
 
-	renderer.addLines(startPoints, endPoints, colour);
+	polyscope::registerCurveNetworkSegments2D(label + " grid", nodes);
 }
 
 template<typename T>
-void ScalarGrid<T>::drawSamplePoints(Renderer& renderer, const Vec3d& colour, double sampleSize) const
+void ScalarGrid<T>::drawSamplePoints(const std::string& label, const Vec3d& colour, double sampleSize) const
 {
-	VecVec2d samplePoints;
-	samplePoints.reserve(this->voxelCount());
+	VecVec2d pts;
+	pts.reserve(this->voxelCount());
 
 	forEachVoxelRange(Vec2i::Zero(), this->size(), [&](const Vec2i& cell)
 	{
-		Vec2d worldPoint = indexToWorld(cell.cast<double>());
-		samplePoints.push_back(worldPoint);
+		pts.push_back(indexToWorld(cell.cast<double>()));
 	});
 
-	renderer.addPoints(samplePoints, colour, sampleSize);
+	auto* pc = polyscope::registerPointCloud2D(label + " sample points", pts);
+	pc->setPointColor(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
+	pc->setPointRadius(sampleSize);
 }
 
 template<typename T>
-void ScalarGrid<T>::drawSupersampledValues(Renderer& renderer, double sampleRadius, int samples, double sampleSize) const
+void ScalarGrid<T>::drawSupersampledValues(const std::string& label, double sampleRadius, int samples, double sampleSize) const
 {
 	std::pair<T, T> minMaxPair = minAndMaxValue();
 	T minSample = minMaxPair.first;
 	T maxSample = minMaxPair.second;
 
+	VecVec2d pts;
+	std::vector<glm::vec3> colors;
+
 	forEachVoxelRange(Vec2i::Zero(), this->mySize, [&](const Vec2i& cell)
 	{
-		// Supersample
 		double dx = 2. * sampleRadius / double(samples);
 		Vec2d indexPoint = cell.cast<double>();
 		Vec2d sampleOffset;
@@ -506,77 +511,78 @@ void ScalarGrid<T>::drawSupersampledValues(Renderer& renderer, double sampleRadi
 
 				T value = (biLerp(worldPoint) - minSample) / (maxSample - minSample);
 
-				renderer.addPoint(worldPoint, Vec3d(value, value, 0), sampleSize);
+				pts.push_back(worldPoint);
+				colors.push_back(glm::vec3((float)value, (float)value, 0.f));
 			}
 	});
+
+	auto* pc = polyscope::registerPointCloud2D(label + " supersampled values", pts);
+	pc->setPointRadius(sampleSize);
+	pc->addColorQuantity("values", colors)->setEnabled(true);
 }
 
 template<typename T>
-void ScalarGrid<T>::drawSampleGradients(Renderer& renderer, const Vec3d& colour, double length) const
+void ScalarGrid<T>::drawSampleGradients(const std::string& label, const Vec3d& colour, double length) const
 {
-	VecVec2d samplePoints;
-	VecVec2d gradientPoints;
+	VecVec2d nodes;
 
 	forEachVoxelRange(Vec2i::Zero(), this->mySize, [&](const Vec2i& cell)
 	{
 		Vec2d worldPoint = indexToWorld(cell.cast<double>());
-		samplePoints.push_back(worldPoint);
-
 		Vec2t<T> gradVector = biLerpGradient(worldPoint);
 		Vec2d vectorEnd = worldPoint + length * gradVector;
-		gradientPoints.push_back(vectorEnd);
+
+		nodes.push_back(worldPoint);
+		nodes.push_back(vectorEnd);
 	});
 
-	renderer.addLines(samplePoints, gradientPoints, colour);
+	polyscope::registerCurveNetworkSegments2D(label + " gradients", nodes);
+	polyscope::getCurveNetwork(label + " gradients")->setColor(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
+	polyscope::getCurveNetwork(label + " gradients")->setRadius(.0005);
 }
 
 template<typename T>
-void ScalarGrid<T>::drawVolumetric(Renderer& renderer, const Vec3d& minColour, const Vec3d& maxColour, T minVal, T maxVal) const
+void ScalarGrid<T>::drawVolumetric(const std::string& label, const Vec3d& minColour, const Vec3d& maxColour, T minVal, T maxVal) const
 {
-	ScalarGrid<double> nodes(xform(), this->mySize, SampleType::NODE);
+	ScalarGrid<double> nodeGrid(xform(), this->mySize, SampleType::NODE);
 
-	VecVec2d quadVertices(nodes.size()[0] * nodes.size()[1]);
-	VecVec4i pixelQuads(this->mySize[0] * this->mySize[1]);
-	VecVec3d colours(this->mySize[0] * this->mySize[1]);
+	VecVec2d verts(nodeGrid.size()[0] * nodeGrid.size()[1]);
+	VecVec4i quads(this->mySize[0] * this->mySize[1]);
+	std::vector<glm::vec3> faceColors(this->mySize[0] * this->mySize[1]);
 
-	// Set node points
-	forEachVoxelRange(Vec2i::Zero(), nodes.size(), [&](const Vec2i& node)
+	forEachVoxelRange(Vec2i::Zero(), nodeGrid.size(), [&](const Vec2i& node)
 	{
-		int index = nodes.flatten(node);
-		quadVertices[index] = nodes.indexToWorld(node.cast<double>());
+		verts[nodeGrid.flatten(node)] = nodeGrid.indexToWorld(node.cast<double>());
 	});
 
+	int quadCount = 0;
+	forEachVoxelRange(Vec2i::Zero(), this->mySize, [&](const Vec2i& cell)
 	{
-		int quadCount = 0;
-
-		forEachVoxelRange(Vec2i::Zero(), this->mySize, [&](const Vec2i& cell)
+		Vec4i quad;
+		for (int nodeIndex = 0; nodeIndex < 4; ++nodeIndex)
 		{
-			Vec4i quad;
+			Vec2i node = cellToNodeCCW(cell, nodeIndex);
+			quad[nodeIndex] = nodeGrid.flatten(node);
+		}
 
-			for (int nodeIndex = 0; nodeIndex < 4; ++nodeIndex)
-			{
-				Vec2i node = cellToNodeCCW(cell, nodeIndex);
-				quad[nodeIndex] = nodes.flatten(node);
-			}
+		T pixelValue = (*this)(cell);
 
-			T pixelValue = (*this)(cell);
+		Vec3d colour;
+		if (pixelValue > maxVal) colour = maxColour;
+		else if (pixelValue < minVal) colour = minColour;
+		else
+		{
+			double s = pixelValue / (maxVal - minVal);
+			colour = minColour * (1. - s) + maxColour * s;
+		}
 
-			pixelQuads[quadCount] = quad;
+		quads[quadCount] = quad;
+		faceColors[quadCount] = glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]);
+		++quadCount;
+	});
 
-			Vec3d colour;
-			if (pixelValue > maxVal) colour = maxColour;
-			else if (pixelValue < minVal) colour = minColour;
-			else
-			{
-				double s = pixelValue / (maxVal - minVal);
-				colour = minColour * (1. - s) + maxColour * s;
-			}
-
-			colours[quadCount++] = colour;
-		});
-	}
-
-	renderer.addQuadFaces(quadVertices, pixelQuads, colours);
+	auto* mesh = polyscope::registerSurfaceMesh2D(label + " volumetric", verts, quads);
+	mesh->addFaceColorQuantity("colours", faceColors)->setEnabled(true);
 }
 
 template<typename T>

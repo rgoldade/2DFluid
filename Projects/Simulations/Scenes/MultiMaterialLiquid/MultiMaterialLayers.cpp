@@ -5,14 +5,15 @@
 #include "InitialGeometry.h"
 #include "LevelSet.h"
 #include "MultiMaterialLiquidSimulator.h"
-#include "Renderer.h"
 #include "Transform.h"
 #include "Utilities.h"
 
+#include "imgui.h"
+#include "polyscope/polyscope.h"
+
 using namespace FluidSim2D;
 
-std::unique_ptr<MultiMaterialLiquidSimulator> multiMaterialSimulator;
-std::unique_ptr<Renderer> renderer;
+static std::unique_ptr<MultiMaterialLiquidSimulator> multiMaterialSimulator;
 
 static int frameCount = 0;
 static bool runSimulation = false;
@@ -20,10 +21,7 @@ static bool runSingleTimestep = false;
 static bool isDisplayDirty = true;
 
 static constexpr double dt = 1. / 60.;
-
 static constexpr double cfl = 5;
-
-static bool printFrame = false;
 
 static int liquidMaterialCount;
 static int currentMaterial = 0;
@@ -35,95 +33,8 @@ static const double lowDensity = 1;
 static const double mediumDensity = 1000;
 static const double highDensity = 10000;
 
-void display()
+int main()
 {
-    if (runSimulation || runSingleTimestep)
-    {
-		double frameTime = 0.;
-		std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
-
-		while (frameTime < dt)
-		{
-			// Set CFL condition
-			double speed = multiMaterialSimulator->maxVelocityMagnitude();
-			double localDt = dt - frameTime;
-			assert(localDt >= 0);
-
-			if (speed > 1E-6)
-			{
-				double cflDt = cfl * xform.dx() / speed;
-				if (localDt > cflDt)
-				{
-					localDt = cflDt;
-					std::cout << "\n  Throttling frame with substep: " << localDt << "\n" << std::endl;
-				}
-			}
-
-			if (localDt <= 0)
-				break;
-
-			for (int material = 0; material < liquidMaterialCount; ++material)
-				multiMaterialSimulator->addForce(localDt, material, Vec2d(0., -9.8));
-
-			multiMaterialSimulator->runTimestep(localDt);
-
-			// Store accumulated substep times
-			frameTime += localDt;
-		}
-		std::cout << "\n\nEnd of frame: " << frameCount << "\n" << std::endl;
-		++frameCount;
-
-		runSingleTimestep = false;
-		isDisplayDirty = true;
-    }
-    if (isDisplayDirty)
-    {
-		renderer->clear();
-		for (int material = 0; material < liquidMaterialCount; ++material)
-			multiMaterialSimulator->drawMaterialSurface(*renderer, material);
-
-		multiMaterialSimulator->drawSolidSurface(*renderer);
-
-		for (int material = 0; material < liquidMaterialCount; ++material)
-		{
-			if (currentMaterial == material)
-				multiMaterialSimulator->drawMaterialVelocity(*renderer, .25, material);
-		}
-		
-		if (printFrame)
-		{
-			std::string frameCountString = std::to_string(frameCount);
-			std::string renderFilename = "multimaterial_" + std::string(4 - frameCountString.length(), '0') + frameCountString;
-			renderer->printImage(renderFilename);
-		}
-
-		isDisplayDirty = false;
-
-		glutPostRedisplay();
-    }
-}
-
-void keyboard(unsigned char key, int, int)
-{
-	if (key == ' ')
-		runSimulation = !runSimulation;
-	else if (key == 'n')
-		runSingleTimestep = true;
-	else if (key == 'm')
-	{
-		currentMaterial = (currentMaterial + 1) % liquidMaterialCount;
-		isDisplayDirty = true;
-	}
-	else if (key == 'p')
-	{
-		printFrame = !printFrame;
-		isDisplayDirty = true;
-	}
-}
-
-int main(int argc, char** argv)
-{
-	// Scene settings
 	double dx = .015;
 	double boundaryPadding = 10;
 
@@ -137,13 +48,8 @@ int main(int argc, char** argv)
 	gridSize = (simulationSize.array() / dx).matrix().cast<int>();
 
 	xform = Transform(dx, bottomLeftCorner);
-	Vec2d center = .5f * (topRightCorner + bottomLeftCorner);
+	Vec2d center = .5 * (topRightCorner + bottomLeftCorner);
 
-	unsigned pixelHeight = 1080;
-	unsigned pixelWidth = pixelHeight * int((topRightCorner[0] - bottomLeftCorner[0]) / (topRightCorner[1] - bottomLeftCorner[1]));
-	renderer = std::make_unique<Renderer>("Multimaterial Liquid Simulator", Vec2i(pixelWidth, pixelHeight), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
-
-	// Build outer boundary grid.
 	EdgeMesh solidMesh = makeSquareMesh(center, .5 * simulationSize - Vec2d(boundaryPadding * xform.dx(), boundaryPadding * xform.dx()));
 	solidMesh.reverse();
 	assert(solidMesh.unitTestMesh());
@@ -153,10 +59,7 @@ int main(int argc, char** argv)
 	solidSurface.initFromMesh(solidMesh, false);
 
 	multiMaterialSimulator = std::make_unique<MultiMaterialLiquidSimulator>(xform, gridSize, 3, 5.);
-
 	multiMaterialSimulator->setSolidSurface(solidSurface);
-
-	// Build three material surfaces
 
 	EdgeMesh lowDensityMesh = makeSquareMesh(Vec2d(center[0], bottomLeftCorner[1] + dx * boundaryPadding + 1. / 6. * (topRightCorner[1] - bottomLeftCorner[1] - 2 * dx * boundaryPadding)), .5 * Vec2d(simulationSize[0] - 2. * boundaryPadding * xform.dx(), .33 * (simulationSize[1] - 2. * boundaryPadding * xform.dx())));
 
@@ -184,11 +87,74 @@ int main(int argc, char** argv)
 
 	liquidMaterialCount = 3;
 
-	std::function<void()> displayFunc = display;
-	renderer->setUserDisplay(displayFunc);
+	polyscope::view::style = polyscope::NavigateStyle::Planar;
+	polyscope::init();
 
-	std::function<void(unsigned char, int, int)> keyboardFunc = keyboard;
-	renderer->setUserKeyboard(keyboardFunc);
+	for (int material = 0; material < liquidMaterialCount; ++material)
+		multiMaterialSimulator->drawMaterialSurface("simulator", material);
+	multiMaterialSimulator->drawSolidSurface("simulator");
 
-	renderer->run();
+	polyscope::state::userCallback = [&]()
+	{
+		if (ImGui::Button("Run/Pause")) runSimulation = !runSimulation;
+		ImGui::SameLine();
+		if (ImGui::Button("Step")) runSingleTimestep = true;
+		ImGui::SameLine();
+		if (ImGui::Button("Next material"))
+		{
+			currentMaterial = (currentMaterial + 1) % liquidMaterialCount;
+			isDisplayDirty = true;
+		}
+		ImGui::Text("Velocity material: %d", currentMaterial);
+
+		if (runSimulation || runSingleTimestep)
+		{
+			double frameTime = 0.;
+			std::cout << "\nStart of frame: " << frameCount << ". Timestep: " << dt << std::endl;
+
+			while (frameTime < dt)
+			{
+				double speed = multiMaterialSimulator->maxVelocityMagnitude();
+				double localDt = dt - frameTime;
+				assert(localDt >= 0);
+
+				if (speed > 1E-6)
+				{
+					double cflDt = cfl * xform.dx() / speed;
+					if (localDt > cflDt)
+					{
+						localDt = cflDt;
+						std::cout << "\n  Throttling frame with substep: " << localDt << "\n" << std::endl;
+					}
+				}
+
+				if (localDt <= 0) break;
+
+				for (int material = 0; material < liquidMaterialCount; ++material)
+					multiMaterialSimulator->addForce(localDt, material, Vec2d(0., -9.8));
+
+				multiMaterialSimulator->runTimestep(localDt);
+				frameTime += localDt;
+			}
+
+			std::cout << "\n\nEnd of frame: " << frameCount << "\n" << std::endl;
+			++frameCount;
+
+			runSingleTimestep = false;
+			isDisplayDirty = true;
+		}
+
+		if (isDisplayDirty)
+		{
+			for (int material = 0; material < liquidMaterialCount; ++material)
+				multiMaterialSimulator->drawMaterialSurface("simulator", material);
+
+			multiMaterialSimulator->drawSolidSurface("simulator");
+			multiMaterialSimulator->drawMaterialVelocity("simulator", .25, currentMaterial);
+
+			isDisplayDirty = false;
+		}
+	};
+
+	polyscope::show();
 }

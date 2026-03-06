@@ -1,12 +1,12 @@
 add_executable(LevelSetLiquid LevelSetLiquid.cpp)
 
 target_link_libraries(LevelSetLiquid 
-						PRIVATE
-						RegularGridSimLibrary
-						RenderTools
-						SimTools
-						SurfaceTrackers
-						Utilities)
+					PRIVATE
+					RegularGridSimLibrary
+					polyscope
+					SimTools
+					SurfaceTrackers
+					Utilities)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 

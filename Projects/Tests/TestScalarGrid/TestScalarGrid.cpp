@@ -1,44 +1,29 @@
-#include <memory>
-
 #include "LevelSet.h"
-#include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "Utilities.h"
 #include "VectorGrid.h"
 
+#include "imgui.h"
+#include "polyscope/polyscope.h"
+
 using namespace FluidSim2D;
 
-static std::unique_ptr<Renderer> gRenderer;
+static const char* gTestNames[] = { "Scalar Grid", "Vector Grid", "Level Set" };
+static int gCurrentTest = 0;
 
-static bool gDoScalarTest = false;
-static bool gDoVectorTest = false;
-static bool gDoLevelSetTest = true;
-
-int main(int argc, char** argv)
+static void registerTest(int testIndex,
+						  const Transform& xform,
+						  const Vec2i& size,
+						  const Vec2d& center,
+						  const Vec2d& topRightCorner,
+						  double dx)
 {
-	double dx = .5;
-	Vec2d topRightCorner(20, 20);
-	Vec2d bottomLeftCorner(-20, -20);
-	Vec2i size = ((topRightCorner - bottomLeftCorner) / dx).cast<int>();
-	Transform xform(dx, bottomLeftCorner);
-	Vec2d center = .5f * (topRightCorner + bottomLeftCorner);
+	polyscope::removeAllStructures();
 
-	gRenderer = std::make_unique<Renderer>("Scalar Grid Test", Vec2i(1000, 1000), bottomLeftCorner, topRightCorner[1] - bottomLeftCorner[1], &argc, argv);
-
-	// Test scalar grid
-	if (gDoScalarTest)
+	if (testIndex == 0)
 	{
 		ScalarGrid<double> testGrid(xform, size, ScalarGridSettings::SampleType::CENTER, ScalarGridSettings::BorderType::CLAMP);
-
-		// Make sure flatten and unflatten are working
-		forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
-		{
-			int flatIndex = testGrid.flatten(cell);
-			Vec2i testCell = testGrid.unflatten(flatIndex);
-
-			assert(cell == testCell);
-		});
 
 		forEachVoxelRange(Vec2i::Zero(), testGrid.size(), [&](const Vec2i& cell)
 		{
@@ -46,12 +31,11 @@ int main(int argc, char** argv)
 			testGrid(cell) = (worldPosition - center).norm();
 		});
 
-		testGrid.drawGrid(*gRenderer);
-		testGrid.drawSamplePoints(*gRenderer, Vec3d(1, 0, 0), 5);
-		testGrid.drawSupersampledValues(*gRenderer, .5, 3, 5);
+		testGrid.drawGrid("testGrid");
+		testGrid.drawSamplePoints("testGrid", Vec3d(1, 0, 0), .001);
+		testGrid.drawSupersampledValues("testGrid", .5, 3, .001);
 	}
-	// Test vector grid. TODO: move to vector grid test.. this is a scalar grid test after all.
-	else if (gDoVectorTest)
+	else if (testIndex == 1)
 	{
 		VectorGrid<double> testVectorGrid(xform, size, VectorGridSettings::SampleType::STAGGERED, ScalarGridSettings::BorderType::CLAMP);
 
@@ -59,20 +43,20 @@ int main(int argc, char** argv)
 		{
 			forEachVoxelRange(Vec2i::Zero(), testVectorGrid.size(axis), [&](const Vec2i& cell)
 			{
-				Vec2d offset(0); offset[axis] += .5;
+				Vec2d offset = Vec2d::Zero(); offset[axis] += .5;
 				Vec2d worldPosition0 = testVectorGrid.indexToWorld(cell.cast<double>() - offset, axis);
 				Vec2d worldPosition1 = testVectorGrid.indexToWorld(cell.cast<double>() + offset, axis);
 
-				double gradient  = ((worldPosition1 - center).norm() - (worldPosition0 - center).norm()) / dx;
+				double gradient = ((worldPosition1 - center).norm() - (worldPosition0 - center).norm()) / dx;
 				testVectorGrid(cell, axis) = gradient;
 			});
 		}
 
-		testVectorGrid.drawGrid(*gRenderer);
-		testVectorGrid.drawSamplePoints(*gRenderer, Vec3d(1, 0, 0), Vec3d(0, 1, 0), Vec2d(5, 5));
-		testVectorGrid.drawSamplePointVectors(*gRenderer, Vec3d::Zero(), .5);
+		testVectorGrid.drawGrid("testVectorGrid");
+		testVectorGrid.drawSamplePoints("testVectorGrid", Vec3d(1, 0, 0), Vec3d(0, 1, 0), Vec2d(.001, .001));
+		testVectorGrid.drawSamplePointVectors("testVectorGrid", Vec3d::Zero(), 1.0);
 	}
-	else if (gDoLevelSetTest)
+	else if (testIndex == 2)
 	{
 		LevelSet testLevelSet(xform, size, 5);
 
@@ -82,14 +66,38 @@ int main(int argc, char** argv)
 			Vec2d worldPosition = testLevelSet.indexToWorld(cell.cast<double>());
 			testLevelSet(cell) = (worldPosition - center).norm() - radius;
 		});
-		
+
 		testLevelSet.reinit(true);
-		testLevelSet.drawGrid(*gRenderer, true);
-		testLevelSet.drawSupersampledValues(*gRenderer, .25, 3, 5);
-		testLevelSet.drawNormals(*gRenderer, Vec3d::Zero(), .5);
-
-		testLevelSet.drawSurface(*gRenderer, Vec3d(1, 0, 0));
+		testLevelSet.drawGrid("testLevelSet", true);
+		testLevelSet.drawSupersampledValues("testLevelSet", .5, 3, .001);
+		testLevelSet.drawNormals("testLevelSet", Vec3d::Zero(), 1.);
+		testLevelSet.drawSurface("testLevelSet", Vec3d(1, 0, 0), .001);
 	}
+}
 
-	gRenderer->run();
+int main()
+{
+	double dx = .5;
+	Vec2d topRightCorner(20, 20);
+	Vec2d bottomLeftCorner(-20, -20);
+	Vec2i size = ((topRightCorner - bottomLeftCorner) / dx).cast<int>();
+	Transform xform(dx, bottomLeftCorner);
+	Vec2d center = .5 * (topRightCorner + bottomLeftCorner);
+
+	polyscope::view::style = polyscope::NavigateStyle::Planar;
+	polyscope::init();
+
+	registerTest(gCurrentTest, xform, size, center, topRightCorner, dx);
+
+	polyscope::state::userCallback = [&]()
+	{
+		if (ImGui::Button("Next test"))
+		{
+			gCurrentTest = (gCurrentTest + 1) % 3;
+			registerTest(gCurrentTest, xform, size, center, topRightCorner, dx);
+		}
+		ImGui::Text("Current test: %s", gTestNames[gCurrentTest]);
+	};
+
+	polyscope::show();
 }

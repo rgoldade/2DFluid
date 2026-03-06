@@ -5,7 +5,6 @@
 #include "GeometricMultigridOperators.h"
 #include "GeometricMultigridPoissonSolver.h"
 #include "InitialMultigridTestDomains.h"
-#include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "UniformGrid.h"

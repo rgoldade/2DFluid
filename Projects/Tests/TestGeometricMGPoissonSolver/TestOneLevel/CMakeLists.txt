@@ -3,7 +3,7 @@ add_executable(TestOneLevel TestOneLevel.cpp)
 target_link_libraries(TestOneLevel
 						PRIVATE
 						GeometricMGUtilities
-						RenderTools
+						polyscope
 						SurfaceTrackers
 						SimTools
 						Utilities)

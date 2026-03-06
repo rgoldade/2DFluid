@@ -13,29 +13,29 @@
 namespace FluidSim2D
 {
 
-void EulerianSmokeSimulator::drawGrid(Renderer& renderer) const
+void EulerianSmokeSimulator::drawGrid(const std::string& label) const
 {
-	mySolidSurface.drawGrid(renderer, false);
+	mySolidSurface.drawGrid(label + " grid", false);
 }
 
-void EulerianSmokeSimulator::drawFluidDensity(Renderer& renderer, double maxDensity)
+void EulerianSmokeSimulator::drawFluidDensity(const std::string& label, double maxDensity)
 {
-	mySmokeDensity.drawVolumetric(renderer, Vec3d::Ones(), Vec3d::Zero(), 0, maxDensity);
+	mySmokeDensity.drawVolumetric(label + " density", Vec3d::Ones(), Vec3d::Zero(), 0., maxDensity);
 }
 
-void EulerianSmokeSimulator::drawFluidVelocity(Renderer& renderer, double length) const
+void EulerianSmokeSimulator::drawFluidVelocity(const std::string& label, double length) const
 {
-	myVelocity.drawSamplePointVectors(renderer, Vec3d::Zero(), myVelocity.dx() * length);
+	myVelocity.drawSamplePointVectors(label + " fluid", Vec3d::Zero(), myVelocity.dx() * length);
 }
 
-void EulerianSmokeSimulator::drawSolidSurface(Renderer& renderer)
+void EulerianSmokeSimulator::drawSolidSurface(const std::string& label)
 {
-	mySolidSurface.drawSurface(renderer, Vec3d::Zero(), 3.f);
+	mySolidSurface.drawSurface(label + " solid", Vec3d::Zero());
 }
 
-void EulerianSmokeSimulator::drawSolidVelocity(Renderer& renderer, double length) const
+void EulerianSmokeSimulator::drawSolidVelocity(const std::string& label, double length) const
 {
-	mySolidVelocity.drawSamplePointVectors(renderer, Vec3d(0.f, 1.f, 0.f), mySolidVelocity.dx() * length);
+	mySolidVelocity.drawSamplePointVectors(label + " solid", Vec3d(0., 1., 0.), mySolidVelocity.dx() * length);
 }
 
 // Incoming solid surface must already be inverted

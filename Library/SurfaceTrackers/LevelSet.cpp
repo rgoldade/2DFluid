@@ -2,6 +2,9 @@
 
 #include <iostream>
 #include <queue>
+#include <string>
+
+#include "polyscope/curve_network.h"
 
 #include <Eigen/Dense>
 #include <Eigen/SVD>
@@ -11,45 +14,69 @@
 namespace FluidSim2D
 {
 
-void LevelSet::drawGrid(Renderer& renderer, bool doOnlyNarrowBand) const
+void LevelSet::drawGrid(const std::string& label, bool doOnlyNarrowBand) const
 {
 	if (doOnlyNarrowBand)
 	{
+		VecVec2d nodes;
+
+		const Vec2d edgeToNodeOffset[4][2] = { {Vec2d::Zero(), Vec2d(1., 0.)},
+											   {Vec2d(0., 1.), Vec2d::Ones()},
+											   {Vec2d::Zero(), Vec2d(0., 1.)},
+											   {Vec2d(1., 0.), Vec2d::Ones()} };
+
 		forEachVoxelRange(Vec2i::Zero(), size(), [&](const Vec2i& cell)
 		{
 			if (std::fabs(myPhiGrid(cell)) < myNarrowBand)
-				myPhiGrid.drawGridCell(renderer, cell);
+			{
+				for (int edgeIndex = 0; edgeIndex < 4; ++edgeIndex)
+				{
+					Vec2d startNode = myPhiGrid.indexToWorld(cell.cast<double>() - Vec2d(.5, .5) + edgeToNodeOffset[edgeIndex][0]);
+					Vec2d endNode   = myPhiGrid.indexToWorld(cell.cast<double>() - Vec2d(.5, .5) + edgeToNodeOffset[edgeIndex][1]);
+
+					nodes.push_back(startNode);
+					nodes.push_back(endNode);
+				}
+			}
 		});
+
+		polyscope::registerCurveNetworkSegments2D(label + " grid", nodes);
+		polyscope::getCurveNetwork(label + " grid")->setColor(glm::vec3(0.f, 0.f, 0.f));
+		polyscope::getCurveNetwork(label + " grid")->setRadius(.0005);		
 	}
-	else myPhiGrid.drawGrid(renderer);
+	else
+	{
+		myPhiGrid.drawGrid(label);
+	}
 }
 
-void LevelSet::drawMeshGrid(Renderer& renderer) const
+void LevelSet::drawMeshGrid(const std::string& label) const
 {
 	Transform xform(myPhiGrid.dx(), myPhiGrid.offset() + Vec2d(.5, .5) * myPhiGrid.dx());
 	ScalarGrid<int> tempGrid(xform, myPhiGrid.size());
-	tempGrid.drawGrid(renderer);
+	tempGrid.drawGrid(label + " meshGrid");
 }
 
-void LevelSet::drawSupersampledValues(Renderer& renderer, double radius, int samples, double sampleSize) const
+void LevelSet::drawSupersampledValues(const std::string& label, double radius, int samples, double sampleSize) const
 {
-	myPhiGrid.drawSupersampledValues(renderer, radius, samples, sampleSize);
-}
-void LevelSet::drawNormals(Renderer& renderer, const Vec3d& colour, double length) const
-{
-	myPhiGrid.drawSampleGradients(renderer, colour, length);
+	myPhiGrid.drawSupersampledValues(label, radius, samples, sampleSize);
 }
 
-void LevelSet::drawSurface(Renderer& renderer, const Vec3d& colour, double lineWidth) const
+void LevelSet::drawNormals(const std::string& label, const Vec3d& colour, double length) const
+{
+	myPhiGrid.drawSampleGradients(label, colour, length);
+}
+
+void LevelSet::drawSurface(const std::string& label, const Vec3d& colour, double lineWidth) const
 {
 	EdgeMesh surface = buildMSMesh();
-	surface.drawMesh(renderer, colour, lineWidth);
+	surface.drawMesh(label, colour, lineWidth);
 }
 
-void LevelSet::drawDCSurface(Renderer& renderer, const Vec3d& colour, double lineWidth) const
+void LevelSet::drawDCSurface(const std::string& label, const Vec3d& colour, double lineWidth) const
 {
 	EdgeMesh surface = buildDCMesh();
-	surface.drawMesh(renderer, colour, lineWidth);
+	surface.drawMesh(label, colour, lineWidth);
 }
 
 // Find the nearest point on the interface starting from the index position.

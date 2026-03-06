@@ -2,7 +2,6 @@
 #define FLUIDSIM2D_PRESSURE_PROJECTION_H
 
 #include "LevelSet.h"
-#include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Utilities.h"
 #include "VectorGrid.h"
@@ -54,7 +53,7 @@ public:
 		return myValidFaces;
 	}
 
-	void drawPressure(Renderer& renderer) const;
+	void drawPressure(const std::string& label) const;
 
 private:
 

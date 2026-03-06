@@ -3,7 +3,7 @@ add_executable(TestMGTransfers TestMGTransfers.cpp)
 target_link_libraries(TestMGTransfers
 						PRIVATE
 						GeometricMGUtilities
-						RenderTools
+						polyscope
 						SurfaceTrackers
 						SimTools
 						Utilities)

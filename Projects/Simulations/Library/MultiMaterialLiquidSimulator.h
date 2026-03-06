@@ -93,9 +93,10 @@ public:
 		myFluidDensities[material] = density;
 	}
 
-	void drawMaterialSurface(Renderer& renderer, int material);
-	void drawMaterialVelocity(Renderer& renderer, double length, int material) const;
-	void drawSolidSurface(Renderer& renderer);
+	// Polyscope rendering tools
+	void drawMaterialSurface(const std::string& label, int material);
+	void drawMaterialVelocity(const std::string& label, double length, int material) const;
+	void drawSolidSurface(const std::string& label);
 
 private:
 

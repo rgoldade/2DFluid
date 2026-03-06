@@ -1,12 +1,12 @@
 add_executable(MultiMaterialBubbles MultiMaterialBubbles.cpp)
 
 target_link_libraries(MultiMaterialBubbles
-						PRIVATE
-						RegularGridSimLibrary
-						RenderTools
-						SimTools
-						SurfaceTrackers
-						Utilities)
+					PRIVATE
+					RegularGridSimLibrary
+					polyscope
+					SimTools
+					SurfaceTrackers
+					Utilities)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
@@ -17,12 +17,12 @@ set_target_properties(MultiMaterialBubbles PROPERTIES FOLDER ${REGULAR_FOLDER})
 add_executable(MultiMaterialLayers MultiMaterialLayers.cpp)
 
 target_link_libraries(MultiMaterialLayers
-						PRIVATE
-						RegularGridSimLibrary
-						RenderTools
-						SimTools
-						SurfaceTrackers
-						Utilities)
+					PRIVATE
+					RegularGridSimLibrary
+					polyscope
+					SimTools
+					SurfaceTrackers
+					Utilities)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 

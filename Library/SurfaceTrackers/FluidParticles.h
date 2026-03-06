@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "LevelSet.h"
-#include "Renderer.h"
 #include "Utilities.h"
 
 ///////////////////////////////////
@@ -55,8 +54,8 @@ public:
 		double blend);
 
 	LevelSet surfaceParticles(const Transform& xform, const Vec2i& size, int narrowBand) const;
-	void drawPoints(Renderer& renderer, const Vec3d& colour = Vec3d(1, 0, 0), double pointSize = 1) const;
-	void drawVelocity(Renderer& renderer, const Vec3d& colour = Vec3d(0, 0, 1), double length = .25) const;
+	void drawPoints(const std::string& label, const Vec3d& colour = Vec3d(1, 0, 0), double pointSize = 1.) const;
+	void drawVelocity(const std::string& label, const Vec3d& colour = Vec3d(0, 0, 1), double length = .25) const;
 
 	// Seed particles into areas of the surface that are under represented
 	// and delete particles in areas that are over represented. If the particle

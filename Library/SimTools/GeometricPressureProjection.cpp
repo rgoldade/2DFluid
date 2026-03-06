@@ -47,9 +47,9 @@ GeometricPressureProjection::GeometricPressureProjection(const LevelSet& surface
 	myValidFaces = VectorGrid<VisitedCellLabels>(surface.xform(), surface.size(), VisitedCellLabels::UNVISITED_CELL, VectorGridSettings::SampleType::STAGGERED);
 }
 
-void GeometricPressureProjection::drawPressure(Renderer& renderer) const
+void GeometricPressureProjection::drawPressure(const std::string& label) const
 {
-	myPressure.drawSupersampledValues(renderer, .25, 1, 2);
+	myPressure.drawSupersampledValues(label + " pressure", .25, 1, 2);
 }
 
 void GeometricPressureProjection::project(VectorGrid<double>& velocity,

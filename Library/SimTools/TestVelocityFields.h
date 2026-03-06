@@ -2,8 +2,9 @@
 #define FLUIDSIM2D_TEST_VELOCITY_FIELD_H
 
 #include "Noise.h"
-#include "Renderer.h"
 #include "Utilities.h"
+
+#include "polyscope/curve_network.h"
 
 ///////////////////////////////////
 //
@@ -33,10 +34,9 @@ public:
 		, myDeformationPeriod(deformationPeriod)
 	{}
 
-	void drawSimVectors(Renderer& renderer, double dt = 1, double radius = 10, const Vec3d& colour = Vec3d::Zero())
+	void drawSimVectors(const std::string& label, double dt = 1, double radius = 10, const Vec3d& colour = Vec3d::Zero())
 	{
-		VecVec2d startPoints;
-		VecVec2d endPoints;
+		VecVec2d nodes;
 
 		for (double drawRadius = 0.; drawRadius <= radius; drawRadius += radius / 10.)
 			for (double theta = 0.; theta < 2. * PI; theta += PI / 16.)
@@ -44,11 +44,13 @@ public:
 				Vec2d start(drawRadius * std::cos(theta), drawRadius * std::sin(theta));
 				Vec2d end = start + dt * (*this)(dt, start);
 
-				startPoints.push_back(start);
-				endPoints.push_back(end);
+				nodes.push_back(start);
+				nodes.push_back(end);
 			}
 
-		renderer.addLines(startPoints, endPoints, colour);
+		auto* cn = polyscope::registerCurveNetworkSegments2D(label + " vectors", nodes);
+		cn->setColor(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
+		cn->setRadius(.0005);
 	}
 
 	void advance(double dt)
@@ -160,10 +162,9 @@ public:
 	CircularField() : myCenter(Vec2d(0)), myScale(1.) {}
 	CircularField(const Vec2d& center, double scale = 1.) : myCenter(center), myScale(scale) {}
 
-	void drawSimVectors(Renderer& renderer, double dt = 1., double radius = 10., const Vec3d& colour = Vec3d(0))
+	void drawSimVectors(const std::string& label, double dt = 1., double radius = 10., const Vec3d& colour = Vec3d::Zero())
 	{
-		VecVec2d startPoints;
-		VecVec2d endPoints;
+		VecVec2d nodes;
 
 		for (double drawRadius = 0.0; drawRadius <= radius; drawRadius += radius / 10.)
 			for (double theta = 0.0; theta < 2 * PI; theta += PI / 16.0)
@@ -171,12 +172,14 @@ public:
 				Vec2d startPoint = Vec2d(drawRadius * cos(theta), drawRadius * sin(theta)) + myCenter;
 				Vec2d endPoint = startPoint + dt * (*this)(dt, startPoint);
 
-				startPoints.push_back(startPoint);
-				endPoints.push_back(endPoint);
+				nodes.push_back(startPoint);
+				nodes.push_back(endPoint);
 			}
 
-		renderer.addLines(startPoints, endPoints, colour);
-	};
+		auto* cn = polyscope::registerCurveNetworkSegments2D(label + " vectors", nodes);
+		cn->setColor(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
+		cn->setRadius(.0005);
+	}
 
 	Vec2d operator()(double, const Vec2d& pos) const
 	{
@@ -199,10 +202,9 @@ class NotchedDiskField
 {
 public:
 
-	void drawSimVectors(Renderer& renderer, double dt = 1., double radius = 10., const Vec3d& colour = Vec3d(0))
+	void drawSimVectors(const std::string& label, double dt = 1., double radius = 10., const Vec3d& colour = Vec3d::Zero())
 	{
-		VecVec2d startPoints;
-		VecVec2d endPoints;
+		VecVec2d nodes;
 
 		for (double drawRadius = 0; drawRadius <= radius; drawRadius += radius / 10.)
 			for (double theta = 0; theta < 2 * PI; theta += PI / 16.)
@@ -210,12 +212,14 @@ public:
 				Vec2d startPoint = Vec2d(drawRadius * cos(theta), drawRadius * sin(theta));
 				Vec2d endPoint = startPoint + dt * (*this)(dt, startPoint);
 
-				startPoints.push_back(startPoint);
-				endPoints.push_back(endPoint);
+				nodes.push_back(startPoint);
+				nodes.push_back(endPoint);
 			}
 
-		renderer.addLines(startPoints, endPoints, colour);
-	};
+		auto* cn = polyscope::registerCurveNetworkSegments2D(label + " vectors", nodes);
+		cn->setColor(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
+		cn->setRadius(.0005);
+	}
 
 	// Procedural velocity field
 	Vec2d operator()(double, const Vec2d& pos) const

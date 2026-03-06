@@ -77,16 +77,15 @@ public:
 	// Useful for CFL
 	double maxVelocityMagnitude() { return myLiquidVelocity.maxMagnitude(); }
 
-	// Rendering tools
-	void drawGrid(Renderer& renderer) const;
+	// Polyscope rendering tools
+	void drawGrid(const std::string& label) const;
+	void drawVolumetricSurface(const std::string& label) const;
 
-	void drawVolumetricSurface(Renderer& renderer) const;
+	void drawLiquidSurface(const std::string& label);
+	void drawLiquidVelocity(const std::string& label, double length) const;
 
-	void drawLiquidSurface(Renderer& renderer);
-	void drawLiquidVelocity(Renderer& renderer, double length) const;
-
-	void drawSolidSurface(Renderer& renderer);
-	void drawSolidVelocity(Renderer& renderer, double length) const;
+	void drawSolidSurface(const std::string& label);
+	void drawSolidVelocity(const std::string& label, double length) const;
 
 private:
 

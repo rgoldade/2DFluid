@@ -1,11 +1,10 @@
 add_library(RegularGridSimLibrary EulerianLiquidSimulator.cpp EulerianSmokeSimulator.cpp MultiMaterialLiquidSimulator.cpp MultiMaterialPressureProjection.cpp)
 
 target_link_libraries(RegularGridSimLibrary
-						PRIVATE
-						RenderTools
-						SimTools
-						SurfaceTrackers
-						Utilities)
+					PRIVATE
+					SimTools
+					SurfaceTrackers
+					Utilities)
 
 target_include_directories(RegularGridSimLibrary PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

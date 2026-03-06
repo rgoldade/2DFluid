@@ -12,59 +12,67 @@
 #include "Timer.h"
 #include "ViscositySolver.h"
 
+#include "polyscope/surface_mesh.h"
+
 namespace FluidSim2D
 {
 
-void EulerianLiquidSimulator::drawGrid(Renderer& renderer) const
+void EulerianLiquidSimulator::drawGrid(const std::string& label) const
 {
-	myLiquidSurface.drawGrid(renderer, false);
+	myLiquidSurface.drawGrid(label + " grid", false);
 }
 
-void EulerianLiquidSimulator::drawVolumetricSurface(Renderer& renderer) const
+void EulerianLiquidSimulator::drawVolumetricSurface(const std::string& label) const
 {
 	ScalarGrid<double> centerAreas = computeSupersampledAreas(myLiquidSurface, ScalarGridSettings::SampleType::CENTER, 3);
 
 	Vec2d nodeOffset[4] = { Vec2d(-.51, -.51), Vec2d(-.51, .51), Vec2d(.51, .51), Vec2d(.51, -.51) };
 
+	VecVec2d verts;
+	VecVec4i faces;
+	std::vector<glm::vec3> faceColors;
+
 	forEachVoxelRange(Vec2i::Zero(), myLiquidSurface.size(), [&](const Vec2i& cell)
 	{
 		if (centerAreas(cell) > 0)
 		{
-			VecVec2d quadVertex(4);
-			VecVec4i quadFace(1);
-			VecVec3d quadColour(1);
-
+			int baseIdx = int(verts.size());
 			for (int nodeIndex = 0; nodeIndex < 4; ++nodeIndex)
-			{
-				quadVertex[nodeIndex] = myLiquidSurface.indexToWorld(cell.cast<double>() + nodeOffset[nodeIndex]);
-				quadFace[0][nodeIndex] = nodeIndex;
-			}
+				verts.push_back(myLiquidSurface.indexToWorld(cell.cast<double>() + nodeOffset[nodeIndex]));
+
+			faces.push_back(Vec4i(baseIdx, baseIdx + 1, baseIdx + 2, baseIdx + 3));
 
 			double s = centerAreas(cell);
-			quadColour[0] = (1 - s) * Vec3d::Ones() + s * Vec3d(0, 1, 1);
-			renderer.addQuadFaces(quadVertex, quadFace, quadColour);
+			Vec3d colour = (1. - s) * Vec3d::Ones() + s * Vec3d(0., 1., 1.);
+			faceColors.push_back(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
 		}
 	});
+
+	if (!verts.empty())
+	{
+		auto* mesh = polyscope::registerSurfaceMesh2D(label + " volumetric", verts, faces);
+		mesh->addFaceColorQuantity("coverage", faceColors)->setEnabled(true);
+	}
 }
 
-void EulerianLiquidSimulator::drawLiquidSurface(Renderer& renderer)
+void EulerianLiquidSimulator::drawLiquidSurface(const std::string& label)
 {
-	myLiquidSurface.drawSurface(renderer, Vec3d(0, 0, 1), 3);
+	myLiquidSurface.drawSurface(label + " liquid", Vec3d(0., 0., 1.));
 }
 
-void EulerianLiquidSimulator::drawLiquidVelocity(Renderer& renderer, double length) const
+void EulerianLiquidSimulator::drawLiquidVelocity(const std::string& label, double length) const
 {
-	myLiquidVelocity.drawSamplePointVectors(renderer, Vec3d::Zero(), myLiquidVelocity.dx() * length);
+	myLiquidVelocity.drawSamplePointVectors(label + " liquid", Vec3d::Zero(), myLiquidVelocity.dx() * length);
 }
 
-void EulerianLiquidSimulator::drawSolidSurface(Renderer& renderer)
+void EulerianLiquidSimulator::drawSolidSurface(const std::string& label)
 {
-	mySolidSurface.drawSurface(renderer, Vec3d::Zero(), 3);
+	mySolidSurface.drawSurface(label + " solid", Vec3d::Zero());
 }
 
-void EulerianLiquidSimulator::drawSolidVelocity(Renderer& renderer, double length) const
+void EulerianLiquidSimulator::drawSolidVelocity(const std::string& label, double length) const
 {
-	mySolidVelocity.drawSamplePointVectors(renderer, Vec3d(0, 1, 0), mySolidVelocity.dx() * length);
+	mySolidVelocity.drawSamplePointVectors(label + " solid", Vec3d(0., 1., 0.), mySolidVelocity.dx() * length);
 }
 
 // Incoming solid surface must already be inverted

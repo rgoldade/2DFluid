@@ -1,6 +1,10 @@
 #include "EdgeMesh.h"
 
 #include <iostream>
+#include <string>
+
+#include "polyscope/curve_network.h"
+#include "polyscope/point_cloud.h"
 
 namespace FluidSim2D
 {
@@ -90,51 +94,43 @@ void EdgeMesh::translate(const Vec2d& t)
 	}
 }
 
-void EdgeMesh::drawMesh(Renderer& renderer,
-						Vec3d edgeColour,
-						double edgeWidth,
-						bool doRenderEdgeNormals,
-						bool doRenderVertices,
-						Vec3d vertexColour) const
+void EdgeMesh::drawMesh(const std::string& label,
+							Vec3d edgeColour,
+							double edgeWidth,
+							bool doRenderEdgeNormals,
+							bool doRenderVertices,
+							Vec3d vertexColour) const
 {
-	VecVec2d startPoints(myEdges.size());
-	VecVec2d endPoints(myEdges.size());
-
-	for (int edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
-	{
-		startPoints[edgeIndex] = myVertices[myEdges[edgeIndex][0]];
-		endPoints[edgeIndex] = myVertices[myEdges[edgeIndex][1]];
-	}
-
-	renderer.addLines(startPoints, endPoints, edgeColour, edgeWidth);
+	auto* cn = polyscope::registerCurveNetwork2D(label + " surface", myVertices, myEdges);
+	cn->setColor(glm::vec3((float)edgeColour[0], (float)edgeColour[1], (float)edgeColour[2]));
+	cn->setRadius(edgeWidth);
 
 	if (doRenderEdgeNormals)
 	{
-		VecVec2d startNormals(myEdges.size());
-		VecVec2d endNormals(myEdges.size());
+		VecVec2d normalNodes;
+		normalNodes.reserve(myEdges.size() * 2);
 
-		// Scale by average edge length
 		double averageLength = 0.;
 		for (const Vec2i& edge : myEdges)
 			averageLength += (myVertices[edge[0]] - myVertices[edge[1]]).norm();
-
 		averageLength /= double(myEdges.size());
 
-		for (int edgeIndex = 0; edgeIndex < myEdges.size(); ++edgeIndex)
+		for (int edgeIndex = 0; edgeIndex < int(myEdges.size()); ++edgeIndex)
 		{
 			Vec2d midPoint = .5 * (myVertices[myEdges[edgeIndex][0]] + myVertices[myEdges[edgeIndex][1]]);
-			Vec2d edgeNormal = normal(edgeIndex);
+			Vec2d endPoint = midPoint + normal(edgeIndex) * averageLength;
 
-			startNormals[edgeIndex] = midPoint;
-			endNormals[edgeIndex] = midPoint + edgeNormal * averageLength;
+			normalNodes.push_back(midPoint);
+			normalNodes.push_back(endPoint);
 		}
 
-		renderer.addLines(startNormals, endNormals, Vec3d::Zero());
+		polyscope::registerCurveNetworkSegments2D(label + " surface normals", normalNodes);
 	}
 
 	if (doRenderVertices)
 	{
-		renderer.addPoints(myVertices, vertexColour, 2);
+		auto* pc = polyscope::registerPointCloud2D(label + " surface vertices", myVertices);
+		pc->setPointColor(glm::vec3((float)vertexColour[0], (float)vertexColour[1], (float)vertexColour[2]));
 	}
 }
 

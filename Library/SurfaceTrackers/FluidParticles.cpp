@@ -2,6 +2,9 @@
 
 #include <random>
 
+#include "polyscope/curve_network.h"
+#include "polyscope/point_cloud.h"
+
 namespace FluidSim2D
 {
 
@@ -16,25 +19,28 @@ static Vec2d randomizer(const Vec2i& coord, size_t count, double seed)
 	return Vec2d(double(pos0) / 100. - .5, double(pos1) / 100. - .5);
 };
 
-void FluidParticles::drawPoints(Renderer& renderer, const Vec3d& colour, double pointSize) const
+
+void FluidParticles::drawPoints(const std::string& label, const Vec3d& colour, double pointSize) const
 {
-	renderer.addPoints(myParticles, colour, pointSize);
+	auto* pc = polyscope::registerPointCloud2D(label + " points", myParticles);
+	pc->setPointColor(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
+	pc->setPointRadius(pointSize * 0.001, true);
 }
 
-void FluidParticles::drawVelocity(Renderer& renderer, const Vec3d& colour, double length) const
+void FluidParticles::drawVelocity(const std::string& label, const Vec3d& colour, double length) const
 {
 	assert(myTrackVelocity);
 
-	VecVec2d startPoints;
-	VecVec2d endPoints;
+	VecVec2d nodes;
 
 	for (size_t particleIndex = 0; particleIndex < myParticles.size(); ++particleIndex)
 	{
-		startPoints.push_back(myParticles[particleIndex]);
-		endPoints.push_back(myParticles[particleIndex] + myVelocity[particleIndex] * length);
+		nodes.push_back(myParticles[particleIndex]);
+		nodes.push_back(myParticles[particleIndex] + myVelocity[particleIndex] * length);
 	}
 
-	renderer.addLines(startPoints, endPoints, colour);
+	auto* cn = polyscope::registerCurveNetworkSegments2D(label + " velocity", nodes);
+	cn->setColor(glm::vec3((float)colour[0], (float)colour[1], (float)colour[2]));
 }
 
 void FluidParticles::init(const LevelSet& surface)

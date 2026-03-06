@@ -1,6 +1,7 @@
 #include "MultiMaterialLiquidSimulator.h"
 
 #include <iostream>
+#include <string>
 
 #include "ComputeWeights.h"
 #include "ExtrapolateField.h"
@@ -10,19 +11,19 @@
 namespace FluidSim2D
 {
 
-void MultiMaterialLiquidSimulator::drawMaterialSurface(Renderer& renderer, int material)
+void MultiMaterialLiquidSimulator::drawMaterialSurface(const std::string& label, int material)
 {
-	myFluidSurfaces[material].drawSurface(renderer, Vec3d(0., 0., 1.), 2.);
+	myFluidSurfaces[material].drawSurface(label + " material " + std::to_string(material), Vec3d(0., 0., 1.));
 }
 
-void MultiMaterialLiquidSimulator::drawMaterialVelocity(Renderer& renderer, double length, int material) const
+void MultiMaterialLiquidSimulator::drawMaterialVelocity(const std::string& label, double length, int material) const
 {
-	myFluidVelocities[material].drawSamplePointVectors(renderer, Vec3d::Zero(), myFluidVelocities[material].dx() * length);
+	myFluidVelocities[material].drawSamplePointVectors(label + " material " + std::to_string(material), Vec3d::Zero(), myFluidVelocities[material].dx() * length);
 }
 
-void MultiMaterialLiquidSimulator::drawSolidSurface(Renderer& renderer)
+void MultiMaterialLiquidSimulator::drawSolidSurface(const std::string& label)
 {
-	mySolidSurface.drawSurface(renderer, Vec3d::Zero(), 2);
+	mySolidSurface.drawSurface(label + " solid", Vec3d::Zero());
 }
 
 template<typename ForceSampler>

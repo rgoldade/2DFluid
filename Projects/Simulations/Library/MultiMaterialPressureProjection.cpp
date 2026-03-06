@@ -118,9 +118,9 @@ MultiMaterialPressureProjection::MultiMaterialPressureProjection(const std::vect
 	}
 }
 
-void MultiMaterialPressureProjection::drawPressure(Renderer& renderer) const
+void MultiMaterialPressureProjection::drawPressure(const std::string& label) const
 {
-	myPressure.drawSupersampledValues(renderer, .5, 3, 1);
+	myPressure.drawSupersampledValues(label + " pressure", .5, 3, 1);
 }
 
 void MultiMaterialPressureProjection::copyToPreconditionerGrids(std::vector<UniformGrid<SolveReal>> &mgSourceGrid,

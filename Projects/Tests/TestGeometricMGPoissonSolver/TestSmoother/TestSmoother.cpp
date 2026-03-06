@@ -5,15 +5,14 @@
 
 #include "GeometricMultigridOperators.h"
 #include "InitialMultigridTestDomains.h"
-#include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Transform.h"
 #include "UniformGrid.h"
 #include "Utilities.h"
 
-using namespace FluidSim2D;
+#include "polyscope/polyscope.h"
 
-std::unique_ptr<Renderer> gRenderer;
+using namespace FluidSim2D;
 
 static constexpr int gGridSize = 256;
 static constexpr bool gUseComplexDomain = true;
@@ -24,7 +23,7 @@ static constexpr bool gUseRandomGuess = true;
 static constexpr int gMaxIterations = 1000;
 static constexpr double gDeltaAmplitude = 1000;
 
-int main(int argc, char** argv)
+int main()
 {
 	using namespace GeometricMultigridOperators;
 
@@ -125,10 +124,6 @@ int main(int argc, char** argv)
 	}
 
 	// Print domain labels to make sure they are set up correctly
-	int pixelHeight = 1080;
-	int pixelWidth = pixelHeight;
-	gRenderer = std::make_unique<Renderer>("Smoother Test", Vec2i(pixelWidth, pixelHeight), Vec2d::Zero(), 1, &argc, argv);
-
 	ScalarGrid<double> tempGrid(Transform(dx, Vec2d::Zero()), domainCellLabels.size());
 
 	tbb::parallel_for(tbb::blocked_range<int>(0, tempGrid.voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
@@ -141,7 +136,8 @@ int main(int argc, char** argv)
 		}
 	});
 
-	tempGrid.drawVolumetric(*gRenderer, Vec3d::Zero(), Vec3d::Ones(), double(CellLabels::INTERIOR_CELL), double(CellLabels::BOUNDARY_CELL));
-
-	gRenderer->run();
+	polyscope::view::style = polyscope::NavigateStyle::Planar;
+	polyscope::init();
+	tempGrid.drawVolumetric("domain", Vec3d::Zero(), Vec3d::Ones(), double(CellLabels::INTERIOR_CELL), double(CellLabels::BOUNDARY_CELL));
+	polyscope::show();
 }

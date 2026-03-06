@@ -3,7 +3,7 @@ add_executable(TestGeometricCG TestGeometricCG.cpp)
 target_link_libraries(TestGeometricCG
 						PRIVATE
 						GeometricMGUtilities
-						RenderTools
+						polyscope
 						SurfaceTrackers
 						SimTools
 						Utilities)

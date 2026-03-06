@@ -46,9 +46,9 @@ PressureProjection::PressureProjection(const LevelSet& surface,
 	myValidFaces = VectorGrid<VisitedCellLabels>(surface.xform(), surface.size(), VisitedCellLabels::UNVISITED_CELL, VectorGridSettings::SampleType::STAGGERED);
 }
 
-void PressureProjection::drawPressure(Renderer& renderer) const
+void PressureProjection::drawPressure(const std::string& label) const
 {
-	myPressure.drawSupersampledValues(renderer, .25, 1, 2);
+	myPressure.drawSupersampledValues(label + " pressure", .25, 1, 2);
 }
 
 void PressureProjection::project(VectorGrid<double>& velocity)

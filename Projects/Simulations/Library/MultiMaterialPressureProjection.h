@@ -6,7 +6,6 @@
 #include "ComputeWeights.h"
 #include "GeometricMultigridOperators.h"
 #include "LevelSet.h"
-#include "Renderer.h"
 #include "ScalarGrid.h"
 #include "Utilities.h"
 #include "VectorGrid.h"
@@ -59,7 +58,7 @@ public:
 		return myPressure;
 	}
 
-	void drawPressure(Renderer& renderer) const;
+	void drawPressure(const std::string& label) const;
 
 	void printPressure(const std::string& filename) const
 	{

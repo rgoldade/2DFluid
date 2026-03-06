@@ -6,10 +6,9 @@ add_library(SurfaceTrackers
 				Predicates.cpp)
 
 target_link_libraries(SurfaceTrackers
-						PRIVATE
-						RenderTools
-						SimTools
-						Utilities)
+					PRIVATE
+					SimTools
+					Utilities)
 
 target_include_directories(SurfaceTrackers PUBLIC
 							  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

@@ -1,12 +1,12 @@
 add_executable(RisingSmoke RisingSmoke.cpp)
 
 target_link_libraries(RisingSmoke 
-						PRIVATE
-						RegularGridSimLibrary
-						RenderTools
-						SimTools
-						SurfaceTrackers
-						Utilities)
+					PRIVATE
+					RegularGridSimLibrary
+					polyscope
+					SimTools
+					SurfaceTrackers
+					Utilities)
 
 file( RELATIVE_PATH REL ${PROJECT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR} )						
 
