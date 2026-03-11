@@ -157,7 +157,7 @@ private:
 class CircularField
 {
 public:
-	CircularField() : myCenter(Vec2d(0)), myScale(1.) {}
+	CircularField() : myCenter(Vec2d::Zero()), myScale(1.) {}
 	CircularField(const Vec2d& center, double scale = 1.) : myCenter(center), myScale(scale) {}
 
 	void drawSimVectors(Renderer& renderer, double dt = 1., double radius = 10., const Vec3d& colour = Vec3d(0))

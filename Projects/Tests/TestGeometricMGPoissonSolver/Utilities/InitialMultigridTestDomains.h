@@ -216,14 +216,14 @@ void buildSimpleDomain(UniformGrid<CellLabels> &domainCellLabels,
 	assert(gridSize > 0);
 	assert(dirichletBand >= 0);
 
-	domainCellLabels.resize(Vec2i(gridSize), CellLabels::EXTERIOR_CELL);
+	domainCellLabels.resize(Vec2i::Constant(gridSize), CellLabels::EXTERIOR_CELL);
 
 	StoreReal dx = 1. / StoreReal(gridSize);
 
 	// Set outer layers to DIRICHLET
 
 	// Set bottom face
-	Vec2i start(0);
+	Vec2i start = Vec2i::Zero();
 	Vec2i end(gridSize, dirichletBand);
 
 	forEachVoxelRange(start, end, [&](const Vec2i &cell)
@@ -233,7 +233,7 @@ void buildSimpleDomain(UniformGrid<CellLabels> &domainCellLabels,
 
 	// Set top face
 	start = Vec2i(0, gridSize - dirichletBand);
-	end = Vec2i(gridSize);
+	end = Vec2i::Constant(gridSize);
 
 	forEachVoxelRange(start, end, [&](const Vec2i &cell)
 	{
@@ -241,7 +241,7 @@ void buildSimpleDomain(UniformGrid<CellLabels> &domainCellLabels,
 	});
 
 	// Set left face
-	start = Vec2i(0);
+	start = Vec2i::Zero();
 	end = Vec2i(dirichletBand, gridSize);
 
 	forEachVoxelRange(start, end, [&](const Vec2i &cell)
@@ -252,15 +252,15 @@ void buildSimpleDomain(UniformGrid<CellLabels> &domainCellLabels,
 	// Set right face
 
 	start = Vec2i(gridSize - dirichletBand, 0);
-	end = Vec2i(gridSize);
+	end = Vec2i::Constant(gridSize);
 
 	forEachVoxelRange(start, end, [&](const Vec2i &cell)
 	{
 		domainCellLabels(cell) = CellLabels::DIRICHLET_CELL;
 	});
 
-	start = Vec2i(dirichletBand);
-	end = Vec2i(gridSize - dirichletBand);
+	start = Vec2i::Constant(dirichletBand);
+	end = Vec2i::Constant(gridSize - dirichletBand);
 
 	forEachVoxelRange(start, end, [&](const Vec2i &cell)
 	{
@@ -268,7 +268,7 @@ void buildSimpleDomain(UniformGrid<CellLabels> &domainCellLabels,
 	});
 
 	// TODO: use proper ghost fluid and cut-cell weights
-	boundaryWeights = VectorGrid<StoreReal>(Transform(dx, Vec2d(0)), Vec2i(gridSize), 0, VectorGridSettings::SampleType::STAGGERED);
+	boundaryWeights = VectorGrid<StoreReal>(Transform(dx, Vec2d::Zero()), Vec2i::Constant(gridSize), 0, VectorGridSettings::SampleType::STAGGERED);
 
 	// Build boundary weights
 	for (int axis : {0, 1})
