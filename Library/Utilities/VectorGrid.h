@@ -160,7 +160,7 @@ public:
 	void drawSamplePoints(const std::string& label,
 								const Vec3d& colour0 = Vec3d(1, 0, 0),
 								const Vec3d& colour1 = Vec3d(0, 0, 1),
-								const Vec2d& sampleSizes = Vec2d(1.)) const;
+								const Vec2d& sampleSizes = Vec2d::Ones()) const;
 
 	void drawSupersampledValues(const std::string& label, double sampleRadius = .5, int samples = 5, double sampleSize = 1.) const;
 	void drawSamplePointVectors(const std::string& label, const Vec3d& colour = Vec3d(0, 0, 1), double length = .25) const;

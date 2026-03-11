@@ -133,7 +133,7 @@ std::pair<Vec2i, int> buildCustomExpandedDomainLabels(UniformGrid<CellLabels>& e
 	// there is still a single layer of exterior cells
 	int exteriorPadding = std::pow(2, mgLevels - 1);
 
-	Vec2i expandedGridSize = baseCustomLabels.size() + 2 * Vec2i(exteriorPadding);
+	Vec2i expandedGridSize = baseCustomLabels.size() + 2 * Vec2i::Constant(exteriorPadding);
 
 	for (int axis : {0, 1})
 	{
@@ -143,7 +143,7 @@ std::pair<Vec2i, int> buildCustomExpandedDomainLabels(UniformGrid<CellLabels>& e
 		expandedGridSize[axis] = std::exp2(logSize);
 	}
 
-	Vec2i exteriorOffset = Vec2i(exteriorPadding);
+	Vec2i exteriorOffset = Vec2i::Constant(exteriorPadding);
 
 	expandedDomainCellLabels.resize(expandedGridSize, CellLabels::EXTERIOR_CELL);
 

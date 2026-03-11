@@ -91,7 +91,7 @@ MultiMaterialPressureProjection::MultiMaterialPressureProjection(const std::vect
 
 					int otherAxis = (axis + 1) % 2;
 
-					Vec2d offset(0); offset[otherAxis] = .5;
+					Vec2d offset = Vec2d::Zero(); offset[otherAxis] = .5;
 
 					for (int material = 0; material < myMaterialCount; ++material)
 					{
@@ -967,7 +967,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<double>>& f
 									++cellIndex;
 							}
 
-							Vec2i oldCell(-1);
+							Vec2i oldCell = Vec2i::Constant(-1);
 							for (; cellIndex != range.end(); ++cellIndex)
 							{
 								Vec2i cell = tempBoundaryCells[cellIndex];
