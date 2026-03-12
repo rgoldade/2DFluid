@@ -327,10 +327,6 @@ void PressureProjection::project(VectorGrid<double>& velocity)
 	//
 
 	{
-		SolveReal maxDivergence = 0;
-		SolveReal accumulatedDivergence = 0;
-		int cellCount = 0;
-
 		Vec3d stats = tbb::parallel_reduce(tbb::blocked_range<int>(0, materialCellLabels.voxelCount(), tbbLightGrainSize), Vec3d::Zero().eval(),
 		[&](const tbb::blocked_range<int>& range, Vec3d stats)
 		{

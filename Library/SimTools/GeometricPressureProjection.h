@@ -43,12 +43,12 @@ public:
 		myUseInitialGuessPressure = false;
 	}
 
-	ScalarGrid<double> getPressureGrid()
+	const ScalarGrid<double>& getPressureGrid() const
 	{
 		return myPressure;
 	}
 
-	const VectorGrid<VisitedCellLabels>& getValidFaces()
+	const VectorGrid<VisitedCellLabels>& getValidFaces() const
 	{
 		return myValidFaces;
 	}

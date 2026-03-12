@@ -83,7 +83,7 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
             const Vec2d sphereCenter(.5, .5);
             constexpr StoreReal sphereRadius = .125;
 
-            return (point - sphereCenter).norm() - std::pow(sphereRadius, 2);
+            return (point - sphereCenter).norm() - sphereRadius;
         };
 
 		tbb::parallel_for(tbb::blocked_range<int>(0, gridSize * gridSize), [&](const tbb::blocked_range<int> &range)

@@ -157,8 +157,8 @@ public:
 	void drawSampleGradients(Renderer& renderer, const Vec3d& colour = Vec3d(.5, .5, .5), double length = .25) const;
 	void drawVolumetric(Renderer& renderer, const Vec3d& minColour, const Vec3d& maxColour, T minVal, T maxVal) const;
 
-	void printAsCSV(std::string filename) const;
-	void printAsOBJ(std::string filename) const;
+	void printAsCSV(const std::string& filename) const;
+	void printAsOBJ(const std::string& filename) const;
 
 private:
 
@@ -191,7 +191,7 @@ T ScalarGrid<T>::biCubicInterp(const Vec2d& samplePoint, bool isIndexSpace, bool
 {
 	Vec2d indexPoint = isIndexSpace ? samplePoint : worldToIndex(samplePoint);
 
-	Vec2i floorPoint = indexPoint.cast<int>();
+	Vec2i floorPoint = indexPoint.array().floor().cast<int>();
 
 	// Revert to linear interpolation near the boundaries
 	if (floorPoint[0] < 1 || floorPoint[0] >= this->mySize[0] - 2 ||
@@ -357,7 +357,7 @@ Vec2t<T> ScalarGrid<T>::biCubicGradient(const Vec2d& samplePoint, bool isIndexSp
 {
 	Vec2d indexPoint = isIndexSpace ? samplePoint : worldToIndex(samplePoint);
 
-	Vec2i floorPoint = indexPoint.cast<int>();
+	Vec2i floorPoint = indexPoint.array().floor().cast<int>();
 
 	// Revert to linear interpolation near the boundaries
 	if (floorPoint[0] < 1 || floorPoint[0] >= this->mySize[0] - 2 ||
@@ -580,7 +580,7 @@ void ScalarGrid<T>::drawVolumetric(Renderer& renderer, const Vec3d& minColour, c
 }
 
 template<typename T>
-void ScalarGrid<T>::printAsCSV(std::string filename) const
+void ScalarGrid<T>::printAsCSV(const std::string& filename) const
 {
 	std::ofstream writer(filename);
 
@@ -602,7 +602,7 @@ void ScalarGrid<T>::printAsCSV(std::string filename) const
 }
 
 template<typename T>
-void ScalarGrid<T>::printAsOBJ(std::string filename) const
+void ScalarGrid<T>::printAsOBJ(const std::string& filename) const
 {
 	std::ofstream writer(filename + std::string(".obj"));
 

@@ -1156,7 +1156,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<double>>& f
 					Vec2i forwardCell = faceToCell(face, axis, 1);
 
 					if (backwardCell[axis] < 0 || forwardCell[axis] >= solvableCellIndices.size()[axis])
-						return;
+						continue;
 
 					assert(solvableCellIndices(backwardCell) >= 0 && solvableCellIndices(forwardCell) >= 0);
 					validFaces(face, axis) = VisitedCellLabels::FINISHED_CELL;
@@ -1282,7 +1282,7 @@ void MultiMaterialPressureProjection::project(std::vector<VectorGrid<double>>& f
 			});
 
 		SolveReal accumulatedDivergence = 0;
-		SolveReal maxDivergence;
+		SolveReal maxDivergence = 0;
 		SolveReal cellCount = 0;
 
 		parallelMaxDivergence.combine_each([&](SolveReal localMaxDivergence)

@@ -180,22 +180,19 @@ void testSupersampledAreas(const LevelSet& surface, ScalarGridSettings::SampleTy
     forEachVoxelRange(Vec2i::Zero(), weights.size(), [&](const Vec2i& coord)
     {
         int accum = 0;
-        int sampleCount = 0;
         Vec2d startPoint = coord.cast<double>() - .5 * Vec2d::Ones() + .5 * Vec2d(sampleDx, sampleDx);
-        Vec2d endPoint = coord.cast<double>() + .5 * Vec2d::Ones();
 
-        for (Vec2d point = startPoint; point[0] <= endPoint[0]; point[0] += sampleDx)
-            for (point[1] = startPoint[1]; point[1] <= endPoint[1]; point[1] += sampleDx)
+        for (int i = 0; i < samples; ++i)
+            for (int j = 0; j < samples; ++j)
             {
+                Vec2d point = startPoint + Vec2d(i * sampleDx, j * sampleDx);
                 Vec2d samplePoint = weights.indexToWorld(point);
 
                 if (surface.biLerp(samplePoint) <= 0)
                     ++accum;
-
-                ++sampleCount;
             }
 
-        double weight = double(accum) / double(sampleCount);
+        double weight = double(accum) / double(samples * samples);
 
         EXPECT_EQ(weights(coord), weight);
     });
@@ -257,25 +254,22 @@ void testSupersampledFacesAreas(const LevelSet& surface)
         forEachVoxelRange(Vec2i::Zero(), weights.size(axis), [&](const Vec2i& face)
         {
             int accum = 0;
-            int sampleCount = 0;
 
             Vec2d start = face.cast<double>() - .5 * Vec2d::Ones() + .5 * Vec2d(sampleDx, sampleDx);
-            Vec2d end = face.cast<double>() + .5 * Vec2d::Ones();
 
-            for (Vec2d point = start; point[0] <= end[0]; point[0] += sampleDx)
-                for (point[1] = start[1]; point[1] <= end[1]; point[1] += sampleDx)
+            for (int i = 0; i < samples; ++i)
+                for (int j = 0; j < samples; ++j)
                 {
+                    Vec2d point = start + Vec2d(i * sampleDx, j * sampleDx);
                     Vec2d samplePoint = weights.indexToWorld(point, axis);
 
-                    if (surface.biLerp(samplePoint) <= 0)
+                    if (surface.biLerp(samplePoint) <= 0.)
                         ++accum;
-
-                    ++sampleCount;
                 }
 
-            double weight = double(accum) / double(sampleCount);
+            double weight = double(accum) / double(samples * samples);
 
-            EXPECT_EQ(weights(face, axis), weight);
+            EXPECT_EQ(weights(face, axis), weight) << "Computed weights: " << weights(face, axis) << " Expected weight: " << weight;
         });
     }
 }

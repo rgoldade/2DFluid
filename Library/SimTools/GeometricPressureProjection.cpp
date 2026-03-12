@@ -1,5 +1,6 @@
 #include "GeometricPressureProjection.h"
 
+#include <atomic>
 #include <iostream>
 
 #include "tbb/blocked_range.h"
@@ -63,7 +64,7 @@ void GeometricPressureProjection::project(VectorGrid<double>& velocity,
 
 	UniformGrid<CellLabels> baseDomainCellLabels(mySurface.size(), MGCellLabels::EXTERIOR_CELL);
 
-	bool hasDirichletCell = false;
+	std::atomic<bool> hasDirichletCell(false);
 	// Build domain labels
 	tbb::parallel_for(tbb::blocked_range<int>(0, mySurface.voxelCount()), [&](const tbb::blocked_range<int>& range)
 	{
@@ -91,7 +92,7 @@ void GeometricPressureProjection::project(VectorGrid<double>& velocity,
 				else
 				{
 					baseDomainCellLabels(cell) = MGCellLabels::DIRICHLET_CELL;
-					hasDirichletCell = true;
+					hasDirichletCell.store(true, std::memory_order_relaxed);
 				}
 			}
 		}
