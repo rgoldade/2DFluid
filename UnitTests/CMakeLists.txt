@@ -2,7 +2,7 @@ if(MSVC)
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 endif()
 
-add_subdirectory("${PROJECT_SOURCE_DIR}/googletest" googletest)
+add_subdirectory("${PROJECT_SOURCE_DIR}/externals/googletest" googletest)
 
 mark_as_advanced(
     BUILD_GMOCK BUILD_GTEST BUILD_SHARED_LIBS

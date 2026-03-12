@@ -256,3 +256,7 @@ ModelManifest.xml
 
 # Mac
 .DS_Store
+
+# Project-specific
+.polyscope.ini
+imgui.ini
