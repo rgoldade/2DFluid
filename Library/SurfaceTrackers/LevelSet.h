@@ -106,7 +106,7 @@ public:
 	void clear() { myPhiGrid.clear(); }
 	void resize(const Vec2i& size) { myPhiGrid.resize(size); }
 
-	FORCE_INLINE double narrowBand() { return myNarrowBand; }
+	FORCE_INLINE double narrowBand() const { return myNarrowBand; }
 
 	// There's no way to change the grid spacing inside the class.
 	// The best way is to build a new grid and sample this one

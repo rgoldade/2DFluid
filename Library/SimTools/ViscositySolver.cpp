@@ -141,7 +141,7 @@ void ViscositySolver(double dt,
 
 		for (int faceAxis : {0, 1})
 		{
-			tbb::parallel_for(tbb::blocked_range<int>(0, materialFaceLabels.grid(faceAxis).voxelCount(), materialFaceLabels.grid(faceAxis).voxelCount() + 1/*tbbLightGrainSize*/), [&](const tbb::blocked_range<int>& range)
+			tbb::parallel_for(tbb::blocked_range<int>(0, materialFaceLabels.grid(faceAxis).voxelCount(), tbbLightGrainSize), [&](const tbb::blocked_range<int>& range)
 			{
 				auto& localSparseElements = parallelSparseElements.local();
 

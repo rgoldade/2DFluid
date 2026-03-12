@@ -187,7 +187,7 @@ private:
 template<typename T>
 T VectorGrid<T>::maxMagnitude() const
 {
-	T sqr_mag;
+	T sqr_mag = 0;
 
 	if (mySampleType == SampleType::CENTER || mySampleType == SampleType::NODE)
 	{
@@ -204,7 +204,7 @@ T VectorGrid<T>::maxMagnitude() const
 
 			return maxMagnitude;
 		},
-		[](T a, T b) -> double
+		[](T a, T b) -> T
 		{
 			return std::max(a, b);
 		});

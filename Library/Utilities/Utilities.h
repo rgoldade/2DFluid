@@ -153,7 +153,7 @@ bool operator==(const VecXt<T, N>& v0, const VecXt<T, N>& v1)
 template<typename T, int N>
 bool operator!=(const VecXt<T, N>& v0, const VecXt<T, N>& v1)
 {
-	return (v0.array() != v1.array()).all();
+	return (v0.array() != v1.array()).any();
 }
 
 template<typename RealType>

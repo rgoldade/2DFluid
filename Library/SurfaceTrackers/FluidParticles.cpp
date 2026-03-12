@@ -300,7 +300,7 @@ void FluidParticles::bumpParticles(const LevelSet& solidSurface)
 
 void FluidParticles::advect(double dt, const VectorGrid<double>& vel, const IntegrationOrder order)
 {
-	auto velFunc = [vel](double, const Vec2d& world_pos) -> Vec2d
+	auto velFunc = [&vel](double, const Vec2d& world_pos) -> Vec2d
 	{
 		return vel.biLerp(world_pos);
 	};

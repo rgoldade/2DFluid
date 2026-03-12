@@ -131,14 +131,14 @@ TEST(GEOMETRIC_MULTIGRID_TESTS, BOUNDARY_CELLS_TEST)
                 for (bool useSolidSphere : solidSphereSettings)
                 {
                     grids = buildTestDomain(useComplexDomain, useSolidSphere, gridSize);
+                    testBoundaryCells(grids.first, &grids.second);
                 }
             }
             else
             {
                 grids = buildTestDomain(useComplexDomain, false, gridSize);
+                testBoundaryCells(grids.first, &grids.second);
             }
-
-            testBoundaryCells(grids.first, &grids.second);
         }
 }
 

@@ -152,7 +152,7 @@ bool EdgeMesh::unitTestMesh() const
 	{
 		if (adjacentEdges[vertexIndex].size() < 2)
 		{
-			std::cout << "Unit test failed in valence check. Vertex: " << vertexIndex << ". Valence: " << myVertices[vertexIndex].size() << std::endl;
+			std::cout << "Unit test failed in valence check. Vertex: " << vertexIndex << ". Valence: " << adjacentEdges[vertexIndex].size() << std::endl;
 			return false;
 		}
 	}
@@ -162,7 +162,7 @@ bool EdgeMesh::unitTestMesh() const
 	{
 		for (int localVertexIndex : {0, 1})
 		{
-			if (myEdges[edgeIndex][localVertexIndex] < 0 || myEdges[edgeIndex][localVertexIndex] > myVertices.size())
+			if (myEdges[edgeIndex][localVertexIndex] < 0 || myEdges[edgeIndex][localVertexIndex] >= myVertices.size())
 			{
 				std::cout << "Unit test failed in edge's vertex count test. Edge: " << edgeIndex << std::endl;
 				return false;

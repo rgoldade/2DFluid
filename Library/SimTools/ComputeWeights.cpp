@@ -100,13 +100,13 @@ ScalarGrid<double> computeSupersampledAreas(const LevelSet& surface, ScalarGridS
 			}
 
 			Vec2d start = sampleCoord.cast<double>() - .5 * Vec2d::Ones() + .5 * Vec2d(sampleDx, sampleDx);
-            Vec2d end = sampleCoord.cast<double>() + .5 * Vec2d::Ones();
 
 			int insideMaterialCount = 0;
 
-			for (Vec2d sample = start; sample[0] <= end[0]; sample[0] += sampleDx)
-                for (sample[1] = start[1]; sample[1] <= end[1]; sample[1] += sampleDx)
+			for (int i = 0; i < samples; ++i)
+				for (int j = 0; j < samples; ++j)
 				{
+					Vec2d sample = start + Vec2d(i * sampleDx, j * sampleDx);
 					Vec2d worldSamplePoint = areas.indexToWorld(sample);
 
 					if (surface.biLerp(worldSamplePoint) <= 0.)
@@ -153,14 +153,14 @@ VectorGrid<double> computeSupersampledFaceAreas(const LevelSet& surface, int sam
 				}
 
 				Vec2d start = face.cast<double>() - .5 * Vec2d::Ones() + .5 * Vec2d(sampleDx, sampleDx);
-                Vec2d end = face.cast<double>() + .5 * Vec2d::Ones();
 
 				double insideMaterialCount = 0;
 
-				for (Vec2d point = start; point[0] <= end[0]; point[0] += sampleDx)
-                    for (point[1] = start[1]; point[1] <= end[1]; point[1] += sampleDx)
+				for (int i = 0; i < samples; ++i)
+					for (int j = 0; j < samples; ++j)
 					{
-                        Vec2d worldSamplePoint = areas.indexToWorld(point, axis);
+						Vec2d point = start + Vec2d(i * sampleDx, j * sampleDx);
+						Vec2d worldSamplePoint = areas.indexToWorld(point, axis);
 
 						if (surface.biLerp(worldSamplePoint) <= 0.)
 							++insideMaterialCount;

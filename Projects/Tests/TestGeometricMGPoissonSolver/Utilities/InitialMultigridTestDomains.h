@@ -77,7 +77,7 @@ void buildComplexDomain(UniformGrid<CellLabels> &domainCellLabels,
 		const Vec2d sphereCenter(.5, .5);
 		constexpr StoreReal sphereRadius = .125;
 
-		return (point - sphereCenter).norm() - std::pow(sphereRadius, 2);
+		return (point - sphereCenter).norm() - sphereRadius;
 	};
 
 	boundaryWeights = VectorGrid<StoreReal>(xform, Vec2i(gridSize, gridSize), 1, VectorGridSettings::SampleType::STAGGERED);
