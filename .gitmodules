@@ -7,3 +7,6 @@
 [submodule "externals/eigen"]
 	path = externals/eigen
 	url = https://gitlab.com/libeigen/eigen.git
+[submodule "externals/onetbb"]
+	path = externals/onetbb
+	url = https://github.com/uxlfoundation/oneTBB.git

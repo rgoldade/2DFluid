@@ -27,11 +27,11 @@ endif()
 set(EIGEN_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/externals/eigen)
 include_directories(${EIGEN_INCLUDE_DIR})
 
-find_package(TBB REQUIRED)
-if (TBB_FOUND)
-	include_directories(${TBB_INCLUDE_DIRS})
-	link_libraries(${TBB_LIBRARIES} ${TBB_LIBRARIES_DEBUG})
-endif()
+set(TBB_TEST OFF CACHE BOOL "" FORCE)
+set(TBB_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(TBB_BENCH OFF CACHE BOOL "" FORCE)
+add_subdirectory(externals/onetbb)
+link_libraries(TBB::tbb)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
