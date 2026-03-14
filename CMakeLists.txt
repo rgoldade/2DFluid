@@ -24,10 +24,8 @@ if (OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
-find_package(EIGEN3 REQUIRED)
-if (EIGEN3_FOUND)
-    include_directories(${EIGEN3_INCLUDE_DIR})
-endif()
+set(EIGEN_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/externals/eigen)
+include_directories(${EIGEN_INCLUDE_DIR})
 
 find_package(TBB REQUIRED)
 if (TBB_FOUND)
